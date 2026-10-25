@@ -27,6 +27,7 @@ struct SynthParams {
 struct AudioEngineTelemetry {
     uint32_t sample_rate = 32000;
     uint32_t period_frames = 128;
+    uint32_t xrun_count = 0;
     std::string device_label = "RK817 SPK (32000 Hz)";
     float vu_left = 0.0f;
     float vu_right = 0.0f;
@@ -119,6 +120,7 @@ private:
     std::atomic<bool> force_internal_{false};
     std::atomic<uint32_t> active_sample_rate_{32000};
     std::atomic<uint32_t> active_period_frames_{128};
+    std::atomic<uint32_t> xrun_count_{0};
 
     std::atomic<float> vu_l_{0.0f};
     std::atomic<float> vu_r_{0.0f};

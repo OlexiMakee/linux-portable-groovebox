@@ -284,9 +284,10 @@ void UiRenderer::renderWorkspace(
         // Вкладка L1: Апаратний монітор, аудіо-роутинг, MIDI Clock та тест кнопок
         ColorRGB route_col = hw.digitakt_connected ? palette::kLevelOk : palette::kAccentOrange;
         std::snprintf(
-            buf, sizeof(buf), "AUDIO OUT : %s | VOL:%3.0f%%",
+            buf, sizeof(buf), "AUDIO OUT : %s | VOL:%3.0f%% | XRUN:%u",
             audio.device_label.c_str(),
-            master_vol * 100.0f
+            master_vol * 100.0f,
+            audio.xrun_count
         );
         drawText(8, top_y + 6, buf, route_col, 1);
 
@@ -479,14 +480,15 @@ void UiRenderer::renderWorkspace(
         const char* nn = kNoteNames[cur_st.note % 12];
 
         std::snprintf(
-            buf, sizeof(buf), "TRK %d [%s] | STEP %02d:%s%d %s | BPM:%3.0f %s",
+            buf, sizeof(buf), "TRK %d [%s] | STEP %02d:%s%d %s | BPM:%3.0f %s | XRUN:%u",
             app.selected_track + 1,
             getEngineTypeName(tp.engine),
             app.cursor_step + 1,
             nn, oct,
             cur_st.has_plock ? "[P-LOCK]" : "",
             app.bpm,
-            app.transport_playing ? "PLAY" : "STOP"
+            app.transport_playing ? "PLAY" : "STOP",
+            audio.xrun_count
         );
         drawText(8, top_y + 6, buf, palette::kAccentOrange, 1);
 

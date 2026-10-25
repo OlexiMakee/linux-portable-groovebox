@@ -533,49 +533,50 @@ void AudioEngine::alsaThreadLoop() {
     int card = current_card_.load();
     const bool use_usb = (card > 0) && !force_internal_.load(std::memory_order_relaxed);
     const uint32_t rate = active_sample_rate_.load();
-    // 21.3 мс (1024 семпли = 4 періоди по 256 семплів) для стабільного USB Isochronous потоку
-    const unsigned int latency_us = use_usb ? 21333u : 16000u;
+    // 32 мс буфер (1536 семплів = 6 періодів по 256) для стабільної черги URB без обвалу dwc2
+    const unsigned int latency_us = use_usb ? 32000u : 16000u;
 
     // 1. Якщо підключено зовнішній USB Audio інтерфейс і не ввімкнено оверрайд FORCE INTERNAL,
     //    відкриваємо ВИКЛЮЧНО його (щоб не було конфлікту двох різних кварцових генераторів USB vs I2S RK817!)
     if (use_usb) {
-        char usb_dev[32];
-        std::snprintf(usb_dev, sizeof(usb_dev), "hw:%d,0", card);
-        int err = snd_pcm_open(&pcm, usb_dev, SND_PCM_STREAM_PLAYBACK, 0);
-        if (err < 0) {
-            std::fprintf(stderr, "[ALSA] Failed to open USB %s: %s\n", usb_dev, snd_strerror(err));
-            pcm = nullptr;
-        } else {
-            static constexpr snd_pcm_format_t kTryFormats[] = {
-                SND_PCM_FORMAT_S32_LE,
-                SND_PCM_FORMAT_S24_3LE,
-                SND_PCM_FORMAT_S24_LE,
-                SND_PCM_FORMAT_S16_LE
-            };
-            bool ok = false;
-            for (snd_pcm_format_t fmt : kTryFormats) {
-                // soft_resample = 0 (прямий апаратний лок частоти дискретизації)
-                if (snd_pcm_set_params(
-                        pcm,
-                        fmt,
-                        SND_PCM_ACCESS_RW_INTERLEAVED,
-                        2,
-                        rate,
-                        0,
-                        latency_us
-                    ) >= 0) {
-                    active_fmt = fmt;
-                    ok = true;
-                    std::printf("[ALSA] Opened EXCLUSIVE USB %s at %u Hz stereo (fmt=%d, latency=%u us, soft_resample=0)\n",
-                                usb_dev, rate, static_cast<int>(fmt), latency_us);
-                    break;
+        char dev_names[2][32];
+        std::snprintf(dev_names[0], sizeof(dev_names[0]), "hw:%d,0", card);
+        std::snprintf(dev_names[1], sizeof(dev_names[1]), "plughw:%d,0", card);
+
+        for (const auto& dev_str : dev_names) {
+            int err = snd_pcm_open(&pcm, dev_str, SND_PCM_STREAM_PLAYBACK, 0);
+            if (err >= 0) {
+                static constexpr snd_pcm_format_t kTryFormats[] = {
+                    SND_PCM_FORMAT_S32_LE,
+                    SND_PCM_FORMAT_S24_3LE,
+                    SND_PCM_FORMAT_S24_LE,
+                    SND_PCM_FORMAT_S16_LE
+                };
+                bool ok = false;
+                for (snd_pcm_format_t fmt : kTryFormats) {
+                    if (snd_pcm_set_params(
+                            pcm,
+                            fmt,
+                            SND_PCM_ACCESS_RW_INTERLEAVED,
+                            2,
+                            rate,
+                            0,
+                            latency_us
+                        ) >= 0) {
+                        active_fmt = fmt;
+                        ok = true;
+                        std::printf("[ALSA] Opened EXCLUSIVE USB %s at %u Hz stereo (fmt=%d, latency=%u us, soft_resample=0)\n",
+                                    dev_str, rate, static_cast<int>(fmt), latency_us);
+                        break;
+                    }
                 }
-            }
-            if (!ok) {
-                std::fprintf(stderr, "[ALSA] Failed to set any format on USB %s (%u Hz)\n", usb_dev, rate);
+                if (ok) break;
                 snd_pcm_close(pcm);
                 pcm = nullptr;
             }
+        }
+        if (!pcm) {
+            std::fprintf(stderr, "[ALSA] Failed to open USB card %d (%u Hz)\n", card, rate);
         }
     }
 
@@ -609,34 +610,53 @@ void AudioEngine::alsaThreadLoop() {
     std::array<int32_t, kBlockFrames * 2> buf32{};
     std::array<uint8_t, kBlockFrames * 2 * 3> buf24_3{};
 
+    auto writeBlock = [&](const int16_t* in_samples) -> snd_pcm_sframes_t {
+        if (!pcm) return 0;
+        if (active_fmt == SND_PCM_FORMAT_S32_LE) {
+            for (size_t i = 0; i < buf16.size(); ++i) {
+                buf32[i] = static_cast<int32_t>(in_samples[i]) << 16;
+            }
+            return snd_pcm_writei(pcm, buf32.data(), kBlockFrames);
+        } else if (active_fmt == SND_PCM_FORMAT_S24_LE) {
+            for (size_t i = 0; i < buf16.size(); ++i) {
+                buf32[i] = static_cast<int32_t>(in_samples[i]) << 8;
+            }
+            return snd_pcm_writei(pcm, buf32.data(), kBlockFrames);
+        } else if (active_fmt == SND_PCM_FORMAT_S24_3LE) {
+            for (size_t i = 0; i < buf16.size(); ++i) {
+                int32_t v = static_cast<int32_t>(in_samples[i]) << 8;
+                buf24_3[i * 3 + 0] = static_cast<uint8_t>(v & 0xFF);
+                buf24_3[i * 3 + 1] = static_cast<uint8_t>((v >> 8) & 0xFF);
+                buf24_3[i * 3 + 2] = static_cast<uint8_t>((v >> 16) & 0xFF);
+            }
+            return snd_pcm_writei(pcm, buf24_3.data(), kBlockFrames);
+        } else {
+            return snd_pcm_writei(pcm, in_samples, kBlockFrames);
+        }
+    };
+
+    // Pre-roll: заповнюємо апаратний буфер ALSA 4 періодами (1024 семпли = 21.3 мс)
+    if (pcm) {
+        for (int p = 0; p < 4; ++p) {
+            renderBlock(buf16.data(), kBlockFrames, rate);
+            writeBlock(buf16.data());
+        }
+    }
+
     while (running_.load(std::memory_order_relaxed)) {
         renderBlock(buf16.data(), kBlockFrames, rate);
 
         if (pcm) {
-            snd_pcm_sframes_t written = 0;
-            if (active_fmt == SND_PCM_FORMAT_S32_LE) {
-                for (size_t i = 0; i < buf16.size(); ++i) {
-                    buf32[i] = static_cast<int32_t>(buf16[i]) << 16;
-                }
-                written = snd_pcm_writei(pcm, buf32.data(), kBlockFrames);
-            } else if (active_fmt == SND_PCM_FORMAT_S24_LE) {
-                for (size_t i = 0; i < buf16.size(); ++i) {
-                    buf32[i] = static_cast<int32_t>(buf16[i]) << 8;
-                }
-                written = snd_pcm_writei(pcm, buf32.data(), kBlockFrames);
-            } else if (active_fmt == SND_PCM_FORMAT_S24_3LE) {
-                for (size_t i = 0; i < buf16.size(); ++i) {
-                    int32_t v = static_cast<int32_t>(buf16[i]) << 8;
-                    buf24_3[i * 3 + 0] = static_cast<uint8_t>(v & 0xFF);
-                    buf24_3[i * 3 + 1] = static_cast<uint8_t>((v >> 8) & 0xFF);
-                    buf24_3[i * 3 + 2] = static_cast<uint8_t>((v >> 16) & 0xFF);
-                }
-                written = snd_pcm_writei(pcm, buf24_3.data(), kBlockFrames);
-            } else {
-                written = snd_pcm_writei(pcm, buf16.data(), kBlockFrames);
-            }
+            snd_pcm_sframes_t written = writeBlock(buf16.data());
             if (written < 0) {
+                xrun_count_.fetch_add(1, std::memory_order_relaxed);
+                std::fprintf(stderr, "[ALSA] XRUN (%ld), recovering...\n", written);
                 snd_pcm_recover(pcm, static_cast<int>(written), 1);
+                // Pre-roll після відновлення, щоб запобігти повторному спустошенню
+                for (int p = 0; p < 2; ++p) {
+                    renderBlock(buf16.data(), kBlockFrames, rate);
+                    writeBlock(buf16.data());
+                }
             }
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -653,6 +673,7 @@ AudioEngineTelemetry AudioEngine::getTelemetry() const {
     AudioEngineTelemetry t;
     t.sample_rate = active_sample_rate_.load(std::memory_order_relaxed);
     t.period_frames = active_period_frames_.load(std::memory_order_relaxed);
+    t.xrun_count = xrun_count_.load(std::memory_order_relaxed);
     const bool forced_int = force_internal_.load(std::memory_order_relaxed);
     if (!forced_int && current_usb_48k_.load(std::memory_order_relaxed)) {
         t.device_label = "OUT: USB (" + std::to_string(t.sample_rate) + " Hz)";

@@ -13,6 +13,10 @@
 #include <cstring>
 
 int main(int argc, char* argv[]) {
+    // 0. Вимикаємо буферизацію виводу для миттєвого логування в /tmp/groovebox.log
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
+    std::setvbuf(stderr, nullptr, _IONBF, 0);
+
     // 0. Завантажуємо профіль пристрою (profiles/<device>.ini)
     groovebox::loadActiveProfile();
 
