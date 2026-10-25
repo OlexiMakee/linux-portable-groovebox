@@ -96,7 +96,7 @@ int main(int argc, char* argv[]) {
         },
         [&]() {
             if (app.transport_playing) {
-                app.current_step = (app.current_step + 1) % 16;
+                app.current_step = (app.current_step + 1) % app.pattern_length;
                 audio_engine.triggerSequencerStep(app.current_step);
                 ui_dirty = true;
             }
@@ -164,15 +164,20 @@ int main(int argc, char* argv[]) {
             hw_monitor.toggleUsbRole();
             ui_dirty = true;
         } else if (app.dev_shortcuts_enabled && in.btn_select && in.a_pressed) {
-            // SELECT + A: циклічне перемикання розміру буфера (128 -> 256 -> 512 -> 1024 -> 2048)
+            // SELECT + A: циклічне перемикання розміру буфера (96 -> 128 -> 256 -> 512 -> 1024 -> 2048)
             audio_engine.cycleBufferSize();
             ui_dirty = true;
         } else if (app.dev_shortcuts_enabled && in.btn_select && in.y_pressed) {
-            // SELECT + Y: тимчасове перемикання аудіовиходу (AUTO / USB <-> FORCE INTERNAL RK817)
-            audio_engine.toggleOutputOverride();
+            // SELECT + Y: перемикання сторінки секвенсора (Page 1 <-> Page 2 для 128 кроків)
+            app.seq_page = (app.seq_page == 0) ? 1 : 0;
+            app.cursor_step = app.seq_page * groovebox::kStepsPerPage + (app.cursor_step % groovebox::kStepsPerPage);
             ui_dirty = true;
         } else if (app.dev_shortcuts_enabled && in.btn_select && in.x_pressed) {
-            hw_monitor.toggleMockDigitakt();
+            // SELECT + X: зміна активної довжини патерну (16 -> 32 -> 64 -> 128)
+            uint32_t cur_len = app.pattern_length;
+            uint32_t next_len = (cur_len == 16) ? 32 : ((cur_len == 32) ? 64 : ((cur_len == 64) ? 128 : 16));
+            app.pattern_length = next_len;
+            audio_engine.setPatternLength(next_len);
             ui_dirty = true;
         } else if (!in.btn_select) {
             // Дії кнопок A, B, X, Y залежно від активної вкладки:
@@ -188,14 +193,27 @@ int main(int argc, char* argv[]) {
                     ui_dirty = true;
                 }
             } else if (app.active_tab == groovebox::WorkspaceTab::kScopeSeq) {
-                if (in.a_pressed) { audio_engine.toggleStep(app.selected_track, app.cursor_step); ui_dirty = true; }
-                if (in.b_pressed) {
-                    float lock_val = std::clamp(0.50f + in.lx * 0.45f, 0.05f, 0.95f);
-                    audio_engine.lockStepCutoff(app.selected_track, app.cursor_step, lock_val);
+                if (in.a_pressed) {
+                    // Кнопка A: перемикання кроку (Off -> Note Trig -> Param Trig -> Off)
+                    audio_engine.toggleStep(app.cursor_row, app.cursor_step);
                     ui_dirty = true;
                 }
-                if (in.x_pressed) { app.selected_track = (app.selected_track + 3) % 4; ui_dirty = true; }
-                if (in.y_pressed) { app.selected_track = (app.selected_track + 1) % 4; ui_dirty = true; }
+                if (in.b_pressed) {
+                    // Кнопка B: Parameter Lock для фільтра
+                    float lock_val = std::clamp(0.50f + in.lx * 0.45f, 0.05f, 0.95f);
+                    audio_engine.lockStepCutoff(app.cursor_row, app.cursor_step, lock_val);
+                    ui_dirty = true;
+                }
+                if (in.x_pressed) {
+                    // Кнопка X: нота -1 півтон
+                    audio_engine.adjustStepNote(app.cursor_row, app.cursor_step, -1);
+                    ui_dirty = true;
+                }
+                if (in.y_pressed) {
+                    // Кнопка Y: нота +1 півтон
+                    audio_engine.adjustStepNote(app.cursor_row, app.cursor_step, +1);
+                    ui_dirty = true;
+                }
             } else {
                 // Live Pad Triggers на вкладках HW/SYS та SYNTH (вибирають доріжку і грають ноту наживо!)
                 if (in.a_pressed) { app.selected_track = 0; audio_engine.triggerNote(0, 36, 0.95f); ui_dirty = true; }
@@ -205,7 +223,7 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // 4. Кнопка START: Play / Stop 16-крокового секвенсора
+        // 4. Кнопка START: Play / Stop секвенсора
         if (in.start_pressed) {
             app.transport_playing = !app.transport_playing;
             if (app.transport_playing) {
@@ -248,11 +266,28 @@ int main(int argc, char* argv[]) {
                 ui_dirty = true;
             }
         } else if (app.active_tab == groovebox::WorkspaceTab::kScopeSeq) {
-            // R1 SCOPE/SEQ: Left/Right = вибір кроку 1..16, Up/Down = транспонування ноти кроку
-            if (in.left_pressed)  { app.cursor_step = (app.cursor_step + 15) % 16; ui_dirty = true; }
-            if (in.right_pressed) { app.cursor_step = (app.cursor_step + 1) % 16; ui_dirty = true; }
-            if (in.up_pressed)    { audio_engine.adjustStepNote(app.selected_track, app.cursor_step, +1); ui_dirty = true; }
-            if (in.down_pressed)  { audio_engine.adjustStepNote(app.selected_track, app.cursor_step, -1); ui_dirty = true; }
+            // R1 SEQ: Up/Down = вибір рядка 1..16 (голоси 4 доріжок), Left/Right = навігація по кроках 1..64/128
+            if (in.up_pressed) {
+                app.cursor_row = (app.cursor_row + groovebox::kTotalRows - 1) % groovebox::kTotalRows;
+                app.selected_track = app.cursor_row / groovebox::kVoicesPerTrack;
+                ui_dirty = true;
+            }
+            if (in.down_pressed) {
+                app.cursor_row = (app.cursor_row + 1) % groovebox::kTotalRows;
+                app.selected_track = app.cursor_row / groovebox::kVoicesPerTrack;
+                ui_dirty = true;
+            }
+            if (in.left_pressed) {
+                if (app.cursor_step > 0) app.cursor_step--;
+                else app.cursor_step = static_cast<int>(app.pattern_length - 1);
+                app.seq_page = (app.cursor_step >= static_cast<int>(groovebox::kStepsPerPage)) ? 1 : 0;
+                ui_dirty = true;
+            }
+            if (in.right_pressed) {
+                app.cursor_step = (app.cursor_step + 1) % app.pattern_length;
+                app.seq_page = (app.cursor_step >= static_cast<int>(groovebox::kStepsPerPage)) ? 1 : 0;
+                ui_dirty = true;
+            }
         } else {
             // L1 HW/SYS: Up/Down = вибір доріжки, Left/Right = зміна BPM
             if (in.up_pressed)    { app.selected_track = (app.selected_track + 3) % 4; ui_dirty = true; }
@@ -265,11 +300,11 @@ int main(int argc, char* argv[]) {
         if (midi_tel.external_sync) {
             app.bpm = midi_tel.detected_bpm;
         } else {
-            // Внутрішній генератор 16-крокового секвенсора (коли немає зовнішнього MIDI Clock)
+            // Внутрішній генератор 64/128-крокового секвенсора (коли немає зовнішнього MIDI Clock)
             const uint32_t step_interval_ms = static_cast<uint32_t>(60000.0f / (app.bpm * 4.0f));
             if (app.transport_playing && (now_ms - last_step_ms >= step_interval_ms)) {
                 last_step_ms = now_ms;
-                app.current_step = (app.current_step + 1) % 16;
+                app.current_step = (app.current_step + 1) % app.pattern_length;
                 audio_engine.triggerSequencerStep(app.current_step);
                 ui_dirty = true;
             }

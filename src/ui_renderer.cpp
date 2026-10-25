@@ -473,59 +473,106 @@ void UiRenderer::renderWorkspace(
             }
         }
     } else {
-        // R1: Повноекранний осцилограф реального звуку + інтерактивний 16-кроковий секвенсор із P-Locks!
-        const auto tp = audio_engine.getTrackParams(app.selected_track);
-        const auto cur_st = audio_engine.getStep(app.selected_track, app.cursor_step);
+        // R1: Повноекранна 16-рядкова x 64/128-крокова матриця Elektron-секвенсора (4 доріжки x 4 голоси)
+        const int cur_r = std::clamp(app.cursor_row, 0, kTotalRows - 1);
+        const int cur_t = cur_r / kVoicesPerTrack;
+        const int cur_v = cur_r % kVoicesPerTrack;
+        const auto tp = audio_engine.getTrackParams(cur_t);
+        const auto cur_st = audio_engine.getStep(cur_r, app.cursor_step);
         static constexpr const char* kNoteNames[12] = {"C","C#","D","D#","E","F","F#","G","G#","A","A#","B"};
         int oct = (cur_st.note / 12) - 1;
         const char* nn = kNoteNames[cur_st.note % 12];
 
+        const char* trig_tag = !cur_st.enabled ? "OFF" : (cur_st.is_param_trig ? "[PARAM-LOCK]" : "[NOTE-TRIG]");
+
         std::snprintf(
-            buf, sizeof(buf), "TRK %d [%s] | STEP %02d:%s%d %s | BUF:%u | XRUN:%u",
-            app.selected_track + 1,
+            buf, sizeof(buf), "T%d:V%d [%s] | ST%03d:%s%d %s | P%d/2 L:%u | BPM:%3.0f %s",
+            cur_t + 1, cur_v + 1,
             getEngineTypeName(tp.engine),
             app.cursor_step + 1,
             nn, oct,
-            cur_st.has_plock ? "[P-LOCK]" : "",
-            audio.period_frames,
-            audio.xrun_count
+            trig_tag,
+            app.seq_page + 1,
+            app.pattern_length,
+            midi.external_sync ? midi.detected_bpm : app.bpm,
+            app.transport_playing ? "PLAY" : "STOP"
         );
-        drawText(8, top_y + 6, buf, palette::kAccentOrange, 1);
+        ColorRGB hdr_col = cur_st.is_param_trig ? palette::kParamTrig : palette::kAccentOrange;
+        drawText(4, top_y + 4, buf, hdr_col, 1);
 
-        const int sc_y = top_y + 18;
-        const int sc_h = ws_h - 54;
-        drawRect(8, sc_y, w - 16, sc_h, palette::kGridDim);
-        int prev_y = sc_y + sc_h / 2;
-        for (int px = 1; px < w - 18; ++px) {
-            uint32_t s_idx = (static_cast<uint32_t>(px) * 255u) / static_cast<uint32_t>(w - 18);
-            float v = audio.scope_samples[s_idx];
-            int cur_y = sc_y + (sc_h / 2) - static_cast<int>(v * (sc_h / 2 - 4));
-            cur_y = std::clamp(cur_y, sc_y + 2, sc_y + sc_h - 2);
-            drawLine(8 + px - 1, prev_y, 8 + px, cur_y, palette::kAccentCyan);
-            prev_y = cur_y;
-        }
+        const int grid_x = 30;
+        const int grid_y = top_y + 14;
+        const int row_h = 10;
+        const uint32_t page_offset = app.seq_page * kStepsPerPage;
 
-        // 16 кроків секвенсора внизу воркспейсу (відображають активні кроки, P-Locks, курсор і Playhead)
-        const int seq_y = sc_y + sc_h + 6;
-        const int step_w = (w - 16) / 16;
-        for (int st = 0; st < 16; ++st) {
-            int sx = 8 + st * step_w;
-            auto step_data = audio_engine.getStep(app.selected_track, st);
-            bool is_playhead = app.transport_playing && (static_cast<int>(app.current_step % 16) == st);
-            bool is_cursor = (app.cursor_step == st);
+        // Малюємо 16 рядків
+        for (int r = 0; r < kTotalRows; ++r) {
+            int t = r / kVoicesPerTrack;
+            int v = r % kVoicesPerTrack;
+            int ry = grid_y + r * row_h;
+            bool is_active_row = (r == cur_r);
 
-            if (is_playhead) {
-                fillRect(sx, seq_y, step_w - 2, 22, palette::kLevelOk);
-            } else if (step_data.enabled) {
-                fillRect(sx, seq_y, step_w - 2, 22, step_data.has_plock ? palette::kAccentCyan : palette::kAccentOrange);
+            // Розділювач між 4 доріжками
+            if (v == 0 && r > 0) {
+                drawLine(0, ry - 1, w - 1, ry - 1, palette::kGridDim);
+            }
+
+            // Назва рядка зліва
+            char lbl[8];
+            const auto trk = audio_engine.getTrackParams(t);
+            if (trk.engine == EngineType::kDrumSyn) {
+                static constexpr const char* kDrumLabels[4] = {"BD", "SD", "CH", "OH"};
+                std::snprintf(lbl, sizeof(lbl), "1%s", kDrumLabels[v]);
             } else {
-                drawRect(sx, seq_y, step_w - 2, 22, (st % 4 == 0) ? palette::kTextMain : palette::kGridDim);
+                std::snprintf(lbl, sizeof(lbl), "%d:%d", t + 1, v + 1);
             }
+            ColorRGB lbl_col = is_active_row ? palette::kAccentOrange : (trk.muted ? palette::kGridDim : palette::kTextDim);
+            drawText(4, ry + 1, lbl, lbl_col, 1);
 
-            if (is_cursor) {
-                drawRect(sx - 1, seq_y - 2, step_w, 26, palette::kTextMain);
+            // Малюємо 64 кроки для цього рядка
+            for (uint32_t s = 0; s < kStepsPerPage; ++s) {
+                uint32_t step_idx = page_offset + s;
+                int cx = grid_x + static_cast<int>(s) * 4;
+                auto step_data = audio_engine.getStep(r, step_idx);
+                bool is_cursor = (r == cur_r && step_idx == static_cast<uint32_t>(app.cursor_step));
+                bool is_playhead = app.transport_playing && (step_idx == (app.current_step % app.pattern_length));
+
+                if (step_data.enabled) {
+                    if (step_data.is_param_trig) {
+                        // Жовтий Elektron Param Trig (Lock-only)
+                        fillRect(cx, ry + 1, 3, 7, palette::kParamTrig);
+                    } else {
+                        // Зелений/Бірюзовий Note Trig
+                        ColorRGB trig_col = (t % 2 == 0) ? palette::kLevelOk : palette::kAccentCyan;
+                        fillRect(cx, ry + 1, 3, 7, trig_col);
+                    }
+                } else {
+                    // Неактивна клітинка: розмітка тактів і долей
+                    if (s % 16 == 0) {
+                        fillRect(cx, ry + 3, 2, 3, palette::kTextDim);
+                    } else if (s % 4 == 0) {
+                        fillRect(cx, ry + 4, 1, 2, palette::kGridDim);
+                    }
+                }
+
+                if (is_playhead) {
+                    // Вертикальна лінія положення програвання (Playhead)
+                    drawLine(cx + 1, ry, cx + 1, ry + 8, palette::kTextMain);
+                }
+
+                if (is_cursor) {
+                    // Білий контур курсора редагування
+                    drawRect(cx - 1, ry, 5, 9, palette::kCursorWhite);
+                }
             }
         }
+
+        // Вертикальні маркери сторінок та тактів справа
+        drawText(grid_x + 258, grid_y + 4,  (app.seq_page == 0) ? "[P1]" : " P1 ", (app.seq_page == 0) ? palette::kLevelOk : palette::kGridDim, 1);
+        drawText(grid_x + 258, grid_y + 14, (app.seq_page == 1) ? "[P2]" : " P2 ", (app.seq_page == 1) ? palette::kLevelOk : palette::kGridDim, 1);
+        char len_buf[16];
+        std::snprintf(len_buf, sizeof(len_buf), "L%03u", app.pattern_length);
+        drawText(grid_x + 258, grid_y + 26, len_buf, palette::kAccentOrange, 1);
     }
 }
 
@@ -568,8 +615,8 @@ void UiRenderer::renderBottomHud(
         drawText(4, hud_y + 11, "U/D : TRACK", palette::kTextMain, 1);
         drawText(4, hud_y + 19, "L/R : LEVEL", palette::kTextDim, 1);
     } else if (app.active_tab == WorkspaceTab::kScopeSeq) {
-        drawText(4, hud_y + 11, "L/R : STEP", palette::kTextMain, 1);
-        drawText(4, hud_y + 19, "U/D : NOTE", palette::kTextDim, 1);
+        drawText(4, hud_y + 11, "U/D : ROW 1..16", palette::kTextMain, 1);
+        drawText(4, hud_y + 19, "L/R : STEP 1..64", palette::kTextDim, 1);
     } else {
         drawText(4, hud_y + 11, "U/D : TRACK", palette::kTextMain, 1);
         drawText(4, hud_y + 19, "L/R : BPM", palette::kTextDim, 1);
@@ -612,9 +659,9 @@ void UiRenderer::renderBottomHud(
         drawText(x_right + 4, hud_y + 11, "A:MUTE B:DLY+", palette::kTextMain, 1);
         drawText(x_right + 4, hud_y + 19, "X:DLY- Y:FBK", palette::kTextDim, 1);
     } else if (app.active_tab == WorkspaceTab::kScopeSeq) {
-        drawText(x_right + 4, hud_y + 3,  "ABXY: SEQ", abxy_col, 1);
-        drawText(x_right + 4, hud_y + 11, "A:STEP B:PLCK", palette::kTextMain, 1);
-        drawText(x_right + 4, hud_y + 19, "X:TRK- Y:TRK+", palette::kTextDim, 1);
+        drawText(x_right + 4, hud_y + 3,  "ABXY: 16x64 SEQ", abxy_col, 1);
+        drawText(x_right + 4, hud_y + 11, "A:TRIG B:PLCK", palette::kTextMain, 1);
+        drawText(x_right + 4, hud_y + 19, "X:NOTE- Y:NOTE+", palette::kTextDim, 1);
     } else {
         drawText(x_right + 4, hud_y + 3,  "ABXY: TRIG", abxy_col, 1);
         drawText(x_right + 4, hud_y + 11, "A:T1  B:T2", palette::kTextMain, 1);

@@ -31,10 +31,89 @@ inline constexpr const char* getEngineTypeName(EngineType type) {
 // Кожен движок має 6 уніфікованих нормалізованих параметрів (0.0f .. 1.0f),
 // назви яких автоматично підтягуються в інтерфейс (нуль хардкоду в UI!)
 inline constexpr int kParamsPerTrack = 6;
+inline constexpr int kTotalRows = 16;         // 4 доріжки x 4 голоси
+inline constexpr int kTracksCount = 4;
+inline constexpr int kVoicesPerTrack = 4;
+inline constexpr uint32_t kMaxSteps = 128;
+inline constexpr uint32_t kStepsPerPage = 64;
+
+enum class AdsrStage : uint8_t {
+    kIdle = 0,
+    kAttack,
+    kDecay,
+    kSustain,
+    kRelease
+};
+
+struct AdsrEnvelope {
+    AdsrStage stage = AdsrStage::kIdle;
+    float value = 0.0f;
+    float attack_rate = 0.01f;
+    float decay_rate = 0.999f;
+    float sustain_level = 0.70f;
+    float release_rate = 0.995f;
+
+    void trigger(float attack_norm, float decay_norm, float sustain_norm, float sample_rate) {
+        stage = AdsrStage::kAttack;
+        float att_sec = 0.002f + attack_norm * 0.80f;
+        attack_rate = 1.0f / (att_sec * sample_rate);
+        float dec_sec = 0.010f + decay_norm * 1.50f;
+        decay_rate = std::exp(-1.0f / (dec_sec * sample_rate));
+        sustain_level = std::clamp(sustain_norm, 0.0f, 1.0f);
+        value = 0.0f;
+    }
+
+    void release(float release_norm, float sample_rate) {
+        if (stage == AdsrStage::kIdle) return;
+        stage = AdsrStage::kRelease;
+        float rel_sec = 0.010f + release_norm * 1.80f;
+        release_rate = std::exp(-1.0f / (rel_sec * sample_rate));
+    }
+
+    float process() {
+        switch (stage) {
+            case AdsrStage::kAttack:
+                value += attack_rate;
+                if (value >= 1.0f) {
+                    value = 1.0f;
+                    stage = AdsrStage::kDecay;
+                }
+                break;
+            case AdsrStage::kDecay:
+                value = sustain_level + (value - sustain_level) * decay_rate;
+                if (std::abs(value - sustain_level) < 0.002f) {
+                    value = sustain_level;
+                    stage = AdsrStage::kSustain;
+                }
+                break;
+            case AdsrStage::kSustain:
+                value = sustain_level;
+                break;
+            case AdsrStage::kRelease:
+                value *= release_rate;
+                if (value <= 0.001f) {
+                    value = 0.0f;
+                    stage = AdsrStage::kIdle;
+                }
+                break;
+            case AdsrStage::kIdle:
+            default:
+                value = 0.0f;
+                break;
+        }
+        return value;
+    }
+
+    bool isActive() const { return stage != AdsrStage::kIdle; }
+};
 
 struct TrackParameters {
     EngineType engine = EngineType::kVaMono;
     std::array<float, kParamsPerTrack> p{0.55f, 0.35f, 0.50f, 0.35f, 0.30f, 0.40f};
+    float attack = 0.02f;
+    float decay = 0.40f;
+    float sustain = 0.65f;
+    float release = 0.30f;
     float level = 0.85f;
     float pan = 0.0f;       // -1.0 (L) .. +1.0 (R)
     float delay_send = 0.2f;
@@ -60,13 +139,15 @@ inline constexpr const char* getParamName(EngineType type, int param_idx) {
     return kParamNames[e][idx];
 }
 
-// Крок 16-крокового секвенсора з підтримкою Parameter Locks (як у Elektron Digitakt)
+// Крок 64/128-крокового секвенсора з підтримкою Elektron Trig моделі (Note Trig vs Yellow Param Trig)
 struct SequencerStep {
-    bool enabled = false;
-    uint8_t note = 48;          // MIDI нота (0..127)
-    float velocity = 0.90f;     // 0.0 .. 1.0
-    bool has_plock = false;     // Чи зафіксовано P-Lock фільтра на цьому кроці
-    float plock_cutoff = 0.5f;  // Значення P-Lock для Cutoff
+    bool enabled = false;        // Чи активний крок
+    bool is_param_trig = false;  // Жовтий крок Elektron: НЕ тригерить ноту/MIDI, тільки змінює параметри звуку!
+    uint8_t note = 48;           // MIDI нота (0..127)
+    float velocity = 0.90f;      // 0.0 .. 1.0
+    bool has_plock = false;      // Чи зафіксовано P-Lock
+    float plock_cutoff = 0.5f;   // P-Lock фільтра
+    float plock_val = 0.5f;      // P-Lock додаткового параметра
 };
 
 } // namespace groovebox

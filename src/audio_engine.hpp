@@ -55,22 +55,26 @@ public:
     void cycleBufferSize();
     uint32_t getTargetPeriodFrames() const { return target_period_frames_.load(std::memory_order_relaxed); }
 
-    // Доступ та модифікація модульних параметрів 4 доріжок і 16 кроків секвенсора
+    // Доступ та модифікація модульних параметрів 4 доріжок і 16 рядків x 128 кроків секвенсора
     TrackParameters getTrackParams(int track) const;
     void setTrackParams(int track, const TrackParameters& tp);
     void cycleTrackEngine(int track, int dir);
     void adjustTrackParam(int track, int param_idx, float delta);
 
-    SequencerStep getStep(int track, int step_idx) const;
-    void toggleStep(int track, int step_idx);
-    void adjustStepNote(int track, int step_idx, int semitones);
-    void lockStepCutoff(int track, int step_idx, float cutoff_val);
+    SequencerStep getStep(int row, int step_idx) const;
+    void toggleStep(int row, int step_idx);
+    void toggleParamTrig(int row, int step_idx); // Жовтий Elektron Trig (Parameter Lock без Note-On)
+    void adjustStepNote(int row, int step_idx, int semitones);
+    void lockStepCutoff(int row, int step_idx, float cutoff_val);
 
-    // Тригер ноти на одній із 4 доріжок (з опціональним P-Lock зрізу фільтра)
+    // Тригер ноти для конкретного голосу/рядка (row = 0..15)
+    void triggerVoice(int row, int midi_note, float velocity = 0.9f, float plock_cutoff = -1.0f);
     void triggerNote(int track, int midi_note, float velocity = 0.9f, float plock_cutoff = -1.0f);
 
-    // Тригер 16-крокового патерну на кожному кроці секвенсора
+    // Тригер кроку секвенсора (0..127)
     void triggerSequencerStep(uint32_t step_idx);
+    uint32_t getPatternLength() const { return pattern_length_.load(std::memory_order_relaxed); }
+    void setPatternLength(uint32_t len) { pattern_length_.store(std::clamp(len, 16u, 128u)); }
 
     SynthParams& params() { return params_; }
     const SynthParams& params() const { return params_; }
@@ -90,7 +94,8 @@ private:
     SynthParams params_;
     mutable std::mutex state_mutex_;
     std::array<TrackParameters, 4> tracks_{};
-    std::array<std::array<SequencerStep, 16>, 4> pattern_{};
+    std::atomic<uint32_t> pattern_length_{64};
+    std::array<std::array<SequencerStep, kMaxSteps>, kTotalRows> pattern_{};
 
     struct VoiceState {
         bool active = false;
@@ -99,17 +104,17 @@ private:
         float phase2 = 0.0f;
         float phase3 = 0.0f;
         float phase4 = 0.0f;
-        float env = 0.0f;
-        float filter_env = 0.0f;
+        AdsrEnvelope amp_adsr{};
+        AdsrEnvelope filter_adsr{};
         float pitch_env = 0.0f;
-        float decay_rate = 0.9995f;
+        float velocity = 1.0f;
         float svf_low = 0.0f;
         float svf_band = 0.0f;
         float last_out = 0.0f;
         float plock_cutoff = -1.0f;
     };
 
-    std::array<VoiceState, 4> voices_{};
+    std::array<VoiceState, kTotalRows> voices_{};
     uint32_t rng_state_ = 0x12345678u;
 
     // Стерео пінг-понг ділей буфер (до 0.5 сек на 48k)

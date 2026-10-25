@@ -19,11 +19,14 @@ struct AppModel {
     bool dev_shortcuts_enabled = kDefaultDevShortcuts;
     bool transport_playing = false;
     float bpm = 120.0f;
-    uint32_t current_step = 0;
+    uint32_t current_step = 0; // 0..127
     float phase = 0.0f;
     int selected_track = 0;    // 0..3 (TRK 1..4)
     int selected_param = 0;    // 0 = ENGINE TYPE, 1..6 = параметри p[0..5]
-    int cursor_step = 0;       // 0..15 (курсор кроку в секвенсорі R1)
+    int cursor_row = 0;        // 0..15 (16 рядків: 4 треки x 4 голоси)
+    int cursor_step = 0;       // 0..127 (курсор кроку)
+    int seq_page = 0;          // 0 = кроки 0..63, 1 = кроки 64..127
+    uint32_t pattern_length = 64; // 16, 32, 64, 128
 };
 
 class UiRenderer {

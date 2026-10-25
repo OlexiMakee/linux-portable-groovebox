@@ -185,3 +185,24 @@
   * Вимкнено параметр ядра `autoclock` (`autoclock=0`) у `/storage/.config/modprobe.d/snd-usb-audio.conf`, `src/hw_monitor.cpp` та `scripts/deploy_xu10.sh`.
   * Перезавантажено модуль у пам'яті ядра (`modprobe -r snd_usb_audio && modprobe snd_usb_audio autoclock=0 lowlatency=0`), перевірено значення `N` у `/sys/module/snd_usb_audio/parameters/autoclock`.
   * Ліквідовано циклічні опитування дескрипторів годинника UAC2 (`Clock Selector / Source Validity`), які на контролері `dwc2` перевантажували керуючий канал та призводили до випадання мікрофреймів при роботі з Elektron Digitakt II.
+
+## [2026-10-25 15:45] Elektron Matrix Sequencer (16-Row x 128-Step), Param Trigs & 4-Stage ADSR Engine
+* **16-Row Polyphonic / Drum Matrix Architecture (src/synth_engines.hpp, src/audio_engine.hpp):**
+  * Створено матричну модель `16 рядків × 128 кроків` (4 доріжки × 4 поліфонічні голоси/доріжки ударних):
+    * Рядки 0–3: Track 1 (Drum: 1BD, 1SD, 1CH, 1OH).
+    * Рядки 4–7: Track 2 (VA Synth: голоси 1–4).
+    * Рядки 8–11: Track 3 (Acid/Lead: голоси 1–4).
+    * Рядки 12–15: Track 4 (FM/Chords: голоси 1–4).
+  * Реалізовано повноцінний 4-стадійний генератор огинаючої `AdsrEnvelope` (Attack, Decay, Sustain, Release) з експоненційними кривими загасання для всіх голосів і рушіїв.
+* **Elektron-Style Yellow Parameter Trigs:**
+  * Додано підтримку жовтих кроків автоматизації (`is_param_trig`):
+    * Звичайний Note Trig (зелений/бірюзовий): запускає огинаючу, фазу генератора та ноту.
+    * Param Trig (жовтий `#FFD600`): застосовує P-Locks (зріз фільтра, резонанс, параметри модуляції) до активного звуку без повторного перезапуску огинаючої та ноти.
+    * Перемикання кроку кнопкою `A`: `Off -> Note Trig -> Param Trig -> Off`.
+* **64-Step Visible Page Grid UI (src/ui_renderer.cpp, src/main.cpp):**
+  * Трансформовано 4-ту вкладку `[R1]` з пасивного осцилографа у повноцінну секвенсорну матрицю 16 рядків × 64 видимих кроки.
+  * Підтримка двох сторінок (P1: 0..63, P2: 64..127) з ручним перемиканням `SELECT + Y` та автоскролом за курсором.
+  * Циклічне перемикання довжини патерну `SELECT + X` (16 -> 32 -> 64 -> 128).
+  * Навігація D-Pad: рух курсора по 16 рядках та 128 кроках; `X/Y` — транспонування півтонів; `B` — запис P-Lock зі стіка.
+* **64-Step Polyphonic Mozart "Rondo Alla Turca" Default Sequence:**
+  * Запрограмовано багатодоріжкову 64-крокову секвенцію Турецького маршу Моцарта: барабанний біт (рядки 0–3), партія басу (рядки 4–5), соло з жовтими Param Trigs (рядок 8) та FM акорди (рядки 12–14).

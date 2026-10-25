@@ -39,8 +39,10 @@ namespace palette {
     inline constexpr ColorRGB kTextMain      = {230, 237, 243};  // #E6EDF3 - основний чіткий білий шрифт
     inline constexpr ColorRGB kAccentOrange  = {255, 106, 0};    // #FF6A00 - Elektron активна вкладка/курсор
     inline constexpr ColorRGB kAccentCyan    = {0,   229, 255};  // #00E5FF - хвиля осцилографа / MIDI / стіки
-    inline constexpr ColorRGB kLevelOk       = {0,   230, 118};  // #00E676 - зелений (USB OK / VU норма)
+    inline constexpr ColorRGB kLevelOk       = {0,   230, 118};  // #00E676 - зелений (USB OK / VU норма / Note Trig)
     inline constexpr ColorRGB kLevelWarnClip = {255, 42,  85};   // #FF2A55 - червоний (Clip / Host warning)
+    inline constexpr ColorRGB kParamTrig     = {255, 214, 0};    // #FFD600 - жовтий Elektron Param Trig (Lock-only)
+    inline constexpr ColorRGB kCursorWhite   = {255, 255, 255};  // #FFFFFF - курсор редагування
 } // namespace palette
 
 // 4 головні вкладки верхнього бара (відповідають фізичним бамперам зліва направо: L1, L2, R2, R1)
