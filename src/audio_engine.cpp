@@ -226,7 +226,7 @@ bool AudioEngine::start(int card_index, bool is_usb_48k, bool headphones_plugged
     const bool use_usb = (card_index > 0) && is_usb_48k && !force_internal_.load(std::memory_order_relaxed);
     const uint32_t target_rate = use_usb ? static_cast<uint32_t>(prof.usb_rate) : static_cast<uint32_t>(prof.internal_rate);
     active_sample_rate_.store(target_rate);
-    active_period_frames_.store(512);
+    active_period_frames_.store(target_period_frames_.load(std::memory_order_relaxed));
 
     applyRk817HardwareMux(headphones_plugged);
     applyRk817HardwareVolume(params_.master_volume.load());
@@ -294,6 +294,23 @@ void AudioEngine::adjustMasterVolume(float delta) {
 void AudioEngine::toggleOutputOverride() {
     bool next = !force_internal_.load(std::memory_order_relaxed);
     force_internal_.store(next, std::memory_order_relaxed);
+    int card = current_card_.load();
+    bool is_usb = current_usb_48k_.load();
+    bool hp = current_hp_.load();
+    start(card, is_usb, hp);
+}
+
+void AudioEngine::cycleBufferSize() {
+    uint32_t cur = target_period_frames_.load(std::memory_order_relaxed);
+    uint32_t next = 1024;
+    if (cur == 128) next = 256;
+    else if (cur == 256) next = 512;
+    else if (cur == 512) next = 1024;
+    else if (cur == 1024) next = 2048;
+    else next = 128;
+    target_period_frames_.store(next, std::memory_order_relaxed);
+    std::printf("[AudioEngine] Buffer size cycled to %u frames (%.1f ms)\n",
+                next, (next * 1000.0f) / active_sample_rate_.load());
     int card = current_card_.load();
     bool is_usb = current_usb_48k_.load();
     bool hp = current_hp_.load();
@@ -529,11 +546,17 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
 
 #if defined(__linux__)
 void AudioEngine::alsaThreadLoop() {
-    // Піднімаємо пріоритет аудіопотоку до Real-Time (SCHED_FIFO 75),
-    // щоб ізохронні USB-пакети dwc2 ніколи не переривалися графікою чи фоновими процесами!
+    // 1. Жорстко ізолюємо аудіопотік на окремому ядрі CPU 3 (усуває конкуренцію з перериваннями dwc2 на CPU 0)
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(3, &cpuset);
+    pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+
+    // 2. Піднімаємо пріоритет до найвищого Real-Time (SCHED_FIFO 85),
+    //    щоб аудіотракт гарантовано не переривався жодними іншими процесами!
     {
         struct sched_param sp{};
-        sp.sched_priority = 75;
+        sp.sched_priority = 85;
         pthread_setschedparam(pthread_self(), SCHED_FIFO, &sp);
     }
 
@@ -543,8 +566,13 @@ void AudioEngine::alsaThreadLoop() {
     int card = current_card_.load();
     const bool use_usb = (card > 0) && !force_internal_.load(std::memory_order_relaxed);
     const uint32_t rate = active_sample_rate_.load();
-    // 64 мс буфер (6 періодів по 512) для стабільної черги URB без обвалу dwc2
-    const unsigned int latency_us = use_usb ? 64000u : 16000u;
+    const uint32_t block_frames = target_period_frames_.load(std::memory_order_relaxed);
+    active_period_frames_.store(block_frames, std::memory_order_relaxed);
+
+    // Буфер ALSA: щонайменше 6 періодів для USB (для компенсації джитеру dwc2) або 4 для внутрішнього ЦАП
+    const unsigned int latency_us = use_usb
+        ? std::max(64000u, static_cast<unsigned int>((block_frames * 6 * 1000000ULL) / rate))
+        : std::max(16000u, static_cast<unsigned int>((block_frames * 4 * 1000000ULL) / rate));
 
     // 1. Якщо підключено зовнішній USB Audio інтерфейс і не ввімкнено оверрайд FORCE INTERNAL,
     //    відкриваємо ВИКЛЮЧНО його (щоб не було конфлікту двох різних кварцових генераторів USB vs I2S RK817!)
@@ -614,11 +642,9 @@ void AudioEngine::alsaThreadLoop() {
         }
     }
 
-    constexpr uint32_t kBlockFrames = 512;
-    active_period_frames_.store(kBlockFrames, std::memory_order_relaxed);
-    std::array<int16_t, kBlockFrames * 2> buf16{};
-    std::array<int32_t, kBlockFrames * 2> buf32{};
-    std::array<uint8_t, kBlockFrames * 2 * 3> buf24_3{};
+    std::vector<int16_t> buf16(block_frames * 2, 0);
+    std::vector<int32_t> buf32(block_frames * 2, 0);
+    std::vector<uint8_t> buf24_3(block_frames * 2 * 3, 0);
 
     auto writeBlock = [&](const int16_t* in_samples) -> snd_pcm_sframes_t {
         if (!pcm) return 0;
@@ -626,12 +652,12 @@ void AudioEngine::alsaThreadLoop() {
             for (size_t i = 0; i < buf16.size(); ++i) {
                 buf32[i] = static_cast<int32_t>(in_samples[i]) << 16;
             }
-            return snd_pcm_writei(pcm, buf32.data(), kBlockFrames);
+            return snd_pcm_writei(pcm, buf32.data(), block_frames);
         } else if (active_fmt == SND_PCM_FORMAT_S24_LE) {
             for (size_t i = 0; i < buf16.size(); ++i) {
                 buf32[i] = static_cast<int32_t>(in_samples[i]) << 8;
             }
-            return snd_pcm_writei(pcm, buf32.data(), kBlockFrames);
+            return snd_pcm_writei(pcm, buf32.data(), block_frames);
         } else if (active_fmt == SND_PCM_FORMAT_S24_3LE) {
             for (size_t i = 0; i < buf16.size(); ++i) {
                 int32_t v = static_cast<int32_t>(in_samples[i]) << 8;
@@ -639,22 +665,22 @@ void AudioEngine::alsaThreadLoop() {
                 buf24_3[i * 3 + 1] = static_cast<uint8_t>((v >> 8) & 0xFF);
                 buf24_3[i * 3 + 2] = static_cast<uint8_t>((v >> 16) & 0xFF);
             }
-            return snd_pcm_writei(pcm, buf24_3.data(), kBlockFrames);
+            return snd_pcm_writei(pcm, buf24_3.data(), block_frames);
         } else {
-            return snd_pcm_writei(pcm, in_samples, kBlockFrames);
+            return snd_pcm_writei(pcm, in_samples, block_frames);
         }
     };
 
-    // Pre-roll: заповнюємо апаратний буфер ALSA 4 періодами (2048 семплів = 42.6 мс)
+    // Pre-roll: заповнюємо апаратний буфер ALSA 4 періодами
     if (pcm) {
         for (int p = 0; p < 4; ++p) {
-            renderBlock(buf16.data(), kBlockFrames, rate);
+            renderBlock(buf16.data(), block_frames, rate);
             writeBlock(buf16.data());
         }
     }
 
     while (running_.load(std::memory_order_relaxed)) {
-        renderBlock(buf16.data(), kBlockFrames, rate);
+        renderBlock(buf16.data(), block_frames, rate);
 
         if (pcm) {
             snd_pcm_sframes_t written = writeBlock(buf16.data());
@@ -669,7 +695,7 @@ void AudioEngine::alsaThreadLoop() {
                 }
                 // Pre-roll після відновлення, щоб запобігти повторному спустошенню
                 for (int p = 0; p < 2; ++p) {
-                    renderBlock(buf16.data(), kBlockFrames, rate);
+                    renderBlock(buf16.data(), block_frames, rate);
                     writeBlock(buf16.data());
                 }
             }

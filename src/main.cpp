@@ -163,6 +163,10 @@ int main(int argc, char* argv[]) {
         if (in.fn_pressed || (in.btn_select && in.b_pressed)) {
             hw_monitor.toggleUsbRole();
             ui_dirty = true;
+        } else if (app.dev_shortcuts_enabled && in.btn_select && in.a_pressed) {
+            // SELECT + A: циклічне перемикання розміру буфера (128 -> 256 -> 512 -> 1024 -> 2048)
+            audio_engine.cycleBufferSize();
+            ui_dirty = true;
         } else if (app.dev_shortcuts_enabled && in.btn_select && in.y_pressed) {
             // SELECT + Y: тимчасове перемикання аудіовиходу (AUTO / USB <-> FORCE INTERNAL RK817)
             audio_engine.toggleOutputOverride();

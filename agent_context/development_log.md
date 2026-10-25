@@ -147,3 +147,16 @@
   * Збільшено розмір блоку `kBlockFrames` до 512 семплів (10.66 мс), що знизило частоту переривань на процесор з 187 Гц до 93 Гц.
   * Буфер USB розширено до 64 мс (`latency_us = 64000u`).
   * При виникненні XRUN тепер викликається `snd_pcm_drop(pcm)` для повного скидання черги DMA перед `snd_pcm_prepare()`, що ліквідує зависання драйвера зі статусом `prepare failed: Broken pipe`.
+
+## [2026-10-25 14:35] Dedicated Linux Appliance (KMSDRM), Audio CPU 3 RT Isolation & Buffer Hot-Cycling (SELECT + A)
+* **Dedicated Appliance Architecture (Direct KMSDRM):**
+  * Повністю ліквідовано залежність від Wayland, Sway та EmulationStation. Замасковано `essway.service` та `sway.service` у systemd.
+  * Створено та активовано системний сервіс `/storage/.config/system.d/groovebox.service` (`WantedBy=rocknix.target`), який запускає DAW одразу при старті Linux напряму поверх `/dev/dri/card0` через Direct KMSDRM (`SDL_VIDEODRIVER=kmsdrm`).
+  * Споживання оперативної пам'яті скоротилося з 297 МБ до 229 МБ, шина AXI та GPU Mali повністю розвантажені від віконного композитора.
+* **Audio Engine CPU 3 Isolation & Real-Time FIFO 85:**
+  * Аудіопотік жорстко зафіксовано на виділеному ядрі CPU 3 (`pthread_setaffinity_np`), ізолювавши його від апаратних переривань контролера USB `dwc2`, дисплея та таймерів ядра (які обробляються на CPU 0).
+  * Пріоритет планувальника піднято до `SCHED_FIFO 85`.
+* **Live Buffer Hot-Cycling (128 -> 256 -> 512 -> 1024 -> 2048):**
+  * Додано метод `AudioEngine::cycleBufferSize()` та комбінацію гарячих клавіш **`SELECT + A`** для циклічної зміни розміру блоку та буфера на льоту: `128 -> 256 -> 512 -> 1024 -> 2048 семплів`.
+  * Буфер ALSA адаптивно розраховується з коефіцієнтом $\times 6$ періодів для USB Audio (`latency_us = max(64ms, block * 6)`), гарантуючи стабільну чергу URB.
+  * Поточний розмір буфера виводиться в статусному рядку інтерфейсу (`BUF: %u`) та відображається в підказці при затисканні `SELECT` (`SEL:[A=BUF B=USB]`).

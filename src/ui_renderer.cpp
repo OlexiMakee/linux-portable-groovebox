@@ -284,8 +284,9 @@ void UiRenderer::renderWorkspace(
         // Вкладка L1: Апаратний монітор, аудіо-роутинг, MIDI Clock та тест кнопок
         ColorRGB route_col = hw.digitakt_connected ? palette::kLevelOk : palette::kAccentOrange;
         std::snprintf(
-            buf, sizeof(buf), "AUDIO OUT : %s | VOL:%3.0f%% | XRUN:%u",
+            buf, sizeof(buf), "AUDIO OUT : %s | BUF:%u | VOL:%3.0f%% | XRUN:%u",
             audio.device_label.c_str(),
+            audio.period_frames,
             master_vol * 100.0f,
             audio.xrun_count
         );
@@ -480,14 +481,13 @@ void UiRenderer::renderWorkspace(
         const char* nn = kNoteNames[cur_st.note % 12];
 
         std::snprintf(
-            buf, sizeof(buf), "TRK %d [%s] | STEP %02d:%s%d %s | BPM:%3.0f %s | XRUN:%u",
+            buf, sizeof(buf), "TRK %d [%s] | STEP %02d:%s%d %s | BUF:%u | XRUN:%u",
             app.selected_track + 1,
             getEngineTypeName(tp.engine),
             app.cursor_step + 1,
             nn, oct,
             cur_st.has_plock ? "[P-LOCK]" : "",
-            app.bpm,
-            app.transport_playing ? "PLAY" : "STOP",
+            audio.period_frames,
             audio.xrun_count
         );
         drawText(8, top_y + 6, buf, palette::kAccentOrange, 1);
@@ -595,7 +595,7 @@ void UiRenderer::renderBottomHud(
 
     // Самий центр: SELECT та START
     drawText(cx_pos, hud_y + 3,  "SEL / START", palette::kAccentOrange, 1);
-    drawText(cx_pos, hud_y + 11, input.btn_select ? "SEL:[SHIFT]" : "SEL:SHIFT", input.btn_select ? palette::kLevelOk : palette::kTextMain, 1);
+    drawText(cx_pos, hud_y + 11, input.btn_select ? "SEL:[A=BUF B=USB]" : "SEL:SHIFT", input.btn_select ? palette::kLevelOk : palette::kTextMain, 1);
     drawText(cx_pos, hud_y + 19, app.transport_playing ? "STA:[PLAY]" : "STA:STOP", app.transport_playing ? palette::kLevelOk : palette::kTextDim, 1);
 
     // Правий стік

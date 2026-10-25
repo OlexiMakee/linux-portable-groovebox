@@ -12,9 +12,9 @@ cmake -S "${PROJECT_DIR}" -B "${PROJECT_DIR}/build-xu10" \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build "${PROJECT_DIR}/build-xu10" -j4
 
-echo "=== 2. Деплой бінарника, профілів та автостарту на MagicX XU10 (${TARGET_HOST}:${REMOTE_DIR}) ==="
+echo "=== 2. Деплой бінарника, профілів та Appliance-сервісу на MagicX XU10 (${TARGET_HOST}:${REMOTE_DIR}) ==="
 ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${TARGET_HOST}" \
-  "mkdir -p ${REMOTE_DIR}/profiles /storage/roms/ports /storage/.config/autostart && killall -9 xu10_groovebox 2>/dev/null || true"
+  "mkdir -p ${REMOTE_DIR}/profiles /storage/.config/system.d /storage/.config/modprobe.d && killall -9 xu10_groovebox 2>/dev/null || true"
 
 cat "${PROJECT_DIR}/build-xu10/xu10_groovebox" | ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${TARGET_HOST}" \
   "cat > ${REMOTE_DIR}/xu10_groovebox && chmod +x ${REMOTE_DIR}/xu10_groovebox"
@@ -27,8 +27,9 @@ cat << 'EOF' > ${REMOTE_DIR}/launch_groovebox.sh
 #!/bin/bash
 mkdir -p /var/cache/services /storage/.cache/services /storage/.config/modprobe.d
 touch /var/cache/services/sshd.conf /storage/.cache/services/sshd.conf
-echo "options snd-usb-audio lowlatency=0" > /storage/.config/modprobe.d/snd-usb-audio.conf 2>/dev/null || true
+echo 'options snd-usb-audio lowlatency=0' > /storage/.config/modprobe.d/snd-usb-audio.conf 2>/dev/null || true
 systemctl start sshd.service 2>/dev/null || true
+
 modprobe snd-usb-audio lowlatency=0 2>/dev/null || true
 modprobe snd-rawmidi 2>/dev/null || true
 modprobe snd-seq-midi 2>/dev/null || true
@@ -45,58 +46,57 @@ if [ \"\${UDC_STATE}\" != \"configured\" ]; then
   /usr/sbin/i2cset -f -y 0 0x20 0xb4 0x46 2>/dev/null || true
 fi
 
-systemctl stop pipewire-pulse.socket pipewire.socket pipewire-pulse pipewire 2>/dev/null || true
-kill -STOP \$(pidof emulationstation) 2>/dev/null || true
-kill -STOP \$(pidof input_sense) \$(pidof evtest) \$(pidof mako) 2>/dev/null || true
+# Зупиняємо всі фонові сервіси, які засмічують звук і шину
+systemctl stop pipewire-pulse.socket pipewire.socket pipewire-pulse pipewire avahi-daemon simple-http-server 2>/dev/null || true
 
-export XDG_RUNTIME_DIR=/var/run/0-runtime-dir
-export WAYLAND_DISPLAY=wayland-1
-export SWAYSOCK=/var/run/0-runtime-dir/sway-ipc.0.sock
-export SDL_VIDEODRIVER=wayland
+# Прямий вивід на екран через Direct KMSDRM (нуль оверхеду Wayland/Mali)
+export SDL_VIDEODRIVER=kmsdrm
+export SDL_RENDER_DRIVER=software
 
-/storage/dev/groovebox/xu10_groovebox >/tmp/groovebox.log 2>&1
-
-kill -CONT \$(pidof input_sense) \$(pidof evtest) \$(pidof mako) 2>/dev/null || true
-kill -CONT \$(pidof emulationstation) 2>/dev/null || true
-systemctl start pipewire.socket pipewire-pulse.socket 2>/dev/null || true
+exec /storage/dev/groovebox/xu10_groovebox
 EOF
 chmod +x ${REMOTE_DIR}/launch_groovebox.sh
 
-# 1. Ярлик у меню Ports для запуску з інтерфейсу консолі в один клік
-cp ${REMOTE_DIR}/launch_groovebox.sh /storage/roms/ports/XU10_Groovebox.sh
-chmod +x /storage/roms/ports/XU10_Groovebox.sh
+# 1. Створюємо системний сервіс виділеного Appliance у systemd
+cat << 'EOF' > /storage/.config/system.d/groovebox.service
+[Unit]
+Description=MagicX XU10 Dedicated Groovebox DAW Appliance
+After=sound.target rocknix.target
+Wants=sound.target
+Conflicts=essway.service sway.service
 
-# 2. Автозапуск DAW одразу після завантаження консолі
-cat << 'EOF' > /storage/.config/autostart/99-groovebox.sh
-#!/bin/bash
-(
-  for _ in \$(seq 1 30); do
-    [ -S /var/run/0-runtime-dir/wayland-1 ] && break
-    sleep 0.5
-  done
-  sleep 1
-  /storage/dev/groovebox/launch_groovebox.sh
-) &
+[Service]
+Type=simple
+WorkingDirectory=/storage/dev/groovebox
+ExecStart=/storage/dev/groovebox/launch_groovebox.sh
+Restart=always
+RestartSec=1
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=rocknix.target
 EOF
-chmod +x /storage/.config/autostart/99-groovebox.sh
+
+# 2. Назавжди маскуємо EmulationStation та Sway (Wayland) і активуємо groovebox.service
+systemctl mask essway.service sway.service 2>/dev/null || true
+systemctl enable /storage/.config/system.d/groovebox.service 2>/dev/null || true
+rm -f /storage/.config/autostart/99-groovebox.sh 2>/dev/null || true
+
 sync
 "
 
 if [[ "${1:-}" == "--run" ]]; then
-  echo "=== 3. Запуск xu10_groovebox на екрані консолі (Wayland/Sway + Direct ALSA) ==="
+  echo "=== 3. Запуск xu10_groovebox як Dedicated Appliance (Direct KMSDRM + Dedicated Audio CPU3) ==="
   ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${TARGET_HOST}" "
     echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor >/dev/null 2>&1 || true
     modprobe snd-usb-audio lowlatency=0 2>/dev/null || true
-modprobe snd-rawmidi 2>/dev/null || true
-modprobe snd-seq-midi 2>/dev/null || true
-    systemctl stop pipewire-pulse.socket pipewire.socket pipewire-pulse pipewire 2>/dev/null || true
-    kill -STOP \$(pidof emulationstation) 2>/dev/null || true
-    kill -STOP \$(pidof input_sense) \$(pidof evtest) \$(pidof mako) 2>/dev/null || true
-    export XDG_RUNTIME_DIR=/var/run/0-runtime-dir
-    export WAYLAND_DISPLAY=wayland-1
-    export SWAYSOCK=/var/run/0-runtime-dir/sway-ipc.0.sock
-    export SDL_VIDEODRIVER=wayland
-    nohup ${REMOTE_DIR}/xu10_groovebox >/tmp/groovebox.log 2>&1 &
+    modprobe snd-rawmidi 2>/dev/null || true
+    modprobe snd-seq-midi 2>/dev/null || true
+    systemctl stop pipewire-pulse.socket pipewire.socket pipewire-pulse pipewire avahi-daemon simple-http-server 2>/dev/null || true
+    export SDL_VIDEODRIVER=kmsdrm
+    killall -9 xu10_groovebox 2>/dev/null || true
+    nohup /storage/dev/groovebox/launch_groovebox.sh >/tmp/groovebox.log 2>&1 &
     sleep 1
     ps aux | grep xu10_groovebox | grep -v grep
     cat /tmp/groovebox.log

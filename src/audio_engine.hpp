@@ -51,6 +51,10 @@ public:
     void toggleOutputOverride();
     bool isOutputForcedInternal() const;
 
+    // Циклічне перемикання розміру буфера/періоду (128 -> 256 -> 512 -> 1024 -> 2048)
+    void cycleBufferSize();
+    uint32_t getTargetPeriodFrames() const { return target_period_frames_.load(std::memory_order_relaxed); }
+
     // Доступ та модифікація модульних параметрів 4 доріжок і 16 кроків секвенсора
     TrackParameters getTrackParams(int track) const;
     void setTrackParams(int track, const TrackParameters& tp);
@@ -119,7 +123,8 @@ private:
     std::atomic<bool> current_hp_{false};
     std::atomic<bool> force_internal_{false};
     std::atomic<uint32_t> active_sample_rate_{32000};
-    std::atomic<uint32_t> active_period_frames_{128};
+    std::atomic<uint32_t> target_period_frames_{1024};
+    std::atomic<uint32_t> active_period_frames_{1024};
     std::atomic<uint32_t> xrun_count_{0};
 
     std::atomic<float> vu_l_{0.0f};
