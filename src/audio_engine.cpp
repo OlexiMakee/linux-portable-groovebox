@@ -650,7 +650,7 @@ void AudioEngine::alsaThreadLoop() {
             snd_pcm_sframes_t written = writeBlock(buf16.data());
             if (written < 0) {
                 xrun_count_.fetch_add(1, std::memory_order_relaxed);
-                std::fprintf(stderr, "[ALSA] XRUN (%ld), recovering...\n", written);
+                std::fprintf(stderr, "[ALSA] Write error %ld: %s, recovering...\n", written, snd_strerror(static_cast<int>(written)));
                 snd_pcm_recover(pcm, static_cast<int>(written), 1);
                 // Pre-roll після відновлення, щоб запобігти повторному спустошенню
                 for (int p = 0; p < 2; ++p) {

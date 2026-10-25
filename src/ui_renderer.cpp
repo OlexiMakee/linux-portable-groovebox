@@ -299,8 +299,8 @@ void UiRenderer::renderWorkspace(
         drawText(8, top_y + 15, buf, palette::kAccentCyan, 1);
 
         std::snprintf(
-            buf, sizeof(buf), "SYSTEM    : CPU %2.0f%% (%dC) | RAM %d / %d MB",
-            hw.cpu_load_percent, hw.cpu_temp_c, hw.ram_used_mb, hw.ram_total_mb
+            buf, sizeof(buf), "SYSTEM    : CPU %2.0f%% [MAX %2.0f%%] (%dC) | RAM %d/%d MB",
+            hw.cpu_load_percent, hw.cpu_max_percent, hw.cpu_temp_c, hw.ram_used_mb, hw.ram_total_mb
         );
         drawText(8, top_y + 24, buf, palette::kTextMain, 1);
 

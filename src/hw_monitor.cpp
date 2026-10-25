@@ -78,7 +78,7 @@ bool HardwareMonitor::requestUsbRoleSwitch(const std::string& target_role) {
     if (target_role == "host") {
         // 1. Вимикаємо USB_MODE у конфігу ROCKNIX (щоб udev не повернув порт у cdc!),
         //    відв'язуємо UDC, переводимо порт OTG у режим Host і вмикаємо 5V VBUS
-        cmd = "modprobe snd-usb-audio implicit_fb=1,1,1,1 lowlatency=0 2>/dev/null; modprobe snd-rawmidi 2>/dev/null; modprobe snd-seq-midi 2>/dev/null; ";
+        cmd = "modprobe snd-usb-audio lowlatency=0 2>/dev/null; modprobe snd-rawmidi 2>/dev/null; modprobe snd-seq-midi 2>/dev/null; ";
         if (!prof.gadget_conf_path.empty()) cmd += "echo 'USB_MODE=disabled' > " + prof.gadget_conf_path + " 2>/dev/null; ";
         cmd += "echo '' > /sys/kernel/config/usb_gadget/cdc/UDC 2>/dev/null; ";
         cmd += "echo host > " + prof.role_switch_path + " 2>/dev/null; ";
@@ -213,6 +213,11 @@ void HardwareMonitor::pollOnce() {
     } else {
         next.cpu_load_percent = 4.2f;
     }
+
+    if (next.cpu_load_percent > cpu_max_percent_) {
+        cpu_max_percent_ = next.cpu_load_percent;
+    }
+    next.cpu_max_percent = cpu_max_percent_;
 
     // 5. Температура SoC RK3326 (/sys/class/thermal/thermal_zone0/temp)
     std::string temp_str = readFirstLine("/sys/class/thermal/thermal_zone0/temp");

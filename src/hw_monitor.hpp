@@ -29,6 +29,7 @@ struct HardwareSnapshot {
     bool headphones_plugged = false;
 
     float cpu_load_percent = 0.0f;
+    float cpu_max_percent = 0.0f;
     int cpu_temp_c = 0;
     int ram_used_mb = 0;
     int ram_total_mb = 1024;
@@ -64,6 +65,7 @@ private:
 
     uint64_t prev_cpu_total_ = 0;
     uint64_t prev_cpu_idle_ = 0;
+    float cpu_max_percent_ = 0.0f;
 };
 
 } // namespace groovebox
