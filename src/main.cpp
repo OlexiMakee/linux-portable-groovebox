@@ -170,6 +170,10 @@ int main(int argc, char* argv[]) {
         if (in.l1_pressed) {
             if (app.active_tab == groovebox::WorkspaceTab::kSeq) {
                 app.active_tab = groovebox::WorkspaceTab::kSynth;
+                int act_rows = audio_engine.getActiveRowCount();
+                if (app.cursor_row < act_rows) {
+                    app.selected_track = audio_engine.getRowTrack(app.cursor_row);
+                }
             } else {
                 app.active_tab = groovebox::WorkspaceTab::kSeq;
             }
@@ -192,110 +196,200 @@ int main(int argc, char* argv[]) {
 
         // 2. Гарячі комбінації клавіш із затиснутим SELECT (Elektron Style):
         if (app.dev_shortcuts_enabled && in.btn_select && in.b_pressed) {
-            // SELECT + B: CLEAR TRACK (повне очищення активної доріжки)
-            audio_engine.clearRow(app.cursor_row);
-            ui_dirty = true;
-        } else if (app.dev_shortcuts_enabled && in.btn_select && in.a_pressed) {
-            // SELECT + A: STEP PREVIEW (прослухати виділений крок із P-Lock)
-            audio_engine.previewStep(app.cursor_row, app.cursor_step);
-            ui_dirty = true;
-        } else if (app.dev_shortcuts_enabled && in.btn_select && in.start_pressed) {
-            // SELECT + START: RANDOMIZE TRACK (рандомізувати тригери доріжки)
-            audio_engine.randomizeRow(app.cursor_row);
-            ui_dirty = true;
-        } else if (app.dev_shortcuts_enabled && in.btn_select && in.y_pressed) {
-            // SELECT + Y: перемикання сторінки секвенсора (до 4 сторінок P1..P4 залежно від довжини рядка)
-            uint32_t r_len = audio_engine.getRowLength(app.cursor_row);
-            uint32_t max_pages = (r_len + groovebox::kStepsPerPage - 1) / groovebox::kStepsPerPage;
-            if (max_pages > 1) {
-                app.seq_page = (app.seq_page + 1) % max_pages;
-                app.cursor_step = app.seq_page * groovebox::kStepsPerPage + (app.cursor_step % groovebox::kStepsPerPage);
-                if (app.cursor_step >= static_cast<int>(r_len)) {
-                    app.cursor_step = static_cast<int>(r_len - 1);
-                }
-            } else {
-                app.seq_page = 0;
-            }
-            ui_dirty = true;
-        } else if (app.dev_shortcuts_enabled && in.btn_select && in.x_pressed) {
-            // SELECT + X: зміна довжини патерну поточного рядка (16 -> 24 -> 32 -> 48 -> 64 -> 72 -> 80 -> 96 -> 112 -> 128)
-            uint32_t next_len = audio_engine.cycleRowLength(app.cursor_row);
-            if (app.cursor_step >= static_cast<int>(next_len)) {
-                app.cursor_step = static_cast<int>(next_len - 1);
-            }
-            uint32_t max_pages = (next_len + groovebox::kStepsPerPage - 1) / groovebox::kStepsPerPage;
-            if (app.seq_page >= static_cast<int>(max_pages)) {
-                app.seq_page = max_pages - 1;
-            }
-            ui_dirty = true;
-        } else if (app.active_tab == groovebox::WorkspaceTab::kSeq && !in.btn_select) {
-            // --- Step Inspector та P-Lock зі стіка: Детекція Hold A vs Tweak стіком vs короткий клік ---
-            if (in.a_pressed) {
-                app.a_press_time_ms = now_ms;
-                app.a_held = true;
-                app.a_long_press_triggered = false;
-                app.stick_plock_tweaked = false;
-                app.plock_cutoff_live = -1.0f;
-            }
-            if (app.a_held) {
-                // Elektron P-Lock механіка: затиснув A і крутиш аналоговий стік -> живий твік і аудіо-прев'ю!
-                if (std::fabs(in.lx) > 0.15f) {
-                    app.stick_plock_tweaked = true;
-                    app.plock_cutoff_live = std::clamp(0.50f + in.lx * 0.45f, 0.05f, 0.95f);
-                    audio_engine.lockStepCutoff(app.cursor_row, app.cursor_step, app.plock_cutoff_live);
-                    ui_dirty = true;
-                }
-                if (!app.a_long_press_triggered && (now_ms - app.a_press_time_ms >= 200)) {
-                    app.a_long_press_triggered = true;
-                    app.step_inspector_open = true;
-                    ui_dirty = true;
-                }
-            }
-            if (app.a_held && !in.btn_a) {
-                if (app.stick_plock_tweaked) {
-                    // Збереження положення стіка, на якому відпущено кнопку A (Elektron P-Lock Auto-Save)
-                    if (app.plock_cutoff_live >= 0.0f) {
-                        audio_engine.lockStepCutoff(app.cursor_row, app.cursor_step, app.plock_cutoff_live);
-                    }
-                    ui_dirty = true;
-                } else if (!app.a_long_press_triggered) {
-                    // Короткий клік (<200мс) без руху стіка: встановлення / зміна кроку (Off -> Note -> Param -> Off)
-                    audio_engine.toggleStep(app.cursor_row, app.cursor_step);
-                    ui_dirty = true;
-                }
-                app.a_held = false;
-                app.step_inspector_open = false;
-                app.stick_plock_tweaked = false;
-                app.plock_cutoff_live = -1.0f;
+            // SELECT + B: CLEAR TRACK — ВИКЛЮЧНО У ВКЛАДЦІ СЕКВЕНСОРА!
+            if (app.active_tab == groovebox::WorkspaceTab::kSeq) {
+                audio_engine.clearRow(app.cursor_row);
                 ui_dirty = true;
             }
+        } else if (app.dev_shortcuts_enabled && in.btn_select && in.a_pressed) {
+            // SELECT + A: STEP PREVIEW (у SEQ) або INSTRUMENT PREVIEW (у SYNTH)
+            if (app.active_tab == groovebox::WorkspaceTab::kSeq) {
+                audio_engine.previewStep(app.cursor_row, app.cursor_step);
+            } else if (app.active_tab == groovebox::WorkspaceTab::kSynth) {
+                audio_engine.triggerNote(app.selected_track, 48, 0.90f);
+            }
+            ui_dirty = true;
+        } else if (app.dev_shortcuts_enabled && in.btn_select && in.start_pressed) {
+            // SELECT + START: RANDOMIZE TRACK — тільки в SEQ
+            if (app.active_tab == groovebox::WorkspaceTab::kSeq) {
+                audio_engine.randomizeRow(app.cursor_row);
+                ui_dirty = true;
+            }
+        } else if (app.dev_shortcuts_enabled && in.btn_select && in.y_pressed) {
+            // SELECT + Y: перемикання сторінки — тільки в SEQ
+            if (app.active_tab == groovebox::WorkspaceTab::kSeq) {
+                uint32_t r_len = audio_engine.getRowLength(app.cursor_row);
+                uint32_t max_pages = (r_len + groovebox::kStepsPerPage - 1) / groovebox::kStepsPerPage;
+                if (max_pages > 1) {
+                    app.seq_page = (app.seq_page + 1) % max_pages;
+                    app.cursor_step = app.seq_page * groovebox::kStepsPerPage + (app.cursor_step % groovebox::kStepsPerPage);
+                    if (app.cursor_step >= static_cast<int>(r_len)) {
+                        app.cursor_step = static_cast<int>(r_len - 1);
+                    }
+                } else {
+                    app.seq_page = 0;
+                }
+                ui_dirty = true;
+            }
+        } else if (app.dev_shortcuts_enabled && in.btn_select && in.x_pressed) {
+            // SELECT + X: зміна довжини патерну поточного рядка — тільки в SEQ
+            if (app.active_tab == groovebox::WorkspaceTab::kSeq) {
+                uint32_t next_len = audio_engine.cycleRowLength(app.cursor_row);
+                if (app.cursor_step >= static_cast<int>(next_len)) {
+                    app.cursor_step = static_cast<int>(next_len - 1);
+                }
+                uint32_t max_pages = (next_len + groovebox::kStepsPerPage - 1) / groovebox::kStepsPerPage;
+                if (app.seq_page >= static_cast<int>(max_pages)) {
+                    app.seq_page = max_pages - 1;
+                }
+                ui_dirty = true;
+            }
+        } else if (app.active_tab == groovebox::WorkspaceTab::kSeq && !in.btn_select) {
+            int act_rows = audio_engine.getActiveRowCount();
+            if (app.cursor_row >= act_rows) {
+                // Курсор на слоті [+] ADD TRACK: кнопка A створює новий інструмент!
+                if (in.a_pressed) {
+                    if (act_rows < groovebox::kTotalRows) {
+                        audio_engine.setActiveRowCount(act_rows + 4);
+                        app.cursor_row = act_rows; // курсор стає на перший новий рядок
+                        app.selected_track = act_rows / 4;
+                        ui_dirty = true;
+                    }
+                }
+            } else {
+                // --- Step Inspector та P-Lock зі стіка: Детекція Hold A vs Tweak стіком vs короткий клік ---
+                if (in.a_pressed) {
+                    app.a_press_time_ms = now_ms;
+                    app.a_held = true;
+                    app.a_long_press_triggered = false;
+                    app.stick_plock_tweaked = false;
+                    app.plock_cutoff_live = -1.0f;
+                }
+                if (app.a_held) {
+                    // Elektron P-Lock механіка: затиснув A і крутиш аналоговий стік -> живий твік і аудіо-прев'ю!
+                    if (std::fabs(in.lx) > 0.15f) {
+                        app.stick_plock_tweaked = true;
+                        app.plock_cutoff_live = std::clamp(0.50f + in.lx * 0.45f, 0.05f, 0.95f);
+                        audio_engine.lockStepCutoff(app.cursor_row, app.cursor_step, app.plock_cutoff_live);
+                        ui_dirty = true;
+                    }
+                    if (!app.a_long_press_triggered && (now_ms - app.a_press_time_ms >= 200)) {
+                        app.a_long_press_triggered = true;
+                        app.step_inspector_open = true;
+                        ui_dirty = true;
+                    }
+                }
+                if (app.a_held && !in.btn_a) {
+                    if (app.stick_plock_tweaked) {
+                        // Збереження положення стіка, на якому відпущено кнопку A (Elektron P-Lock Auto-Save)
+                        if (app.plock_cutoff_live >= 0.0f) {
+                            audio_engine.lockStepCutoff(app.cursor_row, app.cursor_step, app.plock_cutoff_live);
+                        }
+                        ui_dirty = true;
+                    } else if (!app.a_long_press_triggered) {
+                        // Короткий клік (<200мс) без руху стіка: встановлення / зміна кроку (Off -> Note -> Param -> Off)
+                        audio_engine.toggleStep(app.cursor_row, app.cursor_step);
+                        ui_dirty = true;
+                    }
+                    app.a_held = false;
+                    app.step_inspector_open = false;
+                    app.stick_plock_tweaked = false;
+                    app.plock_cutoff_live = -1.0f;
+                    ui_dirty = true;
+                }
 
-            if (!app.step_inspector_open) {
-                if (in.b_pressed) {
-                    // Кнопка B: Видалити крок під курсором (Elektron Clear Step / Trig OFF)
-                    audio_engine.clearStep(app.cursor_row, app.cursor_step);
-                    ui_dirty = true;
-                }
-                if (in.x_pressed) {
-                    // Кнопка X: нота -1 півтон
-                    audio_engine.adjustStepNote(app.cursor_row, app.cursor_step, -1);
-                    ui_dirty = true;
-                }
-                if (in.y_pressed) {
-                    // Кнопка Y: нота +1 півтон
-                    audio_engine.adjustStepNote(app.cursor_row, app.cursor_step, +1);
-                    ui_dirty = true;
+                if (!app.step_inspector_open) {
+                    if (in.b_pressed) {
+                        // Кнопка B: Видалити крок під курсором (Elektron Clear Step / Trig OFF)
+                        audio_engine.clearStep(app.cursor_row, app.cursor_step);
+                        ui_dirty = true;
+                    }
+                    if (in.x_pressed) {
+                        // Кнопка X: нота -1 півтон
+                        audio_engine.adjustStepNote(app.cursor_row, app.cursor_step, -1);
+                        ui_dirty = true;
+                    }
+                    if (in.y_pressed) {
+                        // Кнопка Y: нота +1 півтон
+                        audio_engine.adjustStepNote(app.cursor_row, app.cursor_step, +1);
+                        ui_dirty = true;
+                    }
                 }
             }
         } else if (!in.btn_select) {
             // Дії кнопок A, B, X, Y залежно від інших активних вкладок:
             if (app.active_tab == groovebox::WorkspaceTab::kSynth) {
                 // Вкладка [L1] SYNTH:
+                // A = INCREMENT PARAMETER (+delta)
+                // B = DECREMENT PARAMETER (-delta)
                 // X = ADD INSTRUMENT (додати 4 рядки)
                 // Y = DEL INSTRUMENT (видалити 4 рядки)
-                // A = PREVIEW SOUND (зіграти ноту активної доріжки)
-                // B = RESET PARAM (скинути поточний вибраний параметр)
-                if (in.x_pressed) {
+                auto tweakSynthParam = [&](int dir) {
+                    int sel_row = std::clamp(app.selected_param / 4, 0, 5);
+                    int sel_col = std::clamp(app.selected_param % 4, 0, 3);
+                    const float delta = dir * 0.05f;
+
+                    if (sel_row == 0) {
+                        // INST
+                        if (sel_col == 0) {
+                            audio_engine.cycleTrackEngine(app.selected_track, dir);
+                        } else if (sel_col == 1) {
+                            int trk_count = (audio_engine.getActiveRowCount() + 3) / 4;
+                            app.selected_track = (app.selected_track + dir + trk_count) % trk_count;
+                        } else if (sel_col == 2) {
+                            int cur_rows = audio_engine.getActiveRowCount();
+                            if (cur_rows < 16) {
+                                audio_engine.setActiveRowCount(cur_rows + 4);
+                                app.selected_track = cur_rows / 4;
+                            }
+                        } else if (sel_col == 3) {
+                            int cur_rows = audio_engine.getActiveRowCount();
+                            if (cur_rows > 4) {
+                                audio_engine.setActiveRowCount(cur_rows - 4);
+                                if (app.selected_track >= (cur_rows - 4) / 4) {
+                                    app.selected_track = std::max(0, (cur_rows - 4) / 4 - 1);
+                                }
+                            }
+                        }
+                    } else if (sel_row == 1) {
+                        // FILTER
+                        if (sel_col < 3) audio_engine.adjustTrackParam(app.selected_track, sel_col, delta);
+                    } else if (sel_row == 2) {
+                        // OSC
+                        audio_engine.adjustTrackParam(app.selected_track, sel_col + 2, delta);
+                    } else if (sel_row == 3) {
+                        // ADSR
+                        auto tp = audio_engine.getTrackParams(app.selected_track);
+                        if (sel_col == 0) tp.attack = std::clamp(tp.attack + dir * 0.02f, 0.001f, 0.8f);
+                        else if (sel_col == 1) tp.decay = std::clamp(tp.decay + dir * 0.05f, 0.01f, 1.5f);
+                        else if (sel_col == 2) tp.sustain = std::clamp(tp.sustain + delta, 0.0f, 1.0f);
+                        else if (sel_col == 3) tp.release = std::clamp(tp.release + dir * 0.05f, 0.01f, 1.8f);
+                        audio_engine.setTrackParams(app.selected_track, tp);
+                    } else if (sel_row == 4) {
+                        // MOD / LFO
+                    } else if (sel_row == 5) {
+                        // SENDS & STICKS
+                        auto tp = audio_engine.getTrackParams(app.selected_track);
+                        if (sel_col == 0) {
+                            tp.delay_send = std::clamp(tp.delay_send + delta, 0.0f, 1.0f);
+                            audio_engine.setTrackParams(app.selected_track, tp);
+                        } else if (sel_col == 1) {
+                            tp.pan = std::clamp(tp.pan + dir * 0.1f, -1.0f, 1.0f);
+                            audio_engine.setTrackParams(app.selected_track, tp);
+                        } else if (sel_col == 2) {
+                            groovebox::g_stick_l_mode = (groovebox::g_stick_l_mode + dir + 4) % 4;
+                        } else if (sel_col == 3) {
+                            groovebox::g_stick_r_mode = (groovebox::g_stick_r_mode + dir + 4) % 4;
+                        }
+                    }
+                    ui_dirty = true;
+                };
+
+                if (in.a_pressed) {
+                    tweakSynthParam(+1);
+                } else if (in.b_pressed) {
+                    tweakSynthParam(-1);
+                } else if (in.x_pressed) {
                     int cur_rows = audio_engine.getActiveRowCount();
                     if (cur_rows < 16) {
                         audio_engine.setActiveRowCount(cur_rows + 4);
@@ -311,16 +405,19 @@ int main(int argc, char* argv[]) {
                         }
                         ui_dirty = true;
                     }
-                } else if (in.a_pressed) {
-                    audio_engine.triggerNote(app.selected_track, 48, 0.90f);
-                    ui_dirty = true;
-                } else if (in.b_pressed) {
-                    auto tp = audio_engine.getTrackParams(app.selected_track);
-                    tp.p[0] = 0.5f; tp.p[1] = 0.3f; tp.p[2] = 0.5f;
-                    audio_engine.setTrackParams(app.selected_track, tp);
-                    ui_dirty = true;
                 }
             } else if (app.active_tab == groovebox::WorkspaceTab::kMixFx) {
+                auto tp = audio_engine.getTrackParams(app.selected_track);
+                if (in.a_pressed) { tp.muted = !tp.muted; audio_engine.setTrackParams(app.selected_track, tp); ui_dirty = true; }
+                if (in.b_pressed) { tp.delay_send = 0.0f; audio_engine.setTrackParams(app.selected_track, tp); ui_dirty = true; }
+                if (in.x_pressed) { tp.delay_send = std::clamp(tp.delay_send - 0.10f, 0.0f, 1.0f); audio_engine.setTrackParams(app.selected_track, tp); ui_dirty = true; }
+                if (in.y_pressed) {
+                    float cur_fb = audio_engine.params().delay_feedback.load(std::memory_order_relaxed);
+                    float next_fb = (cur_fb > 0.70f) ? 0.20f : (cur_fb + 0.15f);
+                    audio_engine.params().delay_feedback.store(next_fb, std::memory_order_relaxed);
+                    ui_dirty = true;
+                }
+            } else if (app.active_tab == groovebox::WorkspaceTab::kSys) {
                 auto tp = audio_engine.getTrackParams(app.selected_track);
                 if (in.a_pressed) { tp.muted = !tp.muted; audio_engine.setTrackParams(app.selected_track, tp); ui_dirty = true; }
                 if (in.b_pressed) { tp.delay_send = 0.0f; audio_engine.setTrackParams(app.selected_track, tp); ui_dirty = true; }
@@ -430,51 +527,58 @@ int main(int argc, char* argv[]) {
                 ui_dirty = true;
             }
         } else if (app.active_tab == groovebox::WorkspaceTab::kSeq) {
-            // [L1] SEQ: Up/Down = вибір активного рядка (0..7), Left/Right = навігація по кроках
+            // [L1] SEQ: Up/Down = вибір активного рядка або слота [+] ADD TRACK, Left/Right = навігація по кроках
             const int active_rows = audio_engine.getActiveRowCount();
+            const int total_nav_slots = (active_rows < groovebox::kTotalRows) ? (active_rows + 1) : active_rows;
+
             if (in.up_pressed) {
                 int jump = in.btn_select ? 4 : 1;
-                app.cursor_row = (app.cursor_row + active_rows - jump) % active_rows;
-                app.selected_track = audio_engine.getRowTrack(app.cursor_row);
-                uint32_t r_len = audio_engine.getRowLength(app.cursor_row);
-                if (app.cursor_step >= static_cast<int>(r_len)) {
-                    app.cursor_step = static_cast<int>(r_len - 1);
+                app.cursor_row = (app.cursor_row + total_nav_slots - jump) % total_nav_slots;
+                if (app.cursor_row < active_rows) {
+                    app.selected_track = audio_engine.getRowTrack(app.cursor_row);
+                    uint32_t r_len = audio_engine.getRowLength(app.cursor_row);
+                    if (app.cursor_step >= static_cast<int>(r_len)) {
+                        app.cursor_step = static_cast<int>(r_len - 1);
+                    }
+                    uint32_t max_p = (r_len + groovebox::kStepsPerPage - 1) / groovebox::kStepsPerPage;
+                    app.seq_page = app.cursor_step / groovebox::kStepsPerPage;
+                    if (app.seq_page >= static_cast<int>(max_p)) app.seq_page = max_p - 1;
                 }
-                uint32_t max_p = (r_len + groovebox::kStepsPerPage - 1) / groovebox::kStepsPerPage;
-                app.seq_page = app.cursor_step / groovebox::kStepsPerPage;
-                if (app.seq_page >= static_cast<int>(max_p)) app.seq_page = max_p - 1;
                 ui_dirty = true;
             }
             if (in.down_pressed) {
                 int jump = in.btn_select ? 4 : 1;
-                app.cursor_row = (app.cursor_row + jump) % active_rows;
-                app.selected_track = audio_engine.getRowTrack(app.cursor_row);
-                uint32_t r_len = audio_engine.getRowLength(app.cursor_row);
-                if (app.cursor_step >= static_cast<int>(r_len)) {
-                    app.cursor_step = static_cast<int>(r_len - 1);
+                app.cursor_row = (app.cursor_row + jump) % total_nav_slots;
+                if (app.cursor_row < active_rows) {
+                    app.selected_track = audio_engine.getRowTrack(app.cursor_row);
+                    uint32_t r_len = audio_engine.getRowLength(app.cursor_row);
+                    if (app.cursor_step >= static_cast<int>(r_len)) {
+                        app.cursor_step = static_cast<int>(r_len - 1);
+                    }
+                    uint32_t max_p = (r_len + groovebox::kStepsPerPage - 1) / groovebox::kStepsPerPage;
+                    app.seq_page = app.cursor_step / groovebox::kStepsPerPage;
+                    if (app.seq_page >= static_cast<int>(max_p)) app.seq_page = max_p - 1;
                 }
-                uint32_t max_p = (r_len + groovebox::kStepsPerPage - 1) / groovebox::kStepsPerPage;
-                app.seq_page = app.cursor_step / groovebox::kStepsPerPage;
-                if (app.seq_page >= static_cast<int>(max_p)) app.seq_page = max_p - 1;
                 ui_dirty = true;
             }
-            uint32_t cur_r_len = audio_engine.getRowLength(app.cursor_row);
-            if (in.left_pressed) {
-                int jump = in.btn_select ? 16 : 1; // З SELECT: стрибок на такт (16 кроків)!
-                if (app.cursor_step >= jump) app.cursor_step -= jump;
-                else app.cursor_step = static_cast<int>(cur_r_len - 1);
-                app.seq_page = app.cursor_step / groovebox::kStepsPerPage;
-                ui_dirty = true;
-            }
-            if (in.right_pressed) {
-                int jump = in.btn_select ? 16 : 1;
-                app.cursor_step = (app.cursor_step + jump) % cur_r_len;
-                app.seq_page = app.cursor_step / groovebox::kStepsPerPage;
-                ui_dirty = true;
+            if (app.cursor_row < active_rows) {
+                uint32_t cur_r_len = audio_engine.getRowLength(app.cursor_row);
+                if (in.left_pressed) {
+                    int jump = in.btn_select ? 16 : 1; // З SELECT: стрибок на такт (16 кроків)!
+                    if (app.cursor_step >= jump) app.cursor_step -= jump;
+                    else app.cursor_step = static_cast<int>(cur_r_len - 1);
+                    app.seq_page = app.cursor_step / groovebox::kStepsPerPage;
+                    ui_dirty = true;
+                }
+                if (in.right_pressed) {
+                    int jump = in.btn_select ? 16 : 1;
+                    app.cursor_step = (app.cursor_step + jump) % cur_r_len;
+                    app.seq_page = app.cursor_step / groovebox::kStepsPerPage;
+                    ui_dirty = true;
+                }
             }
         } else if (app.active_tab == groovebox::WorkspaceTab::kSynth) {
-            // [L1] SYNTH: 6x4 Табличний навігатор
-            // app.selected_param: 0..23 (row = selected_param / 4, col = selected_param % 4)
+            // [L1] SYNTH: D-Pad Up/Down/Left/Right повністю матрична навігація по клітинках таблиці 6x4!
             int sel_row = std::clamp(app.selected_param / 4, 0, 5);
             int sel_col = std::clamp(app.selected_param % 4, 0, 3);
 
@@ -488,79 +592,13 @@ int main(int argc, char* argv[]) {
                 ui_dirty = true;
             }
 
-            if (in.btn_select) {
-                // При затиснутому SELECT стрілки Left/Right переміщують курсор по колонках (0..3)
-                if (in.left_pressed) {
-                    sel_col = (sel_col + 3) % 4;
-                    app.selected_param = sel_row * 4 + sel_col;
-                    ui_dirty = true;
-                } else if (in.right_pressed) {
-                    sel_col = (sel_col + 1) % 4;
-                    app.selected_param = sel_row * 4 + sel_col;
-                    ui_dirty = true;
-                }
-            } else if (in.left_pressed || in.right_pressed) {
-                // Без SELECT стрілки Left/Right змінюють значення комірки під курсором!
-                const int dir = in.right_pressed ? +1 : -1;
-                const float delta = dir * 0.05f;
-
-                if (sel_row == 0) {
-                    // Category 0: INST (ENGINE, TRK, ADD, DEL)
-                    if (sel_col == 0) {
-                        audio_engine.cycleTrackEngine(app.selected_track, dir);
-                    } else if (sel_col == 1) {
-                        int trk_count = (audio_engine.getActiveRowCount() + 3) / 4;
-                        app.selected_track = (app.selected_track + dir + trk_count) % trk_count;
-                    } else if (sel_col == 2) {
-                        // ADD
-                        int cur_rows = audio_engine.getActiveRowCount();
-                        if (cur_rows < 16) {
-                            audio_engine.setActiveRowCount(cur_rows + 4);
-                            app.selected_track = cur_rows / 4;
-                        }
-                    } else if (sel_col == 3) {
-                        // DEL
-                        int cur_rows = audio_engine.getActiveRowCount();
-                        if (cur_rows > 4) {
-                            audio_engine.setActiveRowCount(cur_rows - 4);
-                            if (app.selected_track >= (cur_rows - 4) / 4) {
-                                app.selected_track = std::max(0, (cur_rows - 4) / 4 - 1);
-                            }
-                        }
-                    }
-                } else if (sel_row == 1) {
-                    // Category 1: FILTER (CUTOFF, RESO, ENV MOD, TYPE)
-                    if (sel_col < 3) {
-                        audio_engine.adjustTrackParam(app.selected_track, sel_col, delta);
-                    }
-                } else if (sel_row == 2) {
-                    // Category 2: OSC / FM (P2, P3, P4, P5)
-                    audio_engine.adjustTrackParam(app.selected_track, sel_col + 2, delta);
-                } else if (sel_row == 3) {
-                    // Category 3: ADSR
-                    auto tp = audio_engine.getTrackParams(app.selected_track);
-                    if (sel_col == 0) tp.attack = std::clamp(tp.attack + dir * 0.02f, 0.001f, 0.8f);
-                    else if (sel_col == 1) tp.decay = std::clamp(tp.decay + dir * 0.05f, 0.01f, 1.5f);
-                    else if (sel_col == 2) tp.sustain = std::clamp(tp.sustain + delta, 0.0f, 1.0f);
-                    else if (sel_col == 3) tp.release = std::clamp(tp.release + dir * 0.05f, 0.01f, 1.8f);
-                    audio_engine.setTrackParams(app.selected_track, tp);
-                } else if (sel_row == 4) {
-                    // Category 4: MOD / LFO (пресети модуляцій)
-                } else if (sel_row == 5) {
-                    // Category 5: SENDS & STICKS
-                    auto tp = audio_engine.getTrackParams(app.selected_track);
-                    if (sel_col == 0) {
-                        tp.delay_send = std::clamp(tp.delay_send + delta, 0.0f, 1.0f);
-                        audio_engine.setTrackParams(app.selected_track, tp);
-                    } else if (sel_col == 1) {
-                        tp.pan = std::clamp(tp.pan + dir * 0.1f, -1.0f, 1.0f);
-                        audio_engine.setTrackParams(app.selected_track, tp);
-                    } else if (sel_col == 2) {
-                        groovebox::g_stick_l_mode = (groovebox::g_stick_l_mode + dir + 4) % 4;
-                    } else if (sel_col == 3) {
-                        groovebox::g_stick_r_mode = (groovebox::g_stick_r_mode + dir + 4) % 4;
-                    }
-                }
+            if (in.left_pressed) {
+                sel_col = (sel_col + 3) % 4;
+                app.selected_param = sel_row * 4 + sel_col;
+                ui_dirty = true;
+            } else if (in.right_pressed) {
+                sel_col = (sel_col + 1) % 4;
+                app.selected_param = sel_row * 4 + sel_col;
                 ui_dirty = true;
             }
         } else if (app.active_tab == groovebox::WorkspaceTab::kMixFx) {

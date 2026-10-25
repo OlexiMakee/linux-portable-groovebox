@@ -309,3 +309,19 @@
   * Замінено лінійний список параметрів на 6-рядкову таблицю 4×6 (INST & ADD/DEL, FILTER, OSC/FM, ADSR, MOD/LFO, SENDS/STICKS).
   * Кнопки `X` та `Y` у вкладці `SYNTH` динамічно додають (`+4` рядки) або видаляють (`-4` рядки) інструменти в пулі аудіорушія.
   * У `src/audio_engine.cpp` ініціалізовано мапінг усіх 16 рядків (T0: Drums 0..3, T1: VA 4..7, T2: Acid 303 8..11, T3: FM 2-Op 12..15).
+
+## [2026-10-25 18:40] Cyan Tab Color, Full D-Pad 6x4 Grid Nav with A/B Value Tweak, [+] Add Slot in Sequencer & Tabular MIX with MASTER Bus
+* **Cyan Sub-Mode Tab Color for SYNTH (src/ui_renderer.cpp):**
+  * Коли активний режим `SYNTH`, плашка `[L1] SYNTH/seq` у верхньому барі підсвічується неоново-блакитним (`palette::kAccentCyan`) замість помаранчевого, надаючи миттєву візуальну диференціацію двох режимів L1.
+* **Full D-Pad 6x4 Matrix Navigation & A/B Value Controls in SYNTH (src/main.cpp, src/ui_renderer.cpp):**
+  * D-Pad (Up/Down/Left/Right) суворо переміщує курсор по 24 клітинках таблиці 6×4.
+  * Кнопка `A` збільшує значення виділеного параметра (`VAL+`), кнопка `B` зменшує значення (`VAL-`).
+  * `SELECT + A` виконує аудіо-прев'ю виділеного інструмента (`audio_engine.triggerNote`).
+  * Повністю заблоковано дії `CLEAR` (`SELECT + B`), `PAGE LEN` (`SELECT + X`) та `PAGE` (`SELECT + Y`) у вкладці синтезатора.
+* **Contextual Track Sync & [+] ADD TRACK Slot in Sequencer (src/main.cpp, src/ui_renderer.cpp):**
+  * При натисканні `L1` синтезатор автоматично відкривається для того інструмента, на якому стоїть курсор у секвенсорі (`app.selected_track = audio_engine.getRowTrack(app.cursor_row)`).
+  * У сітці секвенсора додано інтерактивний слот `[+] ADD TRACK` одразу під останнім активним рядком (`cursor_row == active_rows`).
+  * Натискання кнопки `A` на слоті `[+]` миттєво створює новий інструмент (+4 голосні рядки), переводить курсор на перший новий рядок та обирає цей трек для швидкого редагування в SYNTH по L1.
+* **Tabular MIX Tab & Master FX Bus (src/ui_renderer.cpp):**
+  * Повністю перероблено громіздкий вертикальний мікшер на компактну горизонтальну матрицю 4 каналів (Channel Header, Mute/On, Level slider + peak VU, Pan dot, Delay send bar).
+  * Додано окремий блок `MASTER FX BUS` (MST VOL, DLY TIME 250ms, DLY FDBK, LIMITER).

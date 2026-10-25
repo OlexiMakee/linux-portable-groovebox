@@ -260,9 +260,11 @@ void UiRenderer::renderTopBar(const AppModel& app, const InputState& input, int 
     // Якщо затиснуто SELECT, верхній бар динамічно відображає гарячі клавіші Elektron!
     if (input.btn_select) {
         fillRect(1, 1, w - 2, bar_h - 3, palette::kHeaderSel);
-        const char* sel_hint = (w >= 320)
-            ? "SEL: [A:PREV] [B:CLR TRK] [X:LEN] [Y:PAGE] [STA:RND] [VOL:BPM]"
-            : "SEL: A:PRV B:CLR X:LEN Y:PG STA:RND";
+        const char* sel_hint = (app.active_tab == WorkspaceTab::kSynth)
+            ? "SEL: [A:PREVIEW NOTE]"
+            : ((w >= 320)
+                ? "SEL: [A:PREV] [B:CLR TRK] [X:LEN] [Y:PAGE] [STA:RND] [VOL:BPM]"
+                : "SEL: A:PRV B:CLR X:LEN Y:PG STA:RND");
         drawText(4, 5, sel_hint, palette::kParamTrig, 1);
         return;
     }
@@ -300,7 +302,10 @@ void UiRenderer::renderTopBar(const AppModel& app, const InputState& input, int 
         const char* lbl = (w >= 320) ? labels_320[i] : labels_160[i];
         const int text_x = tx + (cur_tw - static_cast<int>(std::strlen(lbl)) * 4) / 2;
         if (is_active) {
-            fillRect(tx + 1, 1, cur_tw - 2, bar_h - 3, palette::kAccentOrange);
+            ColorRGB tab_bg = (i == 0 && app.active_tab == WorkspaceTab::kSynth)
+                ? palette::kAccentCyan
+                : palette::kAccentOrange;
+            fillRect(tx + 1, 1, cur_tw - 2, bar_h - 3, tab_bg);
             drawText(text_x, 5, lbl, palette::kBgDark, 1);
         } else if (held[i]) {
             fillRect(tx + 1, 1, cur_tw - 2, bar_h - 3, palette::kAccentCyan);
@@ -338,7 +343,8 @@ void UiRenderer::renderWorkspace(
     if (app.active_tab == WorkspaceTab::kSeq) {
         // [L1] SEQ: 8-рядкова матриця Elektron-секвенсора (2 чисті інструменти: Drums + VA Synth)
         const int active_rows = audio_engine.getActiveRowCount();
-        const int cur_r = std::clamp(app.cursor_row, 0, active_rows - 1);
+        const bool on_add_slot = (app.cursor_row >= active_rows);
+        const int cur_r = on_add_slot ? (active_rows - 1) : app.cursor_row;
         const int cur_t = audio_engine.getRowTrack(cur_r);
         const int cur_v = audio_engine.getRowVoice(cur_r);
         const auto tp = audio_engine.getTrackParams(cur_t);
@@ -351,22 +357,26 @@ void UiRenderer::renderWorkspace(
 
         const uint32_t cur_row_len = audio_engine.getRowLength(cur_r);
         const uint32_t total_row_pages = (cur_row_len + kStepsPerPage - 1) / kStepsPerPage;
-        std::snprintf(
-            buf, sizeof(buf), "R%d [%s] | ST%03d:%s%d %s%s | P%d/%d L:%u | BPM:%3.0f %s",
-            cur_r + 1,
-            getEngineTypeName(tp.engine),
-            app.cursor_step + 1,
-            nn, oct,
-            (cur_st.slide && tp.engine != EngineType::kDrumSyn) ? "~SLD " : "",
-            trig_tag,
-            app.seq_page + 1,
-            total_row_pages,
-            cur_row_len,
-            midi.external_sync ? midi.detected_bpm : app.bpm,
-            app.transport_playing ? "PLAY" : "STOP"
-        );
-        ColorRGB hdr_col = cur_st.is_param_trig ? palette::kParamTrig : palette::kAccentOrange;
-        drawText(4, top_y + 4, buf, hdr_col, 1);
+        if (on_add_slot) {
+            drawText(4, top_y + 4, "[+] CREATE NEW TRACK | PRESS A TO ADD 4 VOICES", palette::kAccentCyan, 1);
+        } else {
+            std::snprintf(
+                buf, sizeof(buf), "R%d [%s] | ST%03d:%s%d %s%s | P%d/%d L:%u | BPM:%3.0f %s",
+                cur_r + 1,
+                getEngineTypeName(tp.engine),
+                app.cursor_step + 1,
+                nn, oct,
+                (cur_st.slide && tp.engine != EngineType::kDrumSyn) ? "~SLD " : "",
+                trig_tag,
+                app.seq_page + 1,
+                total_row_pages,
+                cur_row_len,
+                midi.external_sync ? midi.detected_bpm : app.bpm,
+                app.transport_playing ? "PLAY" : "STOP"
+            );
+            ColorRGB hdr_col = cur_st.is_param_trig ? palette::kParamTrig : palette::kAccentOrange;
+            drawText(4, top_y + 4, buf, hdr_col, 1);
+        }
 
         const int grid_x = 36;
         const int grid_y = top_y + 16;
@@ -382,7 +392,7 @@ void UiRenderer::renderWorkspace(
             int t = audio_engine.getRowTrack(r);
             int v = audio_engine.getRowVoice(r);
             int ry = grid_y + r * row_h;
-            bool is_active_row = (r == cur_r);
+            bool is_active_row = (!on_add_slot && r == cur_r);
             uint32_t r_len = audio_engine.getRowLength(r);
             const auto trk = audio_engine.getTrackParams(t);
 
@@ -415,7 +425,7 @@ void UiRenderer::renderWorkspace(
             for (uint32_t s = 0; s < kStepsPerPage; ++s) {
                 uint32_t step_idx = page_offset + s;
                 int cx = grid_x + static_cast<int>(s) * 7;
-                bool is_cursor = (r == cur_r && step_idx == static_cast<uint32_t>(app.cursor_step));
+                bool is_cursor = (is_active_row && step_idx == static_cast<uint32_t>(app.cursor_step));
                 bool is_playhead = app.transport_playing && (step_idx == row_playhead_step);
 
                 if (step_idx < r_len) {
@@ -457,7 +467,17 @@ void UiRenderer::renderWorkspace(
             drawText(270, ry + 2, r_info, is_active_row ? palette::kAccentOrange : palette::kTextMain, 1);
         }
 
-        // [+] ADD видалено із сітки SEQ: додавання інструментів перенесено у вкладку SYNTH
+        // [+] ADD TRACK слот у кінці списку доріжок:
+        if (active_rows < kTotalRows) {
+            int add_y = grid_y + active_rows * row_h;
+            if (on_add_slot) {
+                fillRect(4, add_y, w - 8, row_h - 1, palette::kHeaderSel);
+                drawRect(4, add_y, w - 8, row_h - 1, palette::kAccentOrange);
+            }
+            drawText(6, add_y + 2, "[+]", on_add_slot ? palette::kAccentOrange : palette::kTextDim, 1);
+            drawText(36, add_y + 2, "ADD NEW INSTRUMENT TRACK [PRESS A]", on_add_slot ? palette::kAccentCyan : palette::kTextDim, 1);
+            drawText(270, add_y + 2, "[+] ADD", on_add_slot ? palette::kAccentOrange : palette::kTextDim, 1);
+        }
 
         // --- STEP INSPECTOR MODAL POPUP (Утримання кнопки A > 200 мс) ---
         if (app.step_inspector_open) {
@@ -643,35 +663,82 @@ void UiRenderer::renderWorkspace(
         }
 
     } else if (app.active_tab == WorkspaceTab::kMixFx) {
-        // Вкладка R2: 4-канальний мікшер, Delay Send, Mute та індивідуальні VU-метри
-        std::snprintf(buf, sizeof(buf), "4-TRACK MIXER & STEREO PING-PONG DELAY | VOL:%3.0f%%", master_vol * 100.0f);
-        drawText(8, top_y + 6, buf, palette::kAccentOrange, 1);
+        // Вкладка [R2] MIX: Компактна таблична матриця 4 треків + окремий рядок MASTER FX BUS
+        std::snprintf(buf, sizeof(buf), "MIXER & MASTER EFFECTS BUS | MST VOL:%3.0f%%", master_vol * 100.0f);
+        drawText(6, top_y + 4, buf, palette::kAccentOrange, 1);
 
+        const int act_trks = (audio_engine.getActiveRowCount() + 3) / 4;
+
+        // 4 канали треків (рядки 0..3)
         for (int t = 0; t < 4; ++t) {
             const auto tp = audio_engine.getTrackParams(t);
-            const int by = top_y + 22 + t * 38;
+            const int by = top_y + 16 + t * 27;
+            const bool is_act = (t < act_trks);
             const bool sel = (app.selected_track == t);
+
             if (sel) {
-                drawRect(6, by - 3, w - 12, 34, palette::kAccentOrange);
+                fillRect(4, by, w - 8, 25, palette::kHeaderSel);
+                drawRect(4, by, w - 8, 25, palette::kAccentOrange);
+            } else {
+                drawRect(4, by, w - 8, 25, palette::kGridDim);
             }
 
-            std::snprintf(
-                buf, sizeof(buf), "%sTRK %d [%-11s] %s LVL:%3.0f%% DLY:%2.0f%%",
-                sel ? ">" : " ",
-                t + 1,
-                getEngineTypeName(tp.engine),
-                tp.muted ? "[MUTE]" : "[ON]  ",
-                tp.level * 100.0f,
-                tp.delay_send * 100.0f
-            );
-            drawText(10, by + 2, buf, tp.muted ? palette::kLevelWarnClip : (sel ? palette::kAccentCyan : palette::kTextMain), 1);
+            // Col 1: Назва та статус (x = 8..90)
+            char trk_hdr[32];
+            std::snprintf(trk_hdr, sizeof(trk_hdr), "T%d [%-9s]", t + 1, is_act ? getEngineTypeName(tp.engine) : "OFF");
+            drawText(8, by + 3, trk_hdr, is_act ? (sel ? palette::kAccentCyan : palette::kTextMain) : palette::kTextDim, 1);
+            const char* mute_str = tp.muted ? "[MUTE]" : "[ON]";
+            drawText(8, by + 13, mute_str, tp.muted ? palette::kLevelWarnClip : palette::kLevelOk, 1);
 
-            const int bar_w = w - 24;
-            drawRect(12, by + 13, bar_w, 11, palette::kGridDim);
-            int lvl = static_cast<int>(std::clamp(audio.track_levels[t] * 1.4f, 0.0f, 1.0f) * (bar_w - 2));
-            if (lvl > 0 && !tp.muted) {
-                fillRect(13, by + 14, lvl, 9, (lvl > (bar_w * 8) / 10) ? palette::kLevelWarnClip : palette::kLevelOk);
+            // Col 2: Level slider + VU Peak (x = 94..180)
+            char lvl_str[16];
+            std::snprintf(lvl_str, sizeof(lvl_str), "LVL:%3.0f%%", tp.level * 100.0f);
+            drawText(94, by + 3, lvl_str, palette::kTextDim, 1);
+            drawRect(94, by + 12, 86, 9, palette::kGridDim);
+            int v_lvl = static_cast<int>(std::clamp(audio.track_levels[t] * 1.4f, 0.0f, 1.0f) * 82.0f);
+            if (v_lvl > 0 && !tp.muted && is_act) {
+                fillRect(96, by + 14, v_lvl, 5, (v_lvl > 68) ? palette::kLevelWarnClip : palette::kLevelOk);
             }
+
+            // Col 3: PAN (x = 186..240)
+            char pan_str[16];
+            std::snprintf(pan_str, sizeof(pan_str), "PAN:%+3.0f", tp.pan * 100.0f);
+            drawText(186, by + 3, pan_str, palette::kTextDim, 1);
+            drawRect(186, by + 12, 54, 9, palette::kGridDim);
+            int pan_dot = 186 + 27 + static_cast<int>(tp.pan * 23.0f);
+            fillRect(pan_dot - 1, by + 13, 3, 7, palette::kAccentCyan);
+
+            // Col 4: DLY SEND (x = 246..312)
+            char dly_str[16];
+            std::snprintf(dly_str, sizeof(dly_str), "DLY:%2.0f%%", tp.delay_send * 100.0f);
+            drawText(246, by + 3, dly_str, palette::kTextDim, 1);
+            drawRect(246, by + 12, 64, 9, palette::kGridDim);
+            int dly_fill = static_cast<int>(tp.delay_send * 60.0f);
+            if (dly_fill > 0 && is_act) {
+                fillRect(248, by + 14, dly_fill, 5, palette::kAccentOrange);
+            }
+        }
+
+        // Рядок 5: MASTER FX BUS (y = top_y + 126, x = 4..316)
+        const int my = top_y + 126;
+        fillRect(4, my, w - 8, 48, palette::kPanelBg);
+        drawRect(4, my, w - 8, 48, palette::kAccentOrange);
+        drawText(8, my + 3, "MASTER FX BUS (PING-PONG DELAY / LIMITER)", palette::kAccentOrange, 1);
+
+        float cur_fb = audio_engine.params().delay_feedback.load(std::memory_order_relaxed);
+        const int m_cell_w = (w - 16) / 4;
+        const char* m_titles[4] = {"MST VOL", "DLY TIME", "DLY FDBK", "LIMITER"};
+        char m_vals[4][16];
+        std::snprintf(m_vals[0], sizeof(m_vals[0]), "%3.0f%%", master_vol * 100.0f);
+        std::snprintf(m_vals[1], sizeof(m_vals[1]), "250 ms");
+        std::snprintf(m_vals[2], sizeof(m_vals[2]), "%3.0f%%", cur_fb * 100.0f);
+        std::snprintf(m_vals[3], sizeof(m_vals[3]), "ACTIVE");
+
+        for (int c = 0; c < 4; ++c) {
+            int mx = 8 + c * m_cell_w;
+            drawRect(mx, my + 14, m_cell_w - 4, 30, palette::kGridDim);
+            drawText(mx + 4, my + 17, m_titles[c], palette::kAccentCyan, 1);
+            drawText(mx + 4, my + 28, m_vals[c], palette::kTextMain, 1);
         }
     } else if (app.active_tab == WorkspaceTab::kScope) {
         // [R1] SCOPE: Повноекранний осцилограф звукової хвилі + стерео VU
@@ -848,10 +915,22 @@ void UiRenderer::renderBottomHud(
     const char* func_b = "DEL";
 
     if (input.btn_select) {
-        func_x = "LEN";
-        func_y = "PAGE";
-        func_a = "PREV";
-        func_b = "CLEAR";
+        if (app.active_tab == WorkspaceTab::kSeq) {
+            func_x = "LEN";
+            func_y = "PAGE";
+            func_a = "PREV";
+            func_b = "CLEAR";
+        } else if (app.active_tab == WorkspaceTab::kSynth) {
+            func_x = "--";
+            func_y = "--";
+            func_a = "PREV";
+            func_b = "--";
+        } else {
+            func_x = "--";
+            func_y = "--";
+            func_a = "PREV";
+            func_b = "--";
+        }
     } else if (app.active_tab == WorkspaceTab::kSeq) {
         func_x = "NOTE+";
         func_y = "PAGE";
@@ -860,8 +939,8 @@ void UiRenderer::renderBottomHud(
     } else if (app.active_tab == WorkspaceTab::kSynth) {
         func_x = "ADD";
         func_y = "DEL";
-        func_a = "TEST";
-        func_b = "INIT";
+        func_a = "VAL+";
+        func_b = "VAL-";
     } else if (app.active_tab == WorkspaceTab::kMixFx) {
         func_x = "MUTE";
         func_y = "SOLO";
