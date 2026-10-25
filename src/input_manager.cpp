@@ -102,6 +102,30 @@ void InputManager::beginFrame() {
     state_.any_change = false;
 }
 
+void InputManager::updateRepeat(uint32_t now_ms) {
+    auto checkRepeat = [&](bool held, bool& edge_field, uint32_t& start_ms, uint32_t& last_ms, const char* label) {
+        if (held) {
+            if (start_ms == 0) {
+                start_ms = now_ms;
+                last_ms = now_ms;
+            } else if (now_ms - start_ms >= 250 && now_ms - last_ms >= 70) {
+                edge_field = true;
+                last_ms = now_ms;
+                state_.any_change = true;
+                state_.last_event_name = label;
+            }
+        } else {
+            start_ms = 0;
+            last_ms = 0;
+        }
+    };
+
+    checkRepeat(state_.dpad_up, state_.up_pressed, dpad_up_start_ms_, dpad_up_last_ms_, "D-UP (REP)");
+    checkRepeat(state_.dpad_down, state_.down_pressed, dpad_down_start_ms_, dpad_down_last_ms_, "D-DOWN (REP)");
+    checkRepeat(state_.dpad_left, state_.left_pressed, dpad_left_start_ms_, dpad_left_last_ms_, "D-LEFT (REP)");
+    checkRepeat(state_.dpad_right, state_.right_pressed, dpad_right_start_ms_, dpad_right_last_ms_, "D-RIGHT (REP)");
+}
+
 void InputManager::setButton(bool& field, bool& edge_field, bool pressed, const char* label) {
     if (field != pressed) {
         field = pressed;

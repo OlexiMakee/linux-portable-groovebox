@@ -80,6 +80,9 @@ public:
     // Очищує edge-прапорці перед новим циклом опитування
     void beginFrame();
 
+    // Оновлює автоповтор D-Pad при тривалому затисканні (затримка 250мс, повтор 70мс)
+    void updateRepeat(uint32_t now_ms);
+
     // Обробка подій SDL2 (для macOS клавіатури / закриття вікна)
     void processSdlEvent(const SDL_Event& ev, bool& quit_requested);
 
@@ -95,6 +98,16 @@ private:
     int fd_gamepad_ = -1;
     int fd_vol_ = -1;
     int fd_headphones_ = -1;
+
+    // Таймінги автоповтору хрестовини (D-Pad auto-repeat)
+    uint32_t dpad_up_start_ms_ = 0;
+    uint32_t dpad_up_last_ms_ = 0;
+    uint32_t dpad_down_start_ms_ = 0;
+    uint32_t dpad_down_last_ms_ = 0;
+    uint32_t dpad_left_start_ms_ = 0;
+    uint32_t dpad_left_last_ms_ = 0;
+    uint32_t dpad_right_start_ms_ = 0;
+    uint32_t dpad_right_last_ms_ = 0;
 };
 
 } // namespace groovebox

@@ -128,6 +128,7 @@ int main(int argc, char* argv[]) {
             input_mgr.processSdlEvent(ev, quit);
         }
         input_mgr.pollEvdev(quit);
+        input_mgr.updateRepeat(now_ms);
 
         const auto& in = input_mgr.state();
         if (in.any_change) {
@@ -152,8 +153,15 @@ int main(int argc, char* argv[]) {
             ui_dirty = true;
         }
 
-        // 1. Перемикання 4 верхніх вкладок за бамперами L1, L2, R2, R1
-        if (in.l1_pressed) { app.active_tab = groovebox::WorkspaceTab::kSeq; ui_dirty = true; }
+        // 1. Перемикання вкладок: L1 перемикає між SEQ та SYNTH (DAW та Sound Design)
+        if (in.l1_pressed) {
+            if (app.active_tab == groovebox::WorkspaceTab::kSeq) {
+                app.active_tab = groovebox::WorkspaceTab::kSynth;
+            } else {
+                app.active_tab = groovebox::WorkspaceTab::kSeq;
+            }
+            ui_dirty = true;
+        }
         if (in.l2_pressed) { app.active_tab = groovebox::WorkspaceTab::kSynth; ui_dirty = true; }
         if (in.r2_pressed) { app.active_tab = groovebox::WorkspaceTab::kMixFx; ui_dirty = true; }
         if (in.r1_pressed) { app.active_tab = groovebox::WorkspaceTab::kScope; ui_dirty = true; }
@@ -185,10 +193,11 @@ int main(int argc, char* argv[]) {
             audio_engine.cycleBufferSize();
             ui_dirty = true;
         } else if (app.dev_shortcuts_enabled && in.btn_select && in.y_pressed) {
-            // SELECT + Y: перемикання сторінки секвенсора (Page 1 <-> Page 2 активується ТІЛЬКИ якщо довжина > 64!)
+            // SELECT + Y: перемикання сторінки секвенсора (до 4 сторінок P1..P4 залежно від довжини рядка)
             uint32_t r_len = audio_engine.getRowLength(app.cursor_row);
-            if (r_len > 64) {
-                app.seq_page = (app.seq_page == 0) ? 1 : 0;
+            uint32_t max_pages = (r_len + groovebox::kStepsPerPage - 1) / groovebox::kStepsPerPage;
+            if (max_pages > 1) {
+                app.seq_page = (app.seq_page + 1) % max_pages;
                 app.cursor_step = app.seq_page * groovebox::kStepsPerPage + (app.cursor_step % groovebox::kStepsPerPage);
                 if (app.cursor_step >= static_cast<int>(r_len)) {
                     app.cursor_step = static_cast<int>(r_len - 1);
@@ -203,32 +212,50 @@ int main(int argc, char* argv[]) {
             if (app.cursor_step >= static_cast<int>(next_len)) {
                 app.cursor_step = static_cast<int>(next_len - 1);
             }
-            if (next_len <= 64) {
-                app.seq_page = 0;
+            uint32_t max_pages = (next_len + groovebox::kStepsPerPage - 1) / groovebox::kStepsPerPage;
+            if (app.seq_page >= static_cast<int>(max_pages)) {
+                app.seq_page = max_pages - 1;
             }
             ui_dirty = true;
         } else if (app.active_tab == groovebox::WorkspaceTab::kSeq && !in.btn_select) {
-            // --- Step Inspector: Детекція Hold A (>200мс) vs короткий клік (<200мс) ---
+            // --- Step Inspector та P-Lock зі стіка: Детекція Hold A vs Tweak стіком vs короткий клік ---
             if (in.a_pressed) {
                 app.a_press_time_ms = now_ms;
                 app.a_held = true;
                 app.a_long_press_triggered = false;
+                app.stick_plock_tweaked = false;
+                app.plock_cutoff_live = -1.0f;
             }
-            if (app.a_held && !app.a_long_press_triggered) {
-                if (now_ms - app.a_press_time_ms >= 200) {
+            if (app.a_held) {
+                // Elektron P-Lock механіка: затиснув A і крутиш аналоговий стік -> живий твік і аудіо-прев'ю!
+                if (std::fabs(in.lx) > 0.15f) {
+                    app.stick_plock_tweaked = true;
+                    app.plock_cutoff_live = std::clamp(0.50f + in.lx * 0.45f, 0.05f, 0.95f);
+                    audio_engine.lockStepCutoff(app.cursor_row, app.cursor_step, app.plock_cutoff_live);
+                    ui_dirty = true;
+                }
+                if (!app.a_long_press_triggered && (now_ms - app.a_press_time_ms >= 200)) {
                     app.a_long_press_triggered = true;
                     app.step_inspector_open = true;
                     ui_dirty = true;
                 }
             }
             if (app.a_held && !in.btn_a) {
-                if (!app.a_long_press_triggered) {
-                    // Короткий клік (<200мс): встановлення / зміна кроку (Off -> Note -> Param -> Off)
+                if (app.stick_plock_tweaked) {
+                    // Збереження положення стіка, на якому відпущено кнопку A (Elektron P-Lock Auto-Save)
+                    if (app.plock_cutoff_live >= 0.0f) {
+                        audio_engine.lockStepCutoff(app.cursor_row, app.cursor_step, app.plock_cutoff_live);
+                    }
+                    ui_dirty = true;
+                } else if (!app.a_long_press_triggered) {
+                    // Короткий клік (<200мс) без руху стіка: встановлення / зміна кроку (Off -> Note -> Param -> Off)
                     audio_engine.toggleStep(app.cursor_row, app.cursor_step);
                     ui_dirty = true;
                 }
                 app.a_held = false;
                 app.step_inspector_open = false;
+                app.stick_plock_tweaked = false;
+                app.plock_cutoff_live = -1.0f;
                 ui_dirty = true;
             }
 
@@ -324,9 +351,11 @@ int main(int argc, char* argv[]) {
                         st.gate_len = std::clamp(st.gate_len + (delta > 0 ? 0.10f : -0.10f), 0.10f, 2.0f);
                         audio_engine.setStep(app.cursor_row, app.cursor_step, st);
                         break;
-                    case 4: // SLIDE (TB-303 Constant-Time 65ms Glide: ON/OFF)
-                        st.slide = !st.slide;
-                        audio_engine.setStep(app.cursor_row, app.cursor_step, st);
+                    case 4: // SLIDE (TB-303 Constant-Time 65ms Glide: ON/OFF, вимкнено для барабанів)
+                        if (audio_engine.getTrackParams(app.selected_track).engine != groovebox::EngineType::kDrumSyn) {
+                            st.slide = !st.slide;
+                            audio_engine.setStep(app.cursor_row, app.cursor_step, st);
+                        }
                         break;
                     case 5: // ATTACK
                         st.attack = std::clamp(((st.attack >= 0.0f) ? st.attack : 0.005f) + (delta > 0 ? step_norm : -step_norm), 0.0f, 1.0f);
@@ -362,7 +391,9 @@ int main(int argc, char* argv[]) {
                 if (app.cursor_step >= static_cast<int>(r_len)) {
                     app.cursor_step = static_cast<int>(r_len - 1);
                 }
-                if (r_len <= 64) app.seq_page = 0;
+                uint32_t max_p = (r_len + groovebox::kStepsPerPage - 1) / groovebox::kStepsPerPage;
+                app.seq_page = app.cursor_step / groovebox::kStepsPerPage;
+                if (app.seq_page >= static_cast<int>(max_p)) app.seq_page = max_p - 1;
                 ui_dirty = true;
             }
             if (in.down_pressed) {
@@ -373,7 +404,9 @@ int main(int argc, char* argv[]) {
                 if (app.cursor_step >= static_cast<int>(r_len)) {
                     app.cursor_step = static_cast<int>(r_len - 1);
                 }
-                if (r_len <= 64) app.seq_page = 0;
+                uint32_t max_p = (r_len + groovebox::kStepsPerPage - 1) / groovebox::kStepsPerPage;
+                app.seq_page = app.cursor_step / groovebox::kStepsPerPage;
+                if (app.seq_page >= static_cast<int>(max_p)) app.seq_page = max_p - 1;
                 ui_dirty = true;
             }
             uint32_t cur_r_len = audio_engine.getRowLength(app.cursor_row);
@@ -381,13 +414,13 @@ int main(int argc, char* argv[]) {
                 int jump = in.btn_select ? 16 : 1; // З SELECT: стрибок на такт (16 кроків)!
                 if (app.cursor_step >= jump) app.cursor_step -= jump;
                 else app.cursor_step = static_cast<int>(cur_r_len - 1);
-                app.seq_page = (app.cursor_step >= static_cast<int>(groovebox::kStepsPerPage)) ? 1 : 0;
+                app.seq_page = app.cursor_step / groovebox::kStepsPerPage;
                 ui_dirty = true;
             }
             if (in.right_pressed) {
                 int jump = in.btn_select ? 16 : 1;
                 app.cursor_step = (app.cursor_step + jump) % cur_r_len;
-                app.seq_page = (app.cursor_step >= static_cast<int>(groovebox::kStepsPerPage)) ? 1 : 0;
+                app.seq_page = app.cursor_step / groovebox::kStepsPerPage;
                 ui_dirty = true;
             }
         } else if (app.active_tab == groovebox::WorkspaceTab::kSynth) {

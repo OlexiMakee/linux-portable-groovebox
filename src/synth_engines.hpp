@@ -35,7 +35,8 @@ inline constexpr int kTotalRows = 16;         // 4 доріжки x 4 голос
 inline constexpr int kTracksCount = 4;
 inline constexpr int kVoicesPerTrack = 4;
 inline constexpr uint32_t kMaxSteps = 128;
-inline constexpr uint32_t kStepsPerPage = 64;
+inline constexpr uint32_t kStepsPerPage = 32; // 32 видимих кроки на сторінку (велика читабельна сітка 7px)
+inline constexpr uint32_t kMaxPages = 4;      // До 4 сторінок: P1 (0..31), P2 (32..63), P3 (64..95), P4 (96..127)
 
 enum class AdsrStage : uint8_t {
     kIdle = 0,

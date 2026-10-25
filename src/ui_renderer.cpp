@@ -304,16 +304,17 @@ void UiRenderer::renderWorkspace(
         const char* trig_tag = !cur_st.enabled ? "OFF" : (cur_st.is_param_trig ? "[PARAM-LOCK]" : "[NOTE-TRIG]");
 
         const uint32_t cur_row_len = audio_engine.getRowLength(cur_r);
+        const uint32_t total_row_pages = (cur_row_len + kStepsPerPage - 1) / kStepsPerPage;
         std::snprintf(
             buf, sizeof(buf), "T%d:V%d [%s] | ST%03d:%s%d %s%s | P%d/%d L:%u | BPM:%3.0f %s",
             cur_t + 1, cur_v + 1,
             getEngineTypeName(tp.engine),
             app.cursor_step + 1,
             nn, oct,
-            cur_st.slide ? "~SLD " : "",
+            (cur_st.slide && tp.engine != EngineType::kDrumSyn) ? "~SLD " : "",
             trig_tag,
             app.seq_page + 1,
-            (cur_row_len > 64) ? 2 : 1,
+            total_row_pages,
             cur_row_len,
             midi.external_sync ? midi.detected_bpm : app.bpm,
             app.transport_playing ? "PLAY" : "STOP"
@@ -321,7 +322,7 @@ void UiRenderer::renderWorkspace(
         ColorRGB hdr_col = cur_st.is_param_trig ? palette::kParamTrig : palette::kAccentOrange;
         drawText(4, top_y + 4, buf, hdr_col, 1);
 
-        const int grid_x = 30;
+        const int grid_x = 36;
         const int grid_y = top_y + 14;
         const int row_h = 10;
         const uint32_t page_offset = app.seq_page * kStepsPerPage;
@@ -356,10 +357,10 @@ void UiRenderer::renderWorkspace(
             // Персональний Playhead для цього рядка на основі його власної довжини!
             uint32_t row_playhead_step = app.transport_playing ? (app.current_step % r_len) : 0;
 
-            // Малюємо 64 кроки для цього рядка
+            // Малюємо 32 видимих кроки для цього рядка (велика сітка 7px)
             for (uint32_t s = 0; s < kStepsPerPage; ++s) {
                 uint32_t step_idx = page_offset + s;
-                int cx = grid_x + static_cast<int>(s) * 4;
+                int cx = grid_x + static_cast<int>(s) * 7;
                 bool is_cursor = (r == cur_r && step_idx == static_cast<uint32_t>(app.cursor_step));
                 bool is_playhead = app.transport_playing && (step_idx == row_playhead_step);
 
@@ -369,47 +370,53 @@ void UiRenderer::renderWorkspace(
                     if (step_data.enabled) {
                         if (step_data.is_param_trig) {
                             // Жовтий Elektron Param Trig (Lock-only)
-                            fillRect(cx, ry + 1, 3, 7, palette::kParamTrig);
+                            fillRect(cx, ry + 1, 6, 7, palette::kParamTrig);
                         } else {
                             // Зелений/Бірюзовий Note Trig
                             ColorRGB trig_col = (t % 2 == 0) ? palette::kLevelOk : palette::kAccentCyan;
-                            fillRect(cx, ry + 1, 3, 7, trig_col);
+                            fillRect(cx, ry + 1, 6, 7, trig_col);
                         }
                     } else {
                         // Неактивна клітинка: розмітка тактів і долей
                         if (s % 16 == 0) {
-                            fillRect(cx, ry + 3, 2, 3, palette::kTextDim);
+                            fillRect(cx + 2, ry + 3, 2, 3, palette::kTextDim);
                         } else if (s % 4 == 0) {
-                            fillRect(cx, ry + 4, 1, 2, palette::kGridDim);
+                            fillRect(cx + 2, ry + 4, 2, 2, palette::kGridDim);
                         }
                     }
 
                     if (is_playhead) {
                         // Вертикальна лінія положення програвання (Playhead)
-                        drawLine(cx + 1, ry, cx + 1, ry + 8, palette::kTextMain);
+                        drawLine(cx + 3, ry, cx + 3, ry + 8, palette::kTextMain);
                     }
                 } else if (step_idx == r_len) {
                     // Маркер кінця патерну доріжки |
                     drawLine(cx, ry, cx, ry + 8, palette::kAccentOrange);
                 } else {
                     // Поза довжиною доріжки (затемнена неактивна область)
-                    // залишається темний фон kBgDark
                 }
 
                 if (is_cursor) {
-                    // Білий контур курсора редагування
-                    drawRect(cx - 1, ry, 5, 9, palette::kCursorWhite);
+                    // Білий контур курсора редагування (8x9 пікселів)
+                    drawRect(cx - 1, ry, 8, 9, palette::kCursorWhite);
                 }
             }
         }
 
-        // Вертикальні маркери сторінок та тактів справа для активного рядка
-        bool has_p2 = (cur_row_len > 64);
-        drawText(grid_x + 258, grid_y + 4,  (app.seq_page == 0) ? "[P1]" : " P1 ", (app.seq_page == 0) ? palette::kLevelOk : palette::kGridDim, 1);
-        drawText(grid_x + 258, grid_y + 14, (app.seq_page == 1) ? "[P2]" : " P2 ", has_p2 ? ((app.seq_page == 1) ? palette::kLevelOk : palette::kTextDim) : palette::kGridDim, 1);
+        // Вертикальні маркери сторінок та тактів справа для активного рядка (P1..P4)
+        drawText(266, grid_y + 4,  (app.seq_page == 0) ? "[P1]" : " P1 ", (app.seq_page == 0) ? palette::kLevelOk : palette::kTextDim, 1);
+        if (cur_row_len > 32) {
+            drawText(266, grid_y + 14, (app.seq_page == 1) ? "[P2]" : " P2 ", (app.seq_page == 1) ? palette::kLevelOk : palette::kTextDim, 1);
+        }
+        if (cur_row_len > 64) {
+            drawText(266, grid_y + 24, (app.seq_page == 2) ? "[P3]" : " P3 ", (app.seq_page == 2) ? palette::kLevelOk : palette::kTextDim, 1);
+        }
+        if (cur_row_len > 96) {
+            drawText(266, grid_y + 34, (app.seq_page == 3) ? "[P4]" : " P4 ", (app.seq_page == 3) ? palette::kLevelOk : palette::kTextDim, 1);
+        }
         char len_buf[16];
         std::snprintf(len_buf, sizeof(len_buf), "L%03u", cur_row_len);
-        drawText(grid_x + 258, grid_y + 26, len_buf, palette::kAccentOrange, 1);
+        drawText(266, grid_y + 46, len_buf, palette::kAccentOrange, 1);
 
         // --- STEP INSPECTOR MODAL POPUP (Утримання кнопки A > 200 мс) ---
         if (app.step_inspector_open) {
@@ -446,7 +453,11 @@ void UiRenderer::renderWorkspace(
                 } else if (i == 3) {
                     std::snprintf(val_str, sizeof(val_str), "%3.0f%%", cur_st.gate_len * 100.0f);
                 } else if (i == 4) {
-                    std::snprintf(val_str, sizeof(val_str), "%s", cur_st.slide ? "ON (65ms)" : "OFF");
+                    if (tp.engine == EngineType::kDrumSyn) {
+                        std::snprintf(val_str, sizeof(val_str), "N/A (DRUM)");
+                    } else {
+                        std::snprintf(val_str, sizeof(val_str), "%s", cur_st.slide ? "ON (65ms)" : "OFF");
+                    }
                 } else if (i == 5) {
                     float atk = (cur_st.attack >= 0.0f) ? cur_st.attack : tp.attack;
                     std::snprintf(val_str, sizeof(val_str), "%3.0f", atk * 127.0f);
@@ -461,13 +472,17 @@ void UiRenderer::renderWorkspace(
                     std::snprintf(val_str, sizeof(val_str), "%3.0f", rel * 127.0f);
                 } else if (i == 9) {
                     float cut = (cur_st.plock_cutoff >= 0.0f) ? cur_st.plock_cutoff : 0.5f;
-                    std::snprintf(val_str, sizeof(val_str), "%3.0f", cut * 127.0f);
+                    std::snprintf(val_str, sizeof(val_str), "%3.0f %s", cut * 127.0f, cur_st.has_plock ? "[LOCK]" : "");
                 }
 
                 std::snprintf(buf, sizeof(buf), "%s%-8s: %s", is_sel ? ">" : " ", kParamNames[i], val_str);
                 drawText(px + 4, iy + 1, buf, is_sel ? palette::kAccentCyan : palette::kTextMain, 1);
             }
-            drawText(px + 4, py + ph - 8, "DPAD:SELECT | L-STK:TWEAK", palette::kTextDim, 1);
+            if (app.stick_plock_tweaked) {
+                drawText(px + 4, py + ph - 8, "STICK TWEAKING... RELEASE A TO LOCK", palette::kParamTrig, 1);
+            } else {
+                drawText(px + 4, py + ph - 8, "DPAD:EDIT | STICK:P-LOCK | REL A:LOCK", palette::kTextDim, 1);
+            }
         }
 
     } else if (app.active_tab == WorkspaceTab::kSynth) {

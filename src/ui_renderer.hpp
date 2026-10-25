@@ -36,6 +36,8 @@ struct AppModel {
     uint32_t a_press_time_ms = 0;
     bool a_held = false;
     bool a_long_press_triggered = false;
+    bool stick_plock_tweaked = false;
+    float plock_cutoff_live = -1.0f;
 };
 
 class UiRenderer {
