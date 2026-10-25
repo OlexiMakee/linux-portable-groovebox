@@ -179,3 +179,9 @@
 * **96-Sample Buffer Option (2.0 ms @ 48k):**
   * Додано розмір блоку 96 семплів у послідовність перемикання `cycleBufferSize()`: `96 -> 128 -> 256 -> 512 -> 1024 -> 2048`.
   * Перевірено успішну роботу ультранизької затримки на інтерфейсі M-Vave Cube Baby.
+
+## [2026-10-25 15:28] Linux snd-usb-audio autoclock=0 (UAC2 Clock Query Elimination)
+* **Kernel Module snd-usb-audio autoclock=0:**
+  * Вимкнено параметр ядра `autoclock` (`autoclock=0`) у `/storage/.config/modprobe.d/snd-usb-audio.conf`, `src/hw_monitor.cpp` та `scripts/deploy_xu10.sh`.
+  * Перезавантажено модуль у пам'яті ядра (`modprobe -r snd_usb_audio && modprobe snd_usb_audio autoclock=0 lowlatency=0`), перевірено значення `N` у `/sys/module/snd_usb_audio/parameters/autoclock`.
+  * Ліквідовано циклічні опитування дескрипторів годинника UAC2 (`Clock Selector / Source Validity`), які на контролері `dwc2` перевантажували керуючий канал та призводили до випадання мікрофреймів при роботі з Elektron Digitakt II.

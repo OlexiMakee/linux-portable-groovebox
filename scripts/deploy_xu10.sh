@@ -27,10 +27,10 @@ cat << 'EOF' > ${REMOTE_DIR}/launch_groovebox.sh
 #!/bin/bash
 mkdir -p /var/cache/services /storage/.cache/services /storage/.config/modprobe.d
 touch /var/cache/services/sshd.conf /storage/.cache/services/sshd.conf
-echo 'options snd-usb-audio lowlatency=0 nrpacks=1' > /storage/.config/modprobe.d/snd-usb-audio.conf 2>/dev/null || true
+echo 'options snd-usb-audio autoclock=0 lowlatency=0' > /storage/.config/modprobe.d/snd-usb-audio.conf 2>/dev/null || true
 systemctl start sshd.service 2>/dev/null || true
 
-modprobe snd-usb-audio lowlatency=0 nrpacks=1 2>/dev/null || true
+modprobe snd-usb-audio autoclock=0 lowlatency=0 2>/dev/null || true
 modprobe snd-rawmidi 2>/dev/null || true
 modprobe snd-seq-midi 2>/dev/null || true
 
@@ -93,7 +93,7 @@ if [[ "${1:-}" == "--run" ]]; then
   echo "=== 3. Запуск xu10_groovebox як Dedicated Appliance (Direct KMSDRM + Dedicated Audio CPU3) ==="
   ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${TARGET_HOST}" "
     echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor >/dev/null 2>&1 || true
-    modprobe snd-usb-audio lowlatency=0 nrpacks=1 2>/dev/null || true
+    modprobe snd-usb-audio autoclock=0 lowlatency=0 2>/dev/null || true
     modprobe snd-rawmidi 2>/dev/null || true
     modprobe snd-seq-midi 2>/dev/null || true
     echo 4 > /proc/irq/26/smp_affinity 2>/dev/null || true
