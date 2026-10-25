@@ -12,12 +12,15 @@ cmake -S "${PROJECT_DIR}" -B "${PROJECT_DIR}/build-xu10" \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build "${PROJECT_DIR}/build-xu10" -j4
 
-echo "=== 2. Деплой бінарника та автостарту на MagicX XU10 (${TARGET_HOST}:${REMOTE_DIR}) ==="
+echo "=== 2. Деплой бінарника, профілів та автостарту на MagicX XU10 (${TARGET_HOST}:${REMOTE_DIR}) ==="
 ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${TARGET_HOST}" \
-  "mkdir -p ${REMOTE_DIR} /storage/roms/ports /storage/.config/autostart && killall -9 xu10_groovebox 2>/dev/null || true"
+  "mkdir -p ${REMOTE_DIR}/profiles /storage/roms/ports /storage/.config/autostart && killall -9 xu10_groovebox 2>/dev/null || true"
 
 cat "${PROJECT_DIR}/build-xu10/xu10_groovebox" | ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${TARGET_HOST}" \
   "cat > ${REMOTE_DIR}/xu10_groovebox && chmod +x ${REMOTE_DIR}/xu10_groovebox"
+
+tar -C "${PROJECT_DIR}" -cf - profiles | ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${TARGET_HOST}" \
+  "tar -C ${REMOTE_DIR} -xf -"
 
 ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${TARGET_HOST}" "
 cat << 'EOF' > ${REMOTE_DIR}/launch_groovebox.sh
@@ -28,6 +31,9 @@ systemctl start sshd.service 2>/dev/null || true
 modprobe snd-usb-audio 2>/dev/null || true
 modprobe snd-rawmidi 2>/dev/null || true
 modprobe snd-seq-midi 2>/dev/null || true
+
+# Фіксуємо CPU Governor у performance (1.5 GHz), щоб уникнути тріску/лагів на USB dwc2
+echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor >/dev/null 2>&1 || true
 
 # Якщо консоль НЕ підключена до комп'ютера по USB-C (UDC не configured),
 # автоматично переводимо порт OTG у режим HOST і вмикаємо 5V VBUS (OTG_SWITCH) для Digitakt / Хаба / MIDI!
@@ -78,6 +84,7 @@ sync
 if [[ "${1:-}" == "--run" ]]; then
   echo "=== 3. Запуск xu10_groovebox на екрані консолі (Wayland/Sway + Direct ALSA) ==="
   ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${TARGET_HOST}" "
+    echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor >/dev/null 2>&1 || true
     modprobe snd-usb-audio 2>/dev/null || true
 modprobe snd-rawmidi 2>/dev/null || true
 modprobe snd-seq-midi 2>/dev/null || true

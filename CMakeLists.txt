@@ -8,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_executable(xu10_groovebox
     src/main.cpp
     src/audio_engine.cpp
+    src/device_profile.cpp
     src/hw_monitor.cpp
     src/input_manager.cpp
     src/midi_engine.cpp

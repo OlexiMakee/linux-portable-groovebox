@@ -93,3 +93,13 @@
   1. Коли підключено зовнішній USB Audio інтерфейс (`card > 0`), відкривається **виключно** `hw:1,0` (потік на 100% тактується від кварцу Digitakt II без блокування об `hw:0,0`). Коли USB відключено — відкривається `hw:0,0` (`32 000 Hz`).
   2. Аудіопотоку призначено Real-Time пріоритет ядра **`SCHED_FIFO` (75)** (`pthread_setschedparam`).
   3. Розмір блоку збільшено до `256` семплів, а буфер ALSA для USB Isochronous — до `24 000 мкс` (`24 мс`), що повністю усуває джитер контролера `dwc2`.
+
+## [2026-10-25 12:16] Portability & USB Crackle Fix Integration
+* **Device Profiles Architecture:**
+  * Зареєстровано `src/device_profile.cpp` у `CMakeLists.txt`.
+  * Додано виклик `groovebox::loadActiveProfile()` на старті в `src/main.cpp`.
+  * Пов'язано аудіорутінг (`internal_card`, `mux_control`, `volume_control`) в `src/audio_engine.cpp` через активний профіль пристрою.
+  * У деплой `scripts/deploy_xu10.sh` додано передачу каталогу `profiles/` на цільову консоль.
+* **USB Audio Buffer & CPU Governor Fix:**
+  * Додано примусове перемикання CPU Governor на `performance` (`echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor`) у `launch_groovebox.sh`, що запобігає затримкам переривань `dwc2` при роботі з Digitakt II (48 кГц).
+  * Успішно проведено крос-компіляцію через Zig C++ під `aarch64-linux-gnu.2.38`.

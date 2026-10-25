@@ -1,5 +1,6 @@
 #include "audio_engine.hpp"
 #include "config.hpp"
+#include "device_profile.hpp"
 #include "hw_monitor.hpp"
 #include "input_manager.hpp"
 #include "midi_engine.hpp"
@@ -12,6 +13,9 @@
 #include <cstring>
 
 int main(int argc, char* argv[]) {
+    // 0. Завантажуємо профіль пристрою (profiles/<device>.ini)
+    groovebox::loadActiveProfile();
+
     bool headless_smoke_test = false;
     int max_frames = 0;
 

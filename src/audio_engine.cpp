@@ -1,4 +1,5 @@
 #include "audio_engine.hpp"
+#include "device_profile.hpp"
 
 #include <SDL.h>
 #include <algorithm>
@@ -164,26 +165,43 @@ void AudioEngine::lockStepCutoff(int track, int step_idx, float cutoff_val) {
 }
 
 void AudioEngine::applyRk817HardwareMux(bool headphones_plugged) {
+    current_hp_.store(headphones_plugged);
 #if defined(__linux__)
-    current_hp_.store(headphones_plugged);
-    const char* cmd = headphones_plugged
-                          ? "amixer -c 0 cset name='Playback Mux' 'HP' >/dev/null 2>&1"
-                          : "amixer -c 0 cset name='Playback Mux' 'SPK' >/dev/null 2>&1";
-    int rc = std::system(cmd);
-    (void)rc;
-#else
-    current_hp_.store(headphones_plugged);
+    const auto& prof = activeProfile();
+    if (!prof.mux_control.empty()) {
+        char cmd[256];
+        std::snprintf(
+            cmd, sizeof(cmd),
+            "amixer -c %d cset name='%s' '%s' >/dev/null 2>&1",
+            prof.internal_card,
+            prof.mux_control.c_str(),
+            headphones_plugged ? prof.mux_hp.c_str() : prof.mux_spk.c_str()
+        );
+        int rc = std::system(cmd);
+        (void)rc;
+    }
 #endif
 }
 
 void AudioEngine::applyRk817HardwareVolume(float vol_norm) {
 #if defined(__linux__)
-    int hw_val = (vol_norm <= 0.01f) ? 0 : static_cast<int>(185.0f + vol_norm * 70.0f);
-    hw_val = std::clamp(hw_val, 0, 255);
-    char cmd[128];
-    std::snprintf(cmd, sizeof(cmd), "amixer -c 0 cset numid=2 %d,%d >/dev/null 2>&1 &", hw_val, hw_val);
-    int rc = std::system(cmd);
-    (void)rc;
+    const auto& prof = activeProfile();
+    if (!prof.volume_control.empty()) {
+        int v_range = prof.volume_max - prof.volume_min;
+        int hw_val = (vol_norm <= 0.01f) ? prof.volume_min
+                     : static_cast<int>(prof.volume_min + (v_range * 0.72f) + vol_norm * (v_range * 0.28f));
+        hw_val = std::clamp(hw_val, prof.volume_min, prof.volume_max);
+        char cmd[256];
+        std::snprintf(
+            cmd, sizeof(cmd),
+            "amixer -c %d cset name='%s' %d,%d >/dev/null 2>&1 &",
+            prof.internal_card,
+            prof.volume_control.c_str(),
+            hw_val, hw_val
+        );
+        int rc = std::system(cmd);
+        (void)rc;
+    }
 #else
     (void)vol_norm;
 #endif
@@ -194,9 +212,10 @@ bool AudioEngine::start(int card_index, bool is_usb_48k, bool headphones_plugged
 
     current_card_.store(card_index);
     current_usb_48k_.store(is_usb_48k);
-    const uint32_t target_rate = is_usb_48k ? 48000u : 32000u;
+    const auto& prof = activeProfile();
+    const uint32_t target_rate = is_usb_48k ? static_cast<uint32_t>(prof.usb_rate) : static_cast<uint32_t>(prof.internal_rate);
     active_sample_rate_.store(target_rate);
-    active_period_frames_.store(128);
+    active_period_frames_.store(256);
 
     applyRk817HardwareMux(headphones_plugged);
     applyRk817HardwareVolume(params_.master_volume.load());
@@ -544,9 +563,11 @@ void AudioEngine::alsaThreadLoop() {
         }
     }
 
-    // 2. Вбудований ЦАП RK817 (hw:0,0) відкриваємо ТІЛЬКИ тоді, коли немає активного USB Audio!
+    // 2. Вбудований ЦАП (internal_card з профілю) відкриваємо ТІЛЬКИ тоді, коли немає активного USB Audio!
     if (!pcm) {
-        int err = snd_pcm_open(&pcm, "hw:0,0", SND_PCM_STREAM_PLAYBACK, 0);
+        char int_dev[32];
+        std::snprintf(int_dev, sizeof(int_dev), "hw:%d,0", activeProfile().internal_card);
+        int err = snd_pcm_open(&pcm, int_dev, SND_PCM_STREAM_PLAYBACK, 0);
         if (err >= 0) {
             if (snd_pcm_set_params(
                     pcm,
@@ -561,7 +582,7 @@ void AudioEngine::alsaThreadLoop() {
                 pcm = nullptr;
             } else {
                 active_fmt = SND_PCM_FORMAT_S16_LE;
-                std::printf("[ALSA] Opened internal hw:0,0 at %u Hz stereo S16_LE\n", rate);
+                std::printf("[ALSA] Opened internal %s at %u Hz stereo S16_LE\n", int_dev, rate);
             }
         }
     }
@@ -617,11 +638,11 @@ AudioEngineTelemetry AudioEngine::getTelemetry() const {
     t.sample_rate = active_sample_rate_.load(std::memory_order_relaxed);
     t.period_frames = active_period_frames_.load(std::memory_order_relaxed);
     if (current_usb_48k_.load(std::memory_order_relaxed)) {
-        t.device_label = "USB DT2 (48000 Hz)";
+        t.device_label = "USB Audio (" + std::to_string(t.sample_rate) + " Hz)";
     } else {
-        t.device_label = current_hp_.load(std::memory_order_relaxed)
-                             ? "RK817 HP (32000 Hz)"
-                             : "RK817 SPK (32000 Hz)";
+        const auto& prof = activeProfile();
+        t.device_label = prof.name + (current_hp_.load(std::memory_order_relaxed) ? " HP (" : " SPK (")
+                         + std::to_string(t.sample_rate) + " Hz)";
     }
     t.vu_left = vu_l_.load(std::memory_order_relaxed);
     t.vu_right = vu_r_.load(std::memory_order_relaxed);

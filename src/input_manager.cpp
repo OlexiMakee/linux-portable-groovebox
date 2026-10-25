@@ -1,9 +1,12 @@
 #include "input_manager.hpp"
+#include "device_profile.hpp"
 
 #include <SDL.h>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <string>
 
 #if defined(__linux__)
 #include <fcntl.h>
@@ -20,11 +23,45 @@ InputManager::~InputManager() {
     shutdown();
 }
 
+#if defined(__linux__)
+namespace {
+
+// Знаходить evdev-пристрій за підрядком імені (EVIOCGNAME), а не за жорстким номером eventN —
+// номери змінюються між прошивками й консолями.
+int openEvdevByName(const std::string& needle) {
+    if (needle.empty()) return -1;
+    std::string want = needle;
+    for (auto& c : want) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    for (int i = 0; i < 32; ++i) {
+        char path[32];
+        std::snprintf(path, sizeof(path), "/dev/input/event%d", i);
+        int fd = ::open(path, O_RDONLY | O_NONBLOCK);
+        if (fd < 0) continue;
+        char name[128] = {0};
+        if (::ioctl(fd, EVIOCGNAME(sizeof(name) - 1), name) >= 0) {
+            std::string n = name;
+            for (auto& c : n) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            if (n.find(want) != std::string::npos) {
+                std::printf("[INPUT] '%s' -> %s (%s)\n", needle.c_str(), path, name);
+                return fd;
+            }
+        }
+        ::close(fd);
+    }
+    std::printf("[INPUT] '%s' not found\n", needle.c_str());
+    return -1;
+}
+
+} // namespace
+#endif
+
 bool InputManager::init() {
 #if defined(__linux__)
-    fd_gamepad_ = ::open("/dev/input/event3", O_RDONLY | O_NONBLOCK);
-    fd_vol_ = ::open("/dev/input/event2", O_RDONLY | O_NONBLOCK);
-    fd_headphones_ = ::open("/dev/input/event1", O_RDONLY | O_NONBLOCK);
+    const auto& prof = activeProfile();
+    fd_gamepad_ = openEvdevByName(prof.gamepad_name);
+    fd_vol_ = openEvdevByName(prof.volume_name);
+    fd_headphones_ = openEvdevByName(prof.headphones_name);
+    if (fd_vol_ >= 0 && fd_vol_ == fd_gamepad_) fd_vol_ = -1;
     if (fd_headphones_ >= 0) {
         uint8_t sw_bits[8] = {0};
         if (::ioctl(fd_headphones_, EVIOCGSW(sizeof(sw_bits)), sw_bits) >= 0) {
@@ -84,7 +121,6 @@ void InputManager::processSdlEvent(const SDL_Event& ev, bool& quit_requested) {
     if (ev.type == SDL_KEYDOWN || ev.type == SDL_KEYUP) {
         if (ev.key.repeat != 0) return;
         const bool down = (ev.type == SDL_KEYDOWN);
-        bool dummy_edge = false;
         switch (ev.key.keysym.sym) {
             case SDLK_ESCAPE:
                 if (down) quit_requested = true;
@@ -133,47 +169,50 @@ void InputManager::pollEvdev(bool& quit_requested) {
     struct input_event ev {};
     bool dummy_edge = false;
 
+    const auto& prof = activeProfile();
+
+    // Коди кнопок беруться з профілю пристрою (profiles/<device>.ini), а не з коду.
+    auto handleKey = [&](int code, bool down) {
+        if (code <= 0) return;
+        if      (code == prof.key(Btn::A))       setButton(state_.btn_a, state_.a_pressed, down, "BTN A");
+        else if (code == prof.key(Btn::B))       setButton(state_.btn_b, state_.b_pressed, down, "BTN B");
+        else if (code == prof.key(Btn::X))       setButton(state_.btn_x, state_.x_pressed, down, "BTN X");
+        else if (code == prof.key(Btn::Y))       setButton(state_.btn_y, state_.y_pressed, down, "BTN Y");
+        else if (code == prof.key(Btn::L1))      setButton(state_.l1, state_.l1_pressed, down, "L1");
+        else if (code == prof.key(Btn::L2))      setButton(state_.l2, state_.l2_pressed, down, "L2");
+        else if (code == prof.key(Btn::R1))      setButton(state_.r1, state_.r1_pressed, down, "R1");
+        else if (code == prof.key(Btn::R2))      setButton(state_.r2, state_.r2_pressed, down, "R2");
+        else if (code == prof.key(Btn::Select))  setButton(state_.btn_select, state_.select_pressed, down, "SELECT");
+        else if (code == prof.key(Btn::Start))   setButton(state_.btn_start, state_.start_pressed, down, "START");
+        else if (code == prof.key(Btn::Fn))      setButton(state_.btn_fn, state_.fn_pressed, down, "FN (USB ROLE)");
+        else if (code == prof.key(Btn::L3))      setButton(state_.l3, dummy_edge, down, "L3");
+        else if (code == prof.key(Btn::R3))      setButton(state_.r3, dummy_edge, down, "R3");
+        else if (code == prof.key(Btn::Up))      setButton(state_.dpad_up, state_.up_pressed, down, "D-UP");
+        else if (code == prof.key(Btn::Down))    setButton(state_.dpad_down, state_.down_pressed, down, "D-DOWN");
+        else if (code == prof.key(Btn::Left))    setButton(state_.dpad_left, state_.left_pressed, down, "D-LEFT");
+        else if (code == prof.key(Btn::Right))   setButton(state_.dpad_right, state_.right_pressed, down, "D-RIGHT");
+        else if (code == prof.key(Btn::VolUp))   setButton(state_.vol_up, state_.vol_up_pressed, down, "VOL+");
+        else if (code == prof.key(Btn::VolDown)) setButton(state_.vol_down, state_.vol_down_pressed, down, "VOL-");
+    };
+
+    const float axis_max = static_cast<float>(prof.axis_max);
+    const int deadzone = prof.axis_deadzone;
+    auto norm = [&](int v) -> float {
+        if (std::abs(v) < deadzone) return 0.0f;
+        return std::clamp(static_cast<float>(v) / axis_max, -1.0f, 1.0f);
+    };
+
     while (fd_gamepad_ >= 0 && ::read(fd_gamepad_, &ev, sizeof(ev)) == sizeof(ev)) {
         if (ev.type == EV_KEY) {
-            const bool down = (ev.value != 0);
-            switch (ev.code) {
-                // Фізичне маркування корпусу MagicX XU10:
-                // 0x130=X, 0x131=A, 0x133=B, 0x134=Y
-                case 0x130: setButton(state_.btn_x, state_.x_pressed, down, "BTN X"); break;
-                case 0x131: setButton(state_.btn_a, state_.a_pressed, down, "BTN A"); break;
-                case 0x133: setButton(state_.btn_b, state_.b_pressed, down, "BTN B"); break;
-                case 0x134: setButton(state_.btn_y, state_.y_pressed, down, "BTN Y"); break;
-                // b4(0x136)=L1, b5(0x137)=R1, b6(0x138)=R2, b7(0x139)=L2
-                case 0x136: setButton(state_.l1, state_.l1_pressed, down, "L1"); break;
-                case 0x137: setButton(state_.r1, state_.r1_pressed, down, "R1"); break;
-                case 0x138: setButton(state_.r2, state_.r2_pressed, down, "R2"); break;
-                case 0x139: setButton(state_.l2, state_.l2_pressed, down, "L2"); break;
-                // b8(0x13a)=SELECT, b9(0x13b)=START, b10(0x13d)=L3, b11(0x13e)=R3
-                case 0x13a: setButton(state_.btn_select, state_.select_pressed, down, "SELECT"); break;
-                case 0x13b: setButton(state_.btn_start, state_.start_pressed, down, "START"); break;
-                case 0x13d: setButton(state_.l3, dummy_edge, down, "L3"); break;
-                case 0x13e: setButton(state_.r3, dummy_edge, down, "R3"); break;
-                // D-Pad: 0x220=UP, 0x221=DOWN, 0x222=LEFT, 0x223=RIGHT
-                case 0x220: setButton(state_.dpad_up, state_.up_pressed, down, "D-UP"); break;
-                case 0x221: setButton(state_.dpad_down, state_.down_pressed, down, "D-DOWN"); break;
-                case 0x222: setButton(state_.dpad_left, state_.left_pressed, down, "D-LEFT"); break;
-                case 0x223: setButton(state_.dpad_right, state_.right_pressed, down, "D-RIGHT"); break;
-                // Guide / Function key (0x2c0)
-                case 0x2c0: setButton(state_.btn_fn, state_.fn_pressed, down, "FN (USB ROLE)"); break;
-                default: break;
-            }
+            handleKey(ev.code, ev.value != 0);
         } else if (ev.type == EV_ABS) {
-            auto norm = [](int v) -> float {
-                if (std::abs(v) < 60) return 0.0f; // deadzone
-                return std::clamp(static_cast<float>(v) / 1800.0f, -1.0f, 1.0f);
-            };
             if (ev.code == ABS_X) {
                 state_.raw_lx = ev.value;
                 float n = norm(ev.value);
                 if (std::fabs(n - state_.lx) > 0.01f) { state_.lx = n; state_.any_change = true; }
             } else if (ev.code == ABS_Y) {
                 state_.raw_ly = ev.value;
-                float n = norm(ev.value);
+                float n = norm(ev.value) * (prof.invert_ly ? -1.0f : 1.0f);
                 if (std::fabs(n - state_.ly) > 0.01f) { state_.ly = n; state_.any_change = true; }
             } else if (ev.code == ABS_RX) {
                 state_.raw_rx = ev.value;
@@ -181,7 +220,7 @@ void InputManager::pollEvdev(bool& quit_requested) {
                 if (std::fabs(n - state_.rx) > 0.01f) { state_.rx = n; state_.any_change = true; }
             } else if (ev.code == ABS_RY) {
                 state_.raw_ry = ev.value;
-                float n = norm(ev.value);
+                float n = norm(ev.value) * (prof.invert_ry ? -1.0f : 1.0f);
                 if (std::fabs(n - state_.ry) > 0.01f) { state_.ry = n; state_.any_change = true; }
             }
         }
@@ -189,9 +228,7 @@ void InputManager::pollEvdev(bool& quit_requested) {
 
     while (fd_vol_ >= 0 && ::read(fd_vol_, &ev, sizeof(ev)) == sizeof(ev)) {
         if (ev.type == EV_KEY) {
-            const bool down = (ev.value != 0);
-            if (ev.code == 0x72) setButton(state_.vol_down, state_.vol_down_pressed, down, "VOL-");
-            else if (ev.code == 0x73) setButton(state_.vol_up, state_.vol_up_pressed, down, "VOL+");
+            handleKey(ev.code, ev.value != 0);
         }
     }
 
