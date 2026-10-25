@@ -99,10 +99,11 @@ void AudioEngine::initDefaultPattern() {
     pattern_length_.store(64);
     active_rows_count_ = 8; // Тільки 8 активних рядків за замовчуванням!
 
-    // Мапінг 8 рядків: Drums (рядки 0..3) та VA Synth (рядки 4..7)
+    // Мапінг 16 рядків: T0 Drums (0..3), T1 VA Synth (4..7), T2 Acid 303 (8..11), T3 FM 2-Op (12..15)
     for (int i = 0; i < 4; ++i) { row_track_[i] = 0; row_voice_[i] = i; }
     for (int i = 0; i < 4; ++i) { row_track_[4 + i] = 1; row_voice_[4 + i] = i; }
-    for (int i = 8; i < kTotalRows; ++i) { row_track_[i] = 0; row_voice_[i] = 0; }
+    for (int i = 0; i < 4; ++i) { row_track_[8 + i] = 2; row_voice_[8 + i] = i; }
+    for (int i = 0; i < 4; ++i) { row_track_[12 + i] = 3; row_voice_[12 + i] = i; }
 
     // Дефолтна довжина для всіх рядків: 16 кроків, усі кроки чисті та порожні (нуль хардкоду Моцарта)
     for (int r = 0; r < kTotalRows; ++r) {
@@ -112,8 +113,10 @@ void AudioEngine::initDefaultPattern() {
             if (r < 4) {
                 static constexpr uint8_t kDefDrum[4] = {36, 38, 42, 46};
                 def_note = kDefDrum[r];
+            } else if (r >= 8 && r < 12) {
+                def_note = 36; // 303 Bassline
             } else {
-                def_note = 48 + (r - 4) * 4;
+                def_note = 48 + (r % 4) * 4;
             }
             pattern_[r][s] = {false, false, false, def_note, 0.90f, 0.60f, 100, TrigCondition::kNone, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
         }
