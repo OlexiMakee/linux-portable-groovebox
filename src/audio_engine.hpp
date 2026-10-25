@@ -62,14 +62,18 @@ public:
     void adjustTrackParam(int track, int param_idx, float delta);
 
     SequencerStep getStep(int row, int step_idx) const;
+    void setStep(int row, int step_idx, const SequencerStep& step);
     void toggleStep(int row, int step_idx);
     void toggleParamTrig(int row, int step_idx); // Жовтий Elektron Trig (Parameter Lock без Note-On)
     void adjustStepNote(int row, int step_idx, int semitones);
     void lockStepCutoff(int row, int step_idx, float cutoff_val);
 
+    // Повне скидання звуку (Panic / Kill all voices + clear delay)
+    void panic();
+
     // Тригер ноти для конкретного голосу/рядка (row = 0..15)
-    void triggerVoice(int row, int midi_note, float velocity = 0.9f, float plock_cutoff = -1.0f);
-    void triggerNote(int track, int midi_note, float velocity = 0.9f, float plock_cutoff = -1.0f);
+    void triggerVoice(int row, int midi_note, float velocity = 0.9f, float plock_cutoff = -1.0f, bool slide = false, float gate_len = 0.60f);
+    void triggerNote(int track, int midi_note, float velocity = 0.9f, float plock_cutoff = -1.0f, bool slide = false, float gate_len = 0.60f);
 
     // Тригер кроку секвенсора (0..127)
     void triggerSequencerStep(uint32_t step_idx);
@@ -100,6 +104,11 @@ private:
     struct VoiceState {
         bool active = false;
         float freq = 110.0f;
+        float current_pitch = 48.0f;
+        float target_pitch = 48.0f;
+        float glide_coef = 0.0f;
+        bool is_legato = false;
+        int32_t gate_samples_left = -1;
         float phase1 = 0.0f;
         float phase2 = 0.0f;
         float phase3 = 0.0f;

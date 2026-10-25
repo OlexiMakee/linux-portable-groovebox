@@ -14,7 +14,8 @@ struct SDL_Renderer;
 namespace groovebox {
 
 struct AppModel {
-    WorkspaceTab active_tab = WorkspaceTab::kHwSys;
+    WorkspaceTab active_tab = WorkspaceTab::kSeq;
+    WorkspaceTab previous_tab = WorkspaceTab::kSeq;
     bool high_res_mode = true; // true = 320x240 (основний режим з високою щільністю інформації)
     bool dev_shortcuts_enabled = kDefaultDevShortcuts;
     bool transport_playing = false;
@@ -27,6 +28,14 @@ struct AppModel {
     int cursor_step = 0;       // 0..127 (курсор кроку)
     int seq_page = 0;          // 0 = кроки 0..63, 1 = кроки 64..127
     uint32_t pattern_length = 64; // 16, 32, 64, 128
+    std::array<uint8_t, kTotalRows> row_lengths{}; // Поліметрія (1..128 кроків для кожного рядка)
+
+    // Step Inspector (Hold Trig / Button A)
+    bool step_inspector_open = false;
+    int step_inspector_param = 0; // 0..9 (TYPE, NOTE, VEL, GATE, SLIDE, ATK, DEC, SUS, REL, CUTOFF)
+    uint32_t a_press_time_ms = 0;
+    bool a_held = false;
+    bool a_long_press_triggered = false;
 };
 
 class UiRenderer {

@@ -70,6 +70,11 @@ struct AdsrEnvelope {
         release_rate = std::exp(-1.0f / (rel_sec * sample_rate));
     }
 
+    void reset() {
+        stage = AdsrStage::kIdle;
+        value = 0.0f;
+    }
+
     float process() {
         switch (stage) {
             case AdsrStage::kAttack:
@@ -83,11 +88,21 @@ struct AdsrEnvelope {
                 value = sustain_level + (value - sustain_level) * decay_rate;
                 if (std::abs(value - sustain_level) < 0.002f) {
                     value = sustain_level;
-                    stage = AdsrStage::kSustain;
+                    if (sustain_level <= 0.001f) {
+                        stage = AdsrStage::kIdle;
+                        value = 0.0f;
+                    } else {
+                        stage = AdsrStage::kSustain;
+                    }
                 }
                 break;
             case AdsrStage::kSustain:
-                value = sustain_level;
+                if (sustain_level <= 0.001f) {
+                    stage = AdsrStage::kIdle;
+                    value = 0.0f;
+                } else {
+                    value = sustain_level;
+                }
                 break;
             case AdsrStage::kRelease:
                 value *= release_rate;
@@ -110,10 +125,10 @@ struct AdsrEnvelope {
 struct TrackParameters {
     EngineType engine = EngineType::kVaMono;
     std::array<float, kParamsPerTrack> p{0.55f, 0.35f, 0.50f, 0.35f, 0.30f, 0.40f};
-    float attack = 0.02f;
-    float decay = 0.40f;
-    float sustain = 0.65f;
-    float release = 0.30f;
+    float attack = 0.005f;  // 5ms
+    float decay = 0.28f;    // 280ms
+    float sustain = 0.0f;   // 0% sustain by default (no infinite drone!)
+    float release = 0.05f;  // 50ms minimal release
     float level = 0.85f;
     float pan = 0.0f;       // -1.0 (L) .. +1.0 (R)
     float delay_send = 0.2f;
@@ -139,15 +154,21 @@ inline constexpr const char* getParamName(EngineType type, int param_idx) {
     return kParamNames[e][idx];
 }
 
-// Крок 64/128-крокового секвенсора з підтримкою Elektron Trig моделі (Note Trig vs Yellow Param Trig)
+// Крок 64/128-крокового секвенсора з підтримкою Elektron Trig моделі (Note Trig vs Yellow Param Trig, Slide, Gate)
 struct SequencerStep {
     bool enabled = false;        // Чи активний крок
     bool is_param_trig = false;  // Жовтий крок Elektron: НЕ тригерить ноту/MIDI, тільки змінює параметри звуку!
+    bool slide = false;          // TB-303 / Elektron Legato Slide (65ms constant-time RC glide)
     uint8_t note = 48;           // MIDI нота (0..127)
     float velocity = 0.90f;      // 0.0 .. 1.0
+    float gate_len = 0.60f;      // 0.1 .. 1.0+ (довжина кроку, усуває нескінченний сустейн)
     bool has_plock = false;      // Чи зафіксовано P-Lock
-    float plock_cutoff = 0.5f;   // P-Lock фільтра
-    float plock_val = 0.5f;      // P-Lock додаткового параметра
+    float plock_cutoff = -1.0f;  // P-Lock фільтра (-1 = дефолт доріжки)
+    float plock_val = -1.0f;     // P-Lock додаткового параметра (-1 = дефолт)
+    float attack = -1.0f;        // P-Lock Attack (-1 = дефолт доріжки)
+    float decay = -1.0f;         // P-Lock Decay (-1 = дефолт доріжки)
+    float sustain = -1.0f;       // P-Lock Sustain (-1 = дефолт доріжки)
+    float release = -1.0f;       // P-Lock Release (-1 = дефолт доріжки)
 };
 
 } // namespace groovebox

@@ -206,3 +206,25 @@
   * Навігація D-Pad: рух курсора по 16 рядках та 128 кроках; `X/Y` — транспонування півтонів; `B` — запис P-Lock зі стіка.
 * **64-Step Polyphonic Mozart "Rondo Alla Turca" Default Sequence:**
   * Запрограмовано багатодоріжкову 64-крокову секвенцію Турецького маршу Моцарта: барабанний біт (рядки 0–3), партія басу (рядки 4–5), соло з жовтими Param Trigs (рядок 8) та FM акорди (рядки 12–14).
+
+## [2026-10-25 16:20] Default ADSR Zero-Sustain, Panic/Kill, TB-303 65ms Glide, Step Inspector & Tab Reorg (L1 SEQ / Button G)
+* **Default Zero-Sustain & Sound Termination (src/synth_engines.hpp, src/audio_engine.cpp):**
+  * Усунуто нескінченний сустейн: дефолтний `sustain = 0.0f` та `release = 0.05f` для всіх інструментів та синтезаторів.
+  * У методі `AdsrEnvelope::process()`: коли `sustain_level <= 0.001f`, після завершення фази `kDecay` огинаюча переходить у `kIdle` з повним вимиканням голосу (`active = false`, нульове споживання CPU).
+  * Додано `gate_len` до кроків секвенсора: після спливання Gate огинаючі автоматично переходять у фазу Release.
+  * Реалізовано метод `AudioEngine::panic()`: миттєве глушіння всіх 16 голосів, обнулення фаз, очищення буферів stereo ping-pong delay та скидання VU-метрів.
+  * Автоматичний виклик `panic()` при зупинці секвенсора кнопкою `START` або комбінацією **`SELECT + B`** (Panic / Kill Sound).
+* **Roland TB-303 Constant-Time 65ms Glide & Legato (src/synth_engines.hpp, src/audio_engine.cpp):**
+  * Додано прапорець `slide` до структури `SequencerStep`.
+  * При зв'язаних нотах на рушії `kAcid303` нова нота не перезапускає огинаючі та не збиває фазу осцилятора, а плавно ковзає до нової цільової частоти за схемою RC-фільтра напруги CV ($\tau \approx 65\text{ ms}$).
+* **Hold-to-Inspect Step Inspector Popup (src/ui_renderer.cpp, src/main.cpp):**
+  * Розпізнавання короткого та довгого натискання кнопки `A`:
+    * Короткий клік (<200 мс): дефолтне перемикання кроку (`Off -> Note -> Param -> Off`).
+    * Утримання (>200 мс): спливає модальне вікно **Step Inspector** над вибраним кроком.
+  * Ліва рука керує параметрами: `D-Pad Up/Down` обирає рядок (`TYPE`, `NOTE`, `VELOCITY`, `GATE LEN`, `SLIDE`, `ATTACK`, `DECAY`, `SUSTAIN`, `RELEASE`, `CUTOFF` за шкалою Elektron 0..127); `D-Pad Left/Right` або лівий стік обертає значення (звичайний крок $\pm 1$, із `SELECT` $\pm 8$).
+* **Реорганізація вкладок та бокова кнопка G:**
+  * Секвенсор перенесено на першу вкладку: **`[L1] SEQ`** (головний робочий екран DAW).
+  * Інші вкладки: `[L2] SYNTH`, `[R2] MIX`, `[R1] SCOPE`.
+  * Бокова апаратна кнопка **`G`** (`key.fn` `0x2c0`): відкриває/закриває системне меню `[G] SYS`.
+* **Динамічний контекст клавіші SELECT:**
+  * При затисканні `SELECT`: верхній заголовок показує `SEL: [A:BUF 96..2048] [B:PANIC/KILL] [X:LEN 16..128] [Y:PAGE] [STA:RESET]`, а нижній HUD оновлює всі підказки дій.

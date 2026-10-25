@@ -88,41 +88,41 @@ AudioEngine::~AudioEngine() {
 void AudioEngine::initDefaultPattern() {
     std::lock_guard<std::mutex> lock(state_mutex_);
 
-    // 4 доріжки з повною ADSR-огинаючою:
+    // 4 доріжки з повною ADSR-огинаючою (за дефолтом сустейн 0.0, перкусійний спад):
     // T1: Оркестрові литаври / маршовий ритм (4 голоси: Kick, Snare, Cl-Hat, Op-Hat)
     // T2: Класичний бас Альберті (VA Synth, 4 голоси)
     // T3: Віртуозна тема "Rondo Alla Turca" KV 331 (Acid 303 Lead, 4 голоси з жовтими Param Trigs)
     // T4: Клавесин / гармонія акордів (2-Op FM, 4 голоси)
-    tracks_[0] = {EngineType::kDrumSyn,  {0.30f, 0.50f, 0.40f, 0.15f, 0.35f, 0.50f}, 0.005f, 0.35f, 0.00f, 0.15f, 0.90f,  0.00f, 0.08f, false};
-    tracks_[1] = {EngineType::kVaMono,   {0.45f, 0.28f, 0.48f, 0.25f, 0.50f, 0.45f}, 0.010f, 0.40f, 0.50f, 0.25f, 0.82f, -0.15f, 0.15f, false};
-    tracks_[2] = {EngineType::kAcid303,  {0.62f, 0.55f, 0.60f, 0.22f, 0.70f, 0.00f}, 0.008f, 0.35f, 0.40f, 0.20f, 0.85f,  0.15f, 0.25f, false};
-    tracks_[3] = {EngineType::kFm2Op,    {0.55f, 0.35f, 0.45f, 0.28f, 0.25f, 0.40f}, 0.015f, 0.60f, 0.60f, 0.40f, 0.75f, -0.20f, 0.30f, false};
+    tracks_[0] = {EngineType::kDrumSyn,  {0.30f, 0.50f, 0.40f, 0.15f, 0.35f, 0.50f}, 0.005f, 0.35f, 0.00f, 0.05f, 0.90f,  0.00f, 0.08f, false};
+    tracks_[1] = {EngineType::kVaMono,   {0.45f, 0.28f, 0.48f, 0.25f, 0.50f, 0.45f}, 0.008f, 0.30f, 0.00f, 0.05f, 0.82f, -0.15f, 0.15f, false};
+    tracks_[2] = {EngineType::kAcid303,  {0.62f, 0.55f, 0.60f, 0.22f, 0.70f, 0.00f}, 0.005f, 0.28f, 0.00f, 0.05f, 0.85f,  0.15f, 0.25f, false};
+    tracks_[3] = {EngineType::kFm2Op,    {0.55f, 0.35f, 0.45f, 0.28f, 0.25f, 0.40f}, 0.010f, 0.45f, 0.00f, 0.05f, 0.75f, -0.20f, 0.30f, false};
 
     pattern_length_.store(64);
 
     // Очищаємо всі 16 рядків x 128 кроків
     for (int r = 0; r < kTotalRows; ++r) {
         for (uint32_t s = 0; s < kMaxSteps; ++s) {
-            pattern_[r][s] = {false, false, 48, 0.85f, false, 0.5f, 0.5f};
+            pattern_[r][s] = {false, false, false, 48, 0.85f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
         }
     }
 
     // 1. T1: Ритм-секція (рядки 0..3) на 64 кроки
     // Row 0: Kick (нота 36)
     for (int s = 0; s < 64; s += 8) {
-        pattern_[0][s] = {true, false, 36, 0.95f, false, 0.5f, 0.5f};
+        pattern_[0][s] = {true, false, false, 36, 0.95f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
     }
     // Row 1: Snare (нота 38)
     for (int s = 4; s < 64; s += 8) {
-        pattern_[1][s] = {true, false, 38, 0.90f, false, 0.5f, 0.5f};
+        pattern_[1][s] = {true, false, false, 38, 0.90f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
     }
     // Row 2: Closed Hat (нота 42)
     for (int s = 2; s < 64; s += 4) {
-        pattern_[2][s] = {true, false, 42, 0.75f, false, 0.5f, 0.5f};
+        pattern_[2][s] = {true, false, false, 42, 0.75f, 0.40f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
     }
     // Row 3: Open Hat / Tom (нота 46)
     for (int s = 14; s < 64; s += 16) {
-        pattern_[3][s] = {true, false, 46, 0.85f, false, 0.5f, 0.5f};
+        pattern_[3][s] = {true, false, false, 46, 0.85f, 0.75f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
     }
 
     // 2. T2: Бас Альберті (рядки 4..5)
@@ -130,10 +130,10 @@ void AudioEngine::initDefaultPattern() {
     for (int s = 0; s < 64; ++s) {
         int note = kAlberti[s % 16];
         int r = (s % 2 == 0) ? 4 : 5;
-        pattern_[r][s] = {true, false, static_cast<uint8_t>(note), 0.82f, false, 0.5f, 0.5f};
+        pattern_[r][s] = {true, false, false, static_cast<uint8_t>(note), 0.82f, 0.50f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
     }
 
-    // 3. T3: Мелодія "Rondo Alla Turca" (рядок 8) + Жовті Param Trigs (Elektron style)
+    // 3. T3: Мелодія "Rondo Alla Turca" (рядок 8) + Жовті Param Trigs (Elektron style) + Slide
     static constexpr int kLead[32] = {
         71, 69, 68, 69, 72, 0, 72, 0, 74, 72, 71, 72, 76, 0, 76, 0,
         77, 76, 74, 76, 79, 0, 79, 0, 81, 79, 77, 76, 74, 0, 74, 0
@@ -141,18 +141,19 @@ void AudioEngine::initDefaultPattern() {
     for (int s = 0; s < 64; ++s) {
         int note = kLead[s % 32];
         if (note > 0) {
-            pattern_[8][s] = {true, false, static_cast<uint8_t>(note), 0.90f, (s % 4 == 0), 0.82f, 0.5f};
+            bool is_slide = (s % 8 == 2 || s % 8 == 3); // 303 constant-time slide on fast ornamental turns
+            pattern_[8][s] = {true, false, is_slide, static_cast<uint8_t>(note), 0.90f, 0.70f, (s % 4 == 0), 0.82f, 0.5f, -1.0f, -1.0f, -1.0f, -1.0f};
         } else if (s % 8 == 6) {
             // Жовтий крок Elektron (Param Trig): не тригерить ноту, але відкриває фільтр на хвості!
-            pattern_[8][s] = {true, true, 72, 0.0f, true, 0.92f, 0.5f};
+            pattern_[8][s] = {true, true, false, 72, 0.0f, 0.50f, true, 0.92f, 0.5f, -1.0f, -1.0f, -1.0f, -1.0f};
         }
     }
 
     // 4. T4: Гармонія FM (рядки 12..14, поліфонічні акорди)
     for (int s = 0; s < 64; s += 16) {
-        pattern_[12][s] = {true, false, 57, 0.75f, false, 0.5f, 0.5f}; // A3
-        pattern_[13][s] = {true, false, 60, 0.70f, false, 0.5f, 0.5f}; // C4
-        pattern_[14][s] = {true, false, 64, 0.72f, false, 0.5f, 0.5f}; // E4
+        pattern_[12][s] = {true, false, false, 57, 0.75f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f}; // A3
+        pattern_[13][s] = {true, false, false, 60, 0.70f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f}; // C4
+        pattern_[14][s] = {true, false, false, 64, 0.72f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f}; // E4
     }
 }
 
@@ -187,6 +188,13 @@ SequencerStep AudioEngine::getStep(int row, int step_idx) const {
     int r = std::clamp(row, 0, kTotalRows - 1);
     int s = std::clamp(step_idx, 0, static_cast<int>(kMaxSteps - 1));
     return pattern_[r][s];
+}
+
+void AudioEngine::setStep(int row, int step_idx, const SequencerStep& step) {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    int r = std::clamp(row, 0, kTotalRows - 1);
+    int s = std::clamp(step_idx, 0, static_cast<int>(kMaxSteps - 1));
+    pattern_[r][s] = step;
 }
 
 void AudioEngine::toggleStep(int row, int step_idx) {
@@ -234,7 +242,27 @@ void AudioEngine::lockStepCutoff(int row, int step_idx, float cutoff_val) {
     st.plock_cutoff = std::clamp(cutoff_val, 0.05f, 0.95f);
 }
 
-void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plock_cutoff) {
+void AudioEngine::panic() {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    for (auto& v : voices_) {
+        v.active = false;
+        v.amp_adsr.reset();
+        v.filter_adsr.reset();
+        v.phase1 = v.phase2 = v.phase3 = v.phase4 = 0.0f;
+        v.last_out = 0.0f;
+        v.svf_low = v.svf_band = 0.0f;
+        v.gate_samples_left = -1;
+        v.is_legato = false;
+    }
+    std::fill(delay_buf_l_.begin(), delay_buf_l_.end(), 0.0f);
+    std::fill(delay_buf_r_.begin(), delay_buf_r_.end(), 0.0f);
+    vu_l_.store(0.0f, std::memory_order_relaxed);
+    vu_r_.store(0.0f, std::memory_order_relaxed);
+    peak_hold_.store(0.0f, std::memory_order_relaxed);
+    for (auto& t : track_vu_) t.store(0.0f, std::memory_order_relaxed);
+}
+
+void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plock_cutoff, bool slide, float gate_len) {
     if (row < 0 || row >= kTotalRows) return;
     std::lock_guard<std::mutex> lock(state_mutex_);
     int t = row / kVoicesPerTrack;
@@ -247,26 +275,41 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
     v.velocity = std::clamp(velocity, 0.05f, 1.0f);
     v.plock_cutoff = plock_cutoff;
     v.pitch_env = 1.0f;
+    v.glide_coef = std::exp(-1.0f / (0.065f * sr)); // 65ms constant-time RC glide (TB-303 authentic)
 
-    if (tracks_[t].engine == EngineType::kDrumSyn) {
-        static constexpr int kDrumNotes[4] = {36, 38, 42, 46};
-        int d_note = (midi_note > 0) ? midi_note : kDrumNotes[v_idx];
-        v.freq = midiToFreq(d_note);
-        float att = 0.001f;
-        float dec = (v_idx == 0) ? 0.38f : (v_idx == 1 ? 0.22f : (v_idx == 2 ? 0.06f : 0.30f));
-        v.amp_adsr.trigger(att, dec, 0.0f, sr);
-        v.filter_adsr.trigger(0.001f, dec * 0.7f, 0.0f, sr);
+    // Тривалість 1 кроку секвенсора (~125мс на 120 BPM)
+    float step_sec = 0.125f;
+    v.gate_samples_left = static_cast<int32_t>(step_sec * std::clamp(gate_len, 0.1f, 2.0f) * sr);
+
+    if (tracks_[t].engine == EngineType::kAcid303 && slide && v.amp_adsr.isActive()) {
+        // Roland TB-303 Legato Slide: нова цільова нота, без скидання фази чи огинаючої!
+        v.target_pitch = static_cast<float>(midi_note);
+        v.is_legato = true;
     } else {
+        v.target_pitch = static_cast<float>(midi_note);
+        v.current_pitch = v.target_pitch;
+        v.is_legato = false;
         v.freq = midiToFreq(midi_note);
-        v.amp_adsr.trigger(tracks_[t].attack, tracks_[t].decay, tracks_[t].sustain, sr);
-        v.filter_adsr.trigger(tracks_[t].attack * 0.6f, tracks_[t].decay, tracks_[t].sustain, sr);
+
+        if (tracks_[t].engine == EngineType::kDrumSyn) {
+            static constexpr int kDrumNotes[4] = {36, 38, 42, 46};
+            int d_note = (midi_note > 0) ? midi_note : kDrumNotes[v_idx];
+            v.freq = midiToFreq(d_note);
+            float att = 0.001f;
+            float dec = (v_idx == 0) ? 0.38f : (v_idx == 1 ? 0.22f : (v_idx == 2 ? 0.06f : 0.30f));
+            v.amp_adsr.trigger(att, dec, 0.0f, sr);
+            v.filter_adsr.trigger(0.001f, dec * 0.7f, 0.0f, sr);
+        } else {
+            v.amp_adsr.trigger(tracks_[t].attack, tracks_[t].decay, tracks_[t].sustain, sr);
+            v.filter_adsr.trigger(tracks_[t].attack * 0.6f, tracks_[t].decay, tracks_[t].sustain, sr);
+        }
     }
 }
 
-void AudioEngine::triggerNote(int track, int midi_note, float velocity, float plock_cutoff) {
+void AudioEngine::triggerNote(int track, int midi_note, float velocity, float plock_cutoff, bool slide, float gate_len) {
     if (track < 0 || track >= 4) return;
     int row = track * kVoicesPerTrack;
-    triggerVoice(row, midi_note, velocity, plock_cutoff);
+    triggerVoice(row, midi_note, velocity, plock_cutoff, slide, gate_len);
 }
 
 void AudioEngine::triggerSequencerStep(uint32_t step_idx) {
@@ -293,7 +336,9 @@ void AudioEngine::triggerSequencerStep(uint32_t step_idx) {
                     r,
                     steps[r].note,
                     steps[r].velocity,
-                    steps[r].has_plock ? steps[r].plock_cutoff : -1.0f
+                    steps[r].has_plock ? steps[r].plock_cutoff : -1.0f,
+                    steps[r].slide,
+                    steps[r].gate_len
                 );
             }
         }
@@ -385,6 +430,7 @@ bool AudioEngine::start(int card_index, bool is_usb_48k, bool headphones_plugged
 }
 
 void AudioEngine::stop() {
+    panic();
     if (!running_.exchange(false)) return;
 #if defined(__linux__)
     if (alsa_thread_.joinable()) {
@@ -483,6 +529,14 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             const auto& tp = local_tracks[t];
             if (tp.muted || !v.active) continue;
 
+            if (v.gate_samples_left > 0) {
+                v.gate_samples_left -= 1;
+                if (v.gate_samples_left <= 0) {
+                    v.amp_adsr.release(tp.release, static_cast<float>(sample_rate));
+                    v.filter_adsr.release(tp.release, static_cast<float>(sample_rate));
+                }
+            }
+
             float amp = v.amp_adsr.process();
             float f_env = v.filter_adsr.process();
             if (!v.amp_adsr.isActive() && amp < 0.0005f) {
@@ -491,7 +545,10 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             }
 
             float cur_freq = v.freq;
-            if (tp.engine == EngineType::kDrumSyn) {
+            if (tp.engine == EngineType::kAcid303 && v.is_legato) {
+                v.current_pitch = (1.0f - v.glide_coef) * v.target_pitch + v.glide_coef * v.current_pitch;
+                cur_freq = 440.0f * std::pow(2.0f, (v.current_pitch - 69.0f) / 12.0f);
+            } else if (tp.engine == EngineType::kDrumSyn) {
                 // Різний характер для 4 голосів ударних: Kick, Snare, Cl-Hat, Op-Hat
                 if (v_idx == 0) {
                     // Kick: швидкий спад висоти від 160 Гц до 45 Гц

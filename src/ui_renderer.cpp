@@ -234,13 +234,23 @@ void UiRenderer::renderTopBar(const AppModel& app, const InputState& input, int 
     fillRect(0, 0, w, bar_h, palette::kPanelBg);
     drawLine(0, bar_h - 1, w - 1, bar_h - 1, palette::kGridDim);
 
-    // 4 вкладки верхнього бара зліва направо: L1, L2, R2, R1
-    const char* labels_320[4] = {"[L1] HW/SYS", "[L2] SYNTH", "[R2] MIX/FX", "[R1] SCOPE"};
-    const char* labels_160[4] = {"L1:SYS", "L2:SYN", "R2:MIX", "R1:SCP"};
-    const bool held[4] = {input.l1, input.l2, input.r2, input.r1};
-    const int tab_w = w / 4;
+    // Якщо затиснуто SELECT, верхній бар динамічно відображає гарячі клавіші Elektron!
+    if (input.btn_select) {
+        fillRect(1, 1, w - 2, bar_h - 3, palette::kHeaderSel);
+        const char* sel_hint = (w >= 320)
+            ? "SEL: [A:BUF 96..2048] [B:PANIC/KILL] [X:LEN 16..128] [Y:PAGE] [STA:RESET]"
+            : "SEL: A:BUF B:PANIC X:LEN Y:PG STA:RST";
+        drawText(4, 5, sel_hint, palette::kParamTrig, 1);
+        return;
+    }
 
-    for (int i = 0; i < 4; ++i) {
+    // 5 вкладок: L1:SEQ (Головний), L2:SYNTH, R2:MIX, R1:SCOPE, G:SYS
+    const char* labels_320[5] = {"[L1] SEQ", "[L2] SYNTH", "[R2] MIX", "[R1] SCOPE", "[G] SYS"};
+    const char* labels_160[5] = {"L1:SEQ", "L2:SYN", "R2:MIX", "R1:SCP", "G:SYS"};
+    const bool held[5] = {input.l1, input.l2, input.r2, input.r1, input.btn_fn};
+    const int tab_w = w / 5;
+
+    for (int i = 0; i < 5; ++i) {
         const int tx = i * tab_w;
         const bool is_active = (static_cast<int>(app.active_tab) == i);
         const char* lbl = (w >= 320) ? labels_320[i] : labels_160[i];
@@ -253,7 +263,7 @@ void UiRenderer::renderTopBar(const AppModel& app, const InputState& input, int 
             drawText(text_x, 5, lbl, palette::kBgDark, 1);
         } else {
             drawRect(tx + 1, 1, tab_w - 2, bar_h - 3, palette::kGridDim);
-            drawText(text_x, 5, lbl, palette::kTextMain, 1);
+            drawText(text_x, 5, lbl, (i == 4) ? palette::kAccentOrange : palette::kTextMain, 1);
         }
     }
 }
@@ -280,200 +290,8 @@ void UiRenderer::renderWorkspace(
 
     char buf[128];
 
-    if (app.active_tab == WorkspaceTab::kHwSys) {
-        // Вкладка L1: Апаратний монітор, аудіо-роутинг, MIDI Clock та тест кнопок
-        ColorRGB route_col = hw.digitakt_connected ? palette::kLevelOk : palette::kAccentOrange;
-        std::snprintf(
-            buf, sizeof(buf), "AUDIO OUT : %s | BUF:%u | VOL:%3.0f%% | XRUN:%u",
-            audio.device_label.c_str(),
-            audio.period_frames,
-            master_vol * 100.0f,
-            audio.xrun_count
-        );
-        drawText(8, top_y + 6, buf, route_col, 1);
-
-        std::snprintf(
-            buf, sizeof(buf), "MIDI SYNC : %s | BPM:%3.0f",
-            midi.port_name.c_str(),
-            midi.external_sync ? midi.detected_bpm : app.bpm
-        );
-        drawText(8, top_y + 15, buf, palette::kAccentCyan, 1);
-
-        std::snprintf(
-            buf, sizeof(buf), "SYSTEM    : CPU %2.0f%% [MAX %2.0f%%] (%dC) | RAM %d/%d MB",
-            hw.cpu_load_percent, hw.cpu_max_percent, hw.cpu_temp_c, hw.ram_used_mb, hw.ram_total_mb
-        );
-        drawText(8, top_y + 24, buf, palette::kTextMain, 1);
-
-        const bool is_host = (hw.usb_role == "host");
-        std::snprintf(
-            buf, sizeof(buf), "USB PORT  : %s [FN:SWITCH]",
-            is_host ? "HOST (5V ON: AUDIO/MIDI)" : "DEVICE (MAC SSH 10.1.1.2)"
-        );
-        drawText(8, top_y + 33, buf, is_host ? palette::kLevelOk : palette::kAccentCyan, 1);
-
-        // Інтерактивна матриця перевірки фізичних кнопок у воркспейсі
-        const int vy = top_y + 45;
-        drawLine(6, vy - 4, w - 6, vy - 4, palette::kGridDim);
-
-        auto drawBadge = [&](int bx, int by, const char* name, bool on) {
-            int bw = static_cast<int>(std::strlen(name)) * 4 + 6;
-            int bh = 11;
-            if (on) {
-                fillRect(bx, by, bw, bh, palette::kLevelOk);
-                drawText(bx + 3, by + 3, name, palette::kBgDark, 1);
-            } else {
-                drawRect(bx, by, bw, bh, palette::kGridDim);
-                drawText(bx + 3, by + 3, name, palette::kTextDim, 1);
-            }
-        };
-
-        drawBadge(8,   vy, "UP",   input.dpad_up);
-        drawBadge(26,  vy, "DN",   input.dpad_down);
-        drawBadge(44,  vy, "LT",   input.dpad_left);
-        drawBadge(62,  vy, "RT",   input.dpad_right);
-        drawBadge(84,  vy, "SEL",  input.btn_select);
-        drawBadge(106, vy, "STA",  input.btn_start);
-        drawBadge(132, vy, "A",    input.btn_a);
-        drawBadge(146, vy, "B",    input.btn_b);
-        drawBadge(160, vy, "X",    input.btn_x);
-        drawBadge(174, vy, "Y",    input.btn_y);
-        drawBadge(192, vy, "L1",   input.l1);
-        drawBadge(210, vy, "L2",   input.l2);
-        drawBadge(228, vy, "R2",   input.r2);
-        drawBadge(246, vy, "R1",   input.r1);
-        drawBadge(268, vy, "V+",   input.vol_up);
-        drawBadge(286, vy, "V-",   input.vol_down);
-
-        // 2D-приціли аналогових стіків + реальний осцилограф аудіовиходу та VU-метр
-        const int sy = vy + 16;
-        const int box = (w >= 320) ? 56 : 26;
-        drawRect(8, sy, box, box, palette::kGridDim);
-        drawText(10, sy + 2, "L-STICK", palette::kTextDim, 1);
-        int lpx = 8 + box / 2 + static_cast<int>(input.lx * (box / 2 - 3));
-        int lpy = sy + box / 2 + static_cast<int>(input.ly * (box / 2 - 3));
-        fillRect(lpx - 2, lpy - 2, 5, 5, palette::kAccentCyan);
-
-        const int rbox_x = 8 + box + 6;
-        drawRect(rbox_x, sy, box, box, palette::kGridDim);
-        drawText(rbox_x + 2, sy + 2, "R-STICK", palette::kTextDim, 1);
-        int rpx = rbox_x + box / 2 + static_cast<int>(input.rx * (box / 2 - 3));
-        int rpy = sy + box / 2 + static_cast<int>(input.ry * (box / 2 - 3));
-        fillRect(rpx - 2, rpy - 2, 5, 5, palette::kAccentOrange);
-
-        // Реальний осцилограф звукової хвилі праворуч у воркспейсі
-        const int sc_x = rbox_x + box + 8;
-        const int sc_w = w - sc_x - 8;
-        const int sc_h = box;
-        if (sc_w > 20) {
-            drawRect(sc_x, sy, sc_w, sc_h, palette::kGridDim);
-            drawText(sc_x + 4, sy + 2, "LIVE AUDIO SCOPE", palette::kTextDim, 1);
-            int prev_y = sy + sc_h / 2;
-            for (int px = 1; px < sc_w - 1; ++px) {
-                uint32_t s_idx = (static_cast<uint32_t>(px) * 255u) / static_cast<uint32_t>(sc_w);
-                float v = audio.scope_samples[s_idx];
-                int cur_y = sy + (sc_h / 2) - static_cast<int>(v * (sc_h / 2 - 4));
-                cur_y = std::clamp(cur_y, sy + 2, sy + sc_h - 2);
-                drawLine(sc_x + px - 1, prev_y, sc_x + px, cur_y, palette::kAccentCyan);
-                prev_y = cur_y;
-            }
-        }
-
-        // Смуга динамічного рівня реального сигналу (VU-метр) внизу воркспейсу
-        const int vu_y = sy + box + 6;
-        if (vu_y + 10 < bot_y) {
-            drawText(8, vu_y + 2, "OUT VU :", palette::kTextDim, 1);
-            const int vu_x = 44;
-            const int vu_w = w - vu_x - 8;
-            drawRect(vu_x, vu_y, vu_w, 9, palette::kGridDim);
-            float vu_val = std::max(audio.vu_left, audio.vu_right);
-            int fill_w = static_cast<int>(std::clamp(vu_val * 1.25f, 0.0f, 1.0f) * (vu_w - 2));
-            ColorRGB vu_col = (fill_w > (vu_w * 8) / 10) ? palette::kLevelWarnClip : palette::kLevelOk;
-            if (fill_w > 0) {
-                fillRect(vu_x + 1, vu_y + 1, fill_w, 7, vu_col);
-            }
-        }
-
-    } else if (app.active_tab == WorkspaceTab::kSynth) {
-        // Вкладка L2: Модульний редактор движка та 6 параметрів обраної доріжки!
-        // Кнопки A/B/X/Y обирають і тригерять TRK 1..4, Up/Down обирає параметр, Left/Right змінює значення!
-        const auto tp = audio_engine.getTrackParams(app.selected_track);
-        std::snprintf(
-            buf, sizeof(buf), "TRACK %d/4 SYNTH EDITOR  |  [A/B/X/Y = SELECT TRACK]",
-            app.selected_track + 1
-        );
-        drawText(8, top_y + 6, buf, palette::kAccentOrange, 1);
-
-        // Рядок 0: Вибір модульного движка (ENGINE TYPE)
-        const bool eng_sel = (app.selected_param == 0);
-        if (eng_sel) {
-            fillRect(6, top_y + 18, w - 12, 13, palette::kPanelBg);
-            drawRect(6, top_y + 18, w - 12, 13, palette::kAccentOrange);
-        }
-        std::snprintf(
-            buf, sizeof(buf), "%s ENGINE TYPE : < %s >",
-            eng_sel ? ">" : " ",
-            getEngineTypeName(tp.engine)
-        );
-        drawText(10, top_y + 22, buf, eng_sel ? palette::kAccentCyan : palette::kTextMain, 1);
-
-        // Рядки 1..6: 6 динамічних параметрів обраного движка з графічними слайдерами
-        for (int p = 0; p < kParamsPerTrack; ++p) {
-            const int py = top_y + 36 + p * 22;
-            const bool is_sel = (app.selected_param == p + 1);
-            const char* pname = getParamName(tp.engine, p);
-            const float pval = tp.p[p];
-
-            if (is_sel) {
-                fillRect(6, py - 2, w - 12, 18, palette::kPanelBg);
-                drawRect(6, py - 2, w - 12, 18, palette::kAccentOrange);
-            }
-
-            std::snprintf(buf, sizeof(buf), "%s %-8s %3.0f%%", is_sel ? ">" : " ", pname, pval * 100.0f);
-            drawText(10, py + 4, buf, is_sel ? palette::kAccentOrange : palette::kTextMain, 1);
-
-            const int bar_x = 92;
-            const int bar_w = w - bar_x - 14;
-            drawRect(bar_x, py + 2, bar_w, 10, palette::kGridDim);
-            int fill_w = static_cast<int>(std::clamp(pval, 0.0f, 1.0f) * (bar_w - 2));
-            if (fill_w > 0) {
-                fillRect(bar_x + 1, py + 3, fill_w, 8, is_sel ? palette::kAccentCyan : palette::kLevelOk);
-            }
-        }
-
-    } else if (app.active_tab == WorkspaceTab::kMixFx) {
-        // Вкладка R2: 4-канальний мікшер, Delay Send, Mute та індивідуальні VU-метри
-        std::snprintf(buf, sizeof(buf), "4-TRACK MIXER & STEREO PING-PONG DELAY | VOL:%3.0f%%", master_vol * 100.0f);
-        drawText(8, top_y + 6, buf, palette::kAccentOrange, 1);
-
-        for (int t = 0; t < 4; ++t) {
-            const auto tp = audio_engine.getTrackParams(t);
-            const int by = top_y + 22 + t * 38;
-            const bool sel = (app.selected_track == t);
-            if (sel) {
-                drawRect(6, by - 3, w - 12, 34, palette::kAccentOrange);
-            }
-
-            std::snprintf(
-                buf, sizeof(buf), "%sTRK %d [%-11s] %s LVL:%3.0f%% DLY:%2.0f%%",
-                sel ? ">" : " ",
-                t + 1,
-                getEngineTypeName(tp.engine),
-                tp.muted ? "[MUTE]" : "[ON]  ",
-                tp.level * 100.0f,
-                tp.delay_send * 100.0f
-            );
-            drawText(10, by + 2, buf, tp.muted ? palette::kLevelWarnClip : (sel ? palette::kAccentCyan : palette::kTextMain), 1);
-
-            const int bar_w = w - 24;
-            drawRect(12, by + 13, bar_w, 11, palette::kGridDim);
-            int lvl = static_cast<int>(std::clamp(audio.track_levels[t] * 1.4f, 0.0f, 1.0f) * (bar_w - 2));
-            if (lvl > 0 && !tp.muted) {
-                fillRect(13, by + 14, lvl, 9, (lvl > (bar_w * 8) / 10) ? palette::kLevelWarnClip : palette::kLevelOk);
-            }
-        }
-    } else {
-        // R1: Повноекранна 16-рядкова x 64/128-крокова матриця Elektron-секвенсора (4 доріжки x 4 голоси)
+    if (app.active_tab == WorkspaceTab::kSeq) {
+        // [L1] SEQ: Повноекранна 16-рядкова x 64/128-крокова матриця Elektron-секвенсора
         const int cur_r = std::clamp(app.cursor_row, 0, kTotalRows - 1);
         const int cur_t = cur_r / kVoicesPerTrack;
         const int cur_v = cur_r % kVoicesPerTrack;
@@ -486,11 +304,12 @@ void UiRenderer::renderWorkspace(
         const char* trig_tag = !cur_st.enabled ? "OFF" : (cur_st.is_param_trig ? "[PARAM-LOCK]" : "[NOTE-TRIG]");
 
         std::snprintf(
-            buf, sizeof(buf), "T%d:V%d [%s] | ST%03d:%s%d %s | P%d/2 L:%u | BPM:%3.0f %s",
+            buf, sizeof(buf), "T%d:V%d [%s] | ST%03d:%s%d %s%s | P%d/2 L:%u | BPM:%3.0f %s",
             cur_t + 1, cur_v + 1,
             getEngineTypeName(tp.engine),
             app.cursor_step + 1,
             nn, oct,
+            cur_st.slide ? "~SLD " : "",
             trig_tag,
             app.seq_page + 1,
             app.pattern_length,
@@ -573,6 +392,262 @@ void UiRenderer::renderWorkspace(
         char len_buf[16];
         std::snprintf(len_buf, sizeof(len_buf), "L%03u", app.pattern_length);
         drawText(grid_x + 258, grid_y + 26, len_buf, palette::kAccentOrange, 1);
+
+        // --- STEP INSPECTOR MODAL POPUP (Утримання кнопки A > 200 мс) ---
+        if (app.step_inspector_open) {
+            const int pw = 170;
+            const int ph = 125;
+            const int px = (w - pw) / 2;
+            const int py = top_y + 10;
+
+            fillRect(px, py, pw, ph, palette::kPanelBg);
+            drawRect(px, py, pw, ph, palette::kAccentOrange);
+            fillRect(px + 1, py + 1, pw - 2, 12, palette::kHeaderSel);
+
+            std::snprintf(buf, sizeof(buf), "STEP INSPECTOR [T%d:V%d ST%03d]", cur_t + 1, cur_v + 1, app.cursor_step + 1);
+            drawText(px + 4, py + 3, buf, palette::kParamTrig, 1);
+
+            static constexpr const char* kParamNames[10] = {
+                "TYPE", "NOTE", "VELOCITY", "GATE LEN", "SLIDE", "ATTACK", "DECAY", "SUSTAIN", "RELEASE", "CUTOFF"
+            };
+
+            for (int i = 0; i < 10; ++i) {
+                int iy = py + 15 + i * 10;
+                bool is_sel = (app.step_inspector_param == i);
+                if (is_sel) {
+                    fillRect(px + 2, iy - 1, pw - 4, 10, palette::kHeaderSel);
+                }
+
+                char val_str[32];
+                if (i == 0) {
+                    std::snprintf(val_str, sizeof(val_str), "%s", !cur_st.enabled ? "OFF" : (cur_st.is_param_trig ? "PARAM TRIG" : "NOTE TRIG"));
+                } else if (i == 1) {
+                    std::snprintf(val_str, sizeof(val_str), "%s%d (%u)", nn, oct, cur_st.note);
+                } else if (i == 2) {
+                    std::snprintf(val_str, sizeof(val_str), "%3.0f (0..127)", cur_st.velocity * 127.0f);
+                } else if (i == 3) {
+                    std::snprintf(val_str, sizeof(val_str), "%3.0f%%", cur_st.gate_len * 100.0f);
+                } else if (i == 4) {
+                    std::snprintf(val_str, sizeof(val_str), "%s", cur_st.slide ? "ON (65ms)" : "OFF");
+                } else if (i == 5) {
+                    float atk = (cur_st.attack >= 0.0f) ? cur_st.attack : tp.attack;
+                    std::snprintf(val_str, sizeof(val_str), "%3.0f", atk * 127.0f);
+                } else if (i == 6) {
+                    float dec = (cur_st.decay >= 0.0f) ? cur_st.decay : tp.decay;
+                    std::snprintf(val_str, sizeof(val_str), "%3.0f", dec * 127.0f);
+                } else if (i == 7) {
+                    float sus = (cur_st.sustain >= 0.0f) ? cur_st.sustain : tp.sustain;
+                    std::snprintf(val_str, sizeof(val_str), "%3.0f", sus * 127.0f);
+                } else if (i == 8) {
+                    float rel = (cur_st.release >= 0.0f) ? cur_st.release : tp.release;
+                    std::snprintf(val_str, sizeof(val_str), "%3.0f", rel * 127.0f);
+                } else if (i == 9) {
+                    float cut = (cur_st.plock_cutoff >= 0.0f) ? cur_st.plock_cutoff : 0.5f;
+                    std::snprintf(val_str, sizeof(val_str), "%3.0f", cut * 127.0f);
+                }
+
+                std::snprintf(buf, sizeof(buf), "%s%-8s: %s", is_sel ? ">" : " ", kParamNames[i], val_str);
+                drawText(px + 4, iy + 1, buf, is_sel ? palette::kAccentCyan : palette::kTextMain, 1);
+            }
+            drawText(px + 4, py + ph - 8, "DPAD:SELECT | L-STK:TWEAK", palette::kTextDim, 1);
+        }
+
+    } else if (app.active_tab == WorkspaceTab::kSynth) {
+        // Вкладка L2: Модульний редактор движка та 6 параметрів обраної доріжки!
+        // Кнопки A/B/X/Y обирають і тригерять TRK 1..4, Up/Down обирає параметр, Left/Right змінює значення!
+        const auto tp = audio_engine.getTrackParams(app.selected_track);
+        std::snprintf(
+            buf, sizeof(buf), "TRACK %d/4 SYNTH EDITOR  |  [A/B/X/Y = SELECT TRACK]",
+            app.selected_track + 1
+        );
+        drawText(8, top_y + 6, buf, palette::kAccentOrange, 1);
+
+        // Рядок 0: Вибір модульного движка (ENGINE TYPE)
+        const bool eng_sel = (app.selected_param == 0);
+        if (eng_sel) {
+            fillRect(6, top_y + 18, w - 12, 13, palette::kPanelBg);
+            drawRect(6, top_y + 18, w - 12, 13, palette::kAccentOrange);
+        }
+        std::snprintf(
+            buf, sizeof(buf), "%s ENGINE TYPE : < %s >",
+            eng_sel ? ">" : " ",
+            getEngineTypeName(tp.engine)
+        );
+        drawText(10, top_y + 22, buf, eng_sel ? palette::kAccentCyan : palette::kTextMain, 1);
+
+        // Рядки 1..6: 6 динамічних параметрів обраного движка з графічними слайдерами
+        for (int p = 0; p < kParamsPerTrack; ++p) {
+            const int py = top_y + 36 + p * 22;
+            const bool is_sel = (app.selected_param == p + 1);
+            const char* pname = getParamName(tp.engine, p);
+            const float pval = tp.p[p];
+
+            if (is_sel) {
+                fillRect(6, py - 2, w - 12, 18, palette::kPanelBg);
+                drawRect(6, py - 2, w - 12, 18, palette::kAccentOrange);
+            }
+
+            std::snprintf(buf, sizeof(buf), "%s %-8s %3.0f%%", is_sel ? ">" : " ", pname, pval * 100.0f);
+            drawText(10, py + 4, buf, is_sel ? palette::kAccentOrange : palette::kTextMain, 1);
+
+            const int bar_x = 92;
+            const int bar_w = w - bar_x - 14;
+            drawRect(bar_x, py + 2, bar_w, 10, palette::kGridDim);
+            int fill_w = static_cast<int>(std::clamp(pval, 0.0f, 1.0f) * (bar_w - 2));
+            if (fill_w > 0) {
+                fillRect(bar_x + 1, py + 3, fill_w, 8, is_sel ? palette::kAccentCyan : palette::kLevelOk);
+            }
+        }
+
+    } else if (app.active_tab == WorkspaceTab::kMixFx) {
+        // Вкладка R2: 4-канальний мікшер, Delay Send, Mute та індивідуальні VU-метри
+        std::snprintf(buf, sizeof(buf), "4-TRACK MIXER & STEREO PING-PONG DELAY | VOL:%3.0f%%", master_vol * 100.0f);
+        drawText(8, top_y + 6, buf, palette::kAccentOrange, 1);
+
+        for (int t = 0; t < 4; ++t) {
+            const auto tp = audio_engine.getTrackParams(t);
+            const int by = top_y + 22 + t * 38;
+            const bool sel = (app.selected_track == t);
+            if (sel) {
+                drawRect(6, by - 3, w - 12, 34, palette::kAccentOrange);
+            }
+
+            std::snprintf(
+                buf, sizeof(buf), "%sTRK %d [%-11s] %s LVL:%3.0f%% DLY:%2.0f%%",
+                sel ? ">" : " ",
+                t + 1,
+                getEngineTypeName(tp.engine),
+                tp.muted ? "[MUTE]" : "[ON]  ",
+                tp.level * 100.0f,
+                tp.delay_send * 100.0f
+            );
+            drawText(10, by + 2, buf, tp.muted ? palette::kLevelWarnClip : (sel ? palette::kAccentCyan : palette::kTextMain), 1);
+
+            const int bar_w = w - 24;
+            drawRect(12, by + 13, bar_w, 11, palette::kGridDim);
+            int lvl = static_cast<int>(std::clamp(audio.track_levels[t] * 1.4f, 0.0f, 1.0f) * (bar_w - 2));
+            if (lvl > 0 && !tp.muted) {
+                fillRect(13, by + 14, lvl, 9, (lvl > (bar_w * 8) / 10) ? palette::kLevelWarnClip : palette::kLevelOk);
+            }
+        }
+    } else if (app.active_tab == WorkspaceTab::kScope) {
+        // [R1] SCOPE: Повноекранний осцилограф звукової хвилі + стерео VU
+        std::snprintf(
+            buf, sizeof(buf), "REAL-TIME OSCILLOSCOPE | RATE:%u Hz | BUF:%u | VOL:%3.0f%%",
+            audio.sample_rate, audio.period_frames, master_vol * 100.0f
+        );
+        drawText(8, top_y + 6, buf, palette::kAccentOrange, 1);
+
+        const int sc_x = 8;
+        const int sc_y = top_y + 20;
+        const int sc_w = w - 16;
+        const int sc_h = ws_h - 45;
+
+        drawRect(sc_x, sc_y, sc_w, sc_h, palette::kGridDim);
+        drawLine(sc_x + 1, sc_y + sc_h / 2, sc_x + sc_w - 2, sc_y + sc_h / 2, palette::kPanelBg);
+
+        int prev_y = sc_y + sc_h / 2;
+        for (int px = 1; px < sc_w - 1; ++px) {
+            uint32_t s_idx = (static_cast<uint32_t>(px) * 255u) / static_cast<uint32_t>(sc_w);
+            float v = audio.scope_samples[s_idx];
+            int cur_y = sc_y + (sc_h / 2) - static_cast<int>(v * (sc_h / 2 - 6));
+            cur_y = std::clamp(cur_y, sc_y + 2, sc_y + sc_h - 2);
+            drawLine(sc_x + px - 1, prev_y, sc_x + px, cur_y, palette::kAccentCyan);
+            prev_y = cur_y;
+        }
+
+        // Подвійний стерео VU метр (L / R) внизу
+        const int vu_y = sc_y + sc_h + 6;
+        drawText(8, vu_y + 1, "L:", palette::kTextDim, 1);
+        drawRect(24, vu_y, w - 32, 6, palette::kGridDim);
+        int fill_l = static_cast<int>(std::clamp(audio.vu_left * 1.3f, 0.0f, 1.0f) * (w - 34));
+        if (fill_l > 0) fillRect(25, vu_y + 1, fill_l, 4, palette::kLevelOk);
+
+        drawText(8, vu_y + 9, "R:", palette::kTextDim, 1);
+        drawRect(24, vu_y + 8, w - 32, 6, palette::kGridDim);
+        int fill_r = static_cast<int>(std::clamp(audio.vu_right * 1.3f, 0.0f, 1.0f) * (w - 34));
+        if (fill_r > 0) fillRect(25, vu_y + 9, fill_r, 4, palette::kLevelOk);
+
+    } else {
+        // [G] SYS: Системний екран, апаратний монітор, USB роутинг та тест кнопок
+        ColorRGB route_col = hw.digitakt_connected ? palette::kLevelOk : palette::kAccentOrange;
+        std::snprintf(
+            buf, sizeof(buf), "AUDIO OUT : %s | BUF:%u | VOL:%3.0f%% | XRUN:%u",
+            audio.device_label.c_str(),
+            audio.period_frames,
+            master_vol * 100.0f,
+            audio.xrun_count
+        );
+        drawText(8, top_y + 6, buf, route_col, 1);
+
+        std::snprintf(
+            buf, sizeof(buf), "MIDI SYNC : %s | BPM:%3.0f",
+            midi.port_name.c_str(),
+            midi.external_sync ? midi.detected_bpm : app.bpm
+        );
+        drawText(8, top_y + 15, buf, palette::kAccentCyan, 1);
+
+        std::snprintf(
+            buf, sizeof(buf), "SYSTEM    : CPU %2.0f%% [MAX %2.0f%%] (%dC) | RAM %d/%d MB",
+            hw.cpu_load_percent, hw.cpu_max_percent, hw.cpu_temp_c, hw.ram_used_mb, hw.ram_total_mb
+        );
+        drawText(8, top_y + 24, buf, palette::kTextMain, 1);
+
+        const bool is_host = (hw.usb_role == "host");
+        std::snprintf(
+            buf, sizeof(buf), "USB PORT  : %s [FN/G:SWITCH]",
+            is_host ? "HOST (5V ON: AUDIO/MIDI)" : "DEVICE (MAC SSH 10.1.1.2)"
+        );
+        drawText(8, top_y + 33, buf, is_host ? palette::kLevelOk : palette::kAccentCyan, 1);
+
+        // Інтерактивна матриця перевірки фізичних кнопок у воркспейсі
+        const int vy = top_y + 45;
+        drawLine(6, vy - 4, w - 6, vy - 4, palette::kGridDim);
+
+        auto drawBadge = [&](int bx, int by, const char* name, bool on) {
+            int bw = static_cast<int>(std::strlen(name)) * 4 + 6;
+            int bh = 11;
+            if (on) {
+                fillRect(bx, by, bw, bh, palette::kLevelOk);
+                drawText(bx + 3, by + 3, name, palette::kBgDark, 1);
+            } else {
+                drawRect(bx, by, bw, bh, palette::kGridDim);
+                drawText(bx + 3, by + 3, name, palette::kTextDim, 1);
+            }
+        };
+
+        drawBadge(8,   vy, "UP",   input.dpad_up);
+        drawBadge(26,  vy, "DN",   input.dpad_down);
+        drawBadge(44,  vy, "LT",   input.dpad_left);
+        drawBadge(62,  vy, "RT",   input.dpad_right);
+        drawBadge(84,  vy, "SEL",  input.btn_select);
+        drawBadge(106, vy, "STA",  input.btn_start);
+        drawBadge(132, vy, "A",    input.btn_a);
+        drawBadge(146, vy, "B",    input.btn_b);
+        drawBadge(160, vy, "X",    input.btn_x);
+        drawBadge(174, vy, "Y",    input.btn_y);
+        drawBadge(192, vy, "L1",   input.l1);
+        drawBadge(210, vy, "L2",   input.l2);
+        drawBadge(228, vy, "R2",   input.r2);
+        drawBadge(246, vy, "R1",   input.r1);
+        drawBadge(268, vy, "V+",   input.vol_up);
+        drawBadge(286, vy, "V-",   input.vol_down);
+
+        // 2D-приціли аналогових стіків
+        const int sy = vy + 16;
+        const int box = (w >= 320) ? 56 : 26;
+        drawRect(8, sy, box, box, palette::kGridDim);
+        drawText(10, sy + 2, "L-STICK", palette::kTextDim, 1);
+        int lpx = 8 + box / 2 + static_cast<int>(input.lx * (box / 2 - 3));
+        int lpy = sy + box / 2 + static_cast<int>(input.ly * (box / 2 - 3));
+        fillRect(lpx - 2, lpy - 2, 5, 5, palette::kAccentCyan);
+
+        const int rbox_x = 8 + box + 6;
+        drawRect(rbox_x, sy, box, box, palette::kGridDim);
+        drawText(rbox_x + 2, sy + 2, "R-STICK", palette::kTextDim, 1);
+        int rpx = rbox_x + box / 2 + static_cast<int>(input.rx * (box / 2 - 3));
+        int rpy = sy + box / 2 + static_cast<int>(input.ry * (box / 2 - 3));
+        fillRect(rpx - 2, rpy - 2, 5, 5, palette::kAccentOrange);
     }
 }
 
@@ -607,19 +682,31 @@ void UiRenderer::renderBottomHud(
     ColorRGB dpad_col = (input.dpad_up || input.dpad_down || input.dpad_left || input.dpad_right)
                             ? palette::kLevelOk
                             : palette::kAccentOrange;
-    drawText(4, hud_y + 3, "DPAD: EDIT", dpad_col, 1);
-    if (app.active_tab == WorkspaceTab::kSynth) {
+
+    if (input.btn_select) {
+        drawText(4, hud_y + 3,  "DPAD: JUMP", palette::kParamTrig, 1);
+        drawText(4, hud_y + 11, "U/D : TRACK x4", palette::kTextMain, 1);
+        drawText(4, hud_y + 19, "L/R : BAR x16", palette::kTextDim, 1);
+    } else if (app.step_inspector_open) {
+        drawText(4, hud_y + 3,  "DPAD: SELECT", palette::kAccentCyan, 1);
+        drawText(4, hud_y + 11, "U/D : PARAM", palette::kTextMain, 1);
+        drawText(4, hud_y + 19, "L-STK: TWEAK", palette::kParamTrig, 1);
+    } else if (app.active_tab == WorkspaceTab::kSeq) {
+        drawText(4, hud_y + 3,  "DPAD: MATRIX", dpad_col, 1);
+        drawText(4, hud_y + 11, "U/D : ROW 1..16", palette::kTextMain, 1);
+        drawText(4, hud_y + 19, "L/R : STEP 1..64", palette::kTextDim, 1);
+    } else if (app.active_tab == WorkspaceTab::kSynth) {
+        drawText(4, hud_y + 3,  "DPAD: SYNTH", dpad_col, 1);
         drawText(4, hud_y + 11, "U/D : PARAM", palette::kTextMain, 1);
         drawText(4, hud_y + 19, "L/R : VALUE", palette::kTextDim, 1);
     } else if (app.active_tab == WorkspaceTab::kMixFx) {
+        drawText(4, hud_y + 3,  "DPAD: MIXER", dpad_col, 1);
         drawText(4, hud_y + 11, "U/D : TRACK", palette::kTextMain, 1);
         drawText(4, hud_y + 19, "L/R : LEVEL", palette::kTextDim, 1);
-    } else if (app.active_tab == WorkspaceTab::kScopeSeq) {
-        drawText(4, hud_y + 11, "U/D : ROW 1..16", palette::kTextMain, 1);
-        drawText(4, hud_y + 19, "L/R : STEP 1..64", palette::kTextDim, 1);
     } else {
-        drawText(4, hud_y + 11, "U/D : TRACK", palette::kTextMain, 1);
-        drawText(4, hud_y + 19, "L/R : BPM", palette::kTextDim, 1);
+        drawText(4, hud_y + 3,  "DPAD: NAV", dpad_col, 1);
+        drawText(4, hud_y + 11, "U/D : ITEM", palette::kTextMain, 1);
+        drawText(4, hud_y + 19, "L/R : CHANGE", palette::kTextDim, 1);
     }
 
     // --- 2. Центр: L-STICK | SEL & STA | R-STICK ---
@@ -642,8 +729,13 @@ void UiRenderer::renderBottomHud(
 
     // Самий центр: SELECT та START
     drawText(cx_pos, hud_y + 3,  "SEL / START", palette::kAccentOrange, 1);
-    drawText(cx_pos, hud_y + 11, input.btn_select ? "SEL:[A=BUF B=USB]" : "SEL:SHIFT", input.btn_select ? palette::kLevelOk : palette::kTextMain, 1);
-    drawText(cx_pos, hud_y + 19, app.transport_playing ? "STA:[PLAY]" : "STA:STOP", app.transport_playing ? palette::kLevelOk : palette::kTextDim, 1);
+    if (input.btn_select) {
+        drawText(cx_pos, hud_y + 11, "SEL:HOTKEYS", palette::kParamTrig, 1);
+        drawText(cx_pos, hud_y + 19, "STA:RESET/STOP", palette::kAccentOrange, 1);
+    } else {
+        drawText(cx_pos, hud_y + 11, "SEL:HOLD", palette::kTextMain, 1);
+        drawText(cx_pos, hud_y + 19, app.transport_playing ? "STA:[PLAY]" : "STA:STOP", app.transport_playing ? palette::kLevelOk : palette::kTextDim, 1);
+    }
 
     // Правий стік
     drawText(rx_pos, hud_y + 3,  "R-STK:MOD", palette::kAccentCyan, 1);
@@ -654,16 +746,25 @@ void UiRenderer::renderBottomHud(
     ColorRGB abxy_col = (input.btn_a || input.btn_b || input.btn_x || input.btn_y)
                             ? palette::kLevelOk
                             : palette::kAccentOrange;
-    if (app.active_tab == WorkspaceTab::kMixFx) {
+
+    if (input.btn_select) {
+        drawText(x_right + 4, hud_y + 3,  "SEL + ABXY", palette::kParamTrig, 1);
+        drawText(x_right + 4, hud_y + 11, "A:BUF B:PANIC", palette::kTextMain, 1);
+        drawText(x_right + 4, hud_y + 19, "X:LEN Y:PAGE", palette::kTextDim, 1);
+    } else if (app.step_inspector_open) {
+        drawText(x_right + 4, hud_y + 3,  "ABXY: INSPECT", palette::kAccentCyan, 1);
+        drawText(x_right + 4, hud_y + 11, "HOLD A: EDIT", palette::kParamTrig, 1);
+        drawText(x_right + 4, hud_y + 19, "REL A: CLOSE", palette::kTextDim, 1);
+    } else if (app.active_tab == WorkspaceTab::kSeq) {
+        drawText(x_right + 4, hud_y + 3,  "ABXY: 16x64 SEQ", abxy_col, 1);
+        drawText(x_right + 4, hud_y + 11, "A:TRIG(HOLD:ED)", palette::kTextMain, 1);
+        drawText(x_right + 4, hud_y + 19, "B:PLCK X/Y:NOTE", palette::kTextDim, 1);
+    } else if (app.active_tab == WorkspaceTab::kMixFx) {
         drawText(x_right + 4, hud_y + 3,  "ABXY: MIX/FX", abxy_col, 1);
         drawText(x_right + 4, hud_y + 11, "A:MUTE B:DLY+", palette::kTextMain, 1);
         drawText(x_right + 4, hud_y + 19, "X:DLY- Y:FBK", palette::kTextDim, 1);
-    } else if (app.active_tab == WorkspaceTab::kScopeSeq) {
-        drawText(x_right + 4, hud_y + 3,  "ABXY: 16x64 SEQ", abxy_col, 1);
-        drawText(x_right + 4, hud_y + 11, "A:TRIG B:PLCK", palette::kTextMain, 1);
-        drawText(x_right + 4, hud_y + 19, "X:NOTE- Y:NOTE+", palette::kTextDim, 1);
     } else {
-        drawText(x_right + 4, hud_y + 3,  "ABXY: TRIG", abxy_col, 1);
+        drawText(x_right + 4, hud_y + 3,  "ABXY: LIVE PAD", abxy_col, 1);
         drawText(x_right + 4, hud_y + 11, "A:T1  B:T2", palette::kTextMain, 1);
         drawText(x_right + 4, hud_y + 19, "X:T3  Y:T4", palette::kTextDim, 1);
     }

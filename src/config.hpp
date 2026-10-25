@@ -42,15 +42,17 @@ namespace palette {
     inline constexpr ColorRGB kLevelOk       = {0,   230, 118};  // #00E676 - зелений (USB OK / VU норма / Note Trig)
     inline constexpr ColorRGB kLevelWarnClip = {255, 42,  85};   // #FF2A55 - червоний (Clip / Host warning)
     inline constexpr ColorRGB kParamTrig     = {255, 214, 0};    // #FFD600 - жовтий Elektron Param Trig (Lock-only)
+    inline constexpr ColorRGB kHeaderSel     = {48,  28,  12};   // #301C0C - темний бурштиновий фон для виділення/селекту
     inline constexpr ColorRGB kCursorWhite   = {255, 255, 255};  // #FFFFFF - курсор редагування
 } // namespace palette
 
-// 4 головні вкладки верхнього бара (відповідають фізичним бамперам зліва направо: L1, L2, R2, R1)
+// 4 головні вкладки (відповідають фізичним бамперам L1, L2, R2, R1) + системне меню по бічній кнопці G
 enum class WorkspaceTab : uint8_t {
-    kHwSys    = 0, // L1: Апаратний монітор, аудіо-роутинг RK817 <-> Digitakt II, тест вводу
-    kSynth    = 1, // L2: Параметри синтезатора (4 доріжки, осцилятори, фільтр)
-    kMixFx    = 2, // R2: Мікшер доріжок, панорама, Send FX, загальний VU-метр
-    kScopeSeq = 3  // R1: Осцилограф у реальному часі + 16-кроковий секвенсор / MIDI Sync
+    kSeq      = 0, // [L1] SEQ: 16-рядковий матричний секвенсор x 64/128 кроків (Головний екран)
+    kSynth    = 1, // [L2] SYNTH: Параметри синтезатора (4 доріжки, осцилятори, фільтр, ADSR)
+    kMixFx    = 2, // [R2] MIX/FX: Мікшер доріжок, панорама, Send FX, загальний VU-метр
+    kScope    = 3, // [R1] SCOPE: Осцилограф у реальному часі + монітор стереовиходу
+    kSys      = 4  // [G]  SYS: Системні налаштування, буфер, USB роутинг, апаратний монітор
 };
 
 } // namespace groovebox
