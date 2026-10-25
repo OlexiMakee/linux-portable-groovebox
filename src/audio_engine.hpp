@@ -75,10 +75,19 @@ public:
     void triggerVoice(int row, int midi_note, float velocity = 0.9f, float plock_cutoff = -1.0f, bool slide = false, float gate_len = 0.60f);
     void triggerNote(int track, int midi_note, float velocity = 0.9f, float plock_cutoff = -1.0f, bool slide = false, float gate_len = 0.60f);
 
-    // Тригер кроку секвенсора (0..127)
-    void triggerSequencerStep(uint32_t step_idx);
+    // Тригер кроку секвенсора (master_tick 0..unlimited)
+    void triggerSequencerStep(uint32_t master_tick);
     uint32_t getPatternLength() const { return pattern_length_.load(std::memory_order_relaxed); }
     void setPatternLength(uint32_t len) { pattern_length_.store(std::clamp(len, 16u, 128u)); }
+
+    // Поліметрія: незалежні довжини для кожного з 16 рядків (16..128 кроків)
+    uint32_t getRowLength(int row) const;
+    void setRowLength(int row, uint32_t len);
+    uint32_t cycleRowLength(int row);
+
+    // Мапінг рядків на треки та голоси (моно-девайси займають 1 рядок, полі - кілька)
+    int getRowTrack(int row) const;
+    int getRowVoice(int row) const;
 
     SynthParams& params() { return params_; }
     const SynthParams& params() const { return params_; }
@@ -99,6 +108,9 @@ private:
     mutable std::mutex state_mutex_;
     std::array<TrackParameters, 4> tracks_{};
     std::atomic<uint32_t> pattern_length_{64};
+    std::array<std::atomic<uint32_t>, kTotalRows> row_lengths_{};
+    std::array<uint8_t, kTotalRows> row_track_{};
+    std::array<uint8_t, kTotalRows> row_voice_{};
     std::array<std::array<SequencerStep, kMaxSteps>, kTotalRows> pattern_{};
 
     struct VoiceState {

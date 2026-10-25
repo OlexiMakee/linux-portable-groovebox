@@ -303,8 +303,9 @@ void UiRenderer::renderWorkspace(
 
         const char* trig_tag = !cur_st.enabled ? "OFF" : (cur_st.is_param_trig ? "[PARAM-LOCK]" : "[NOTE-TRIG]");
 
+        const uint32_t cur_row_len = audio_engine.getRowLength(cur_r);
         std::snprintf(
-            buf, sizeof(buf), "T%d:V%d [%s] | ST%03d:%s%d %s%s | P%d/2 L:%u | BPM:%3.0f %s",
+            buf, sizeof(buf), "T%d:V%d [%s] | ST%03d:%s%d %s%s | P%d/%d L:%u | BPM:%3.0f %s",
             cur_t + 1, cur_v + 1,
             getEngineTypeName(tp.engine),
             app.cursor_step + 1,
@@ -312,7 +313,8 @@ void UiRenderer::renderWorkspace(
             cur_st.slide ? "~SLD " : "",
             trig_tag,
             app.seq_page + 1,
-            app.pattern_length,
+            (cur_row_len > 64) ? 2 : 1,
+            cur_row_len,
             midi.external_sync ? midi.detected_bpm : app.bpm,
             app.transport_playing ? "PLAY" : "STOP"
         );
@@ -324,14 +326,15 @@ void UiRenderer::renderWorkspace(
         const int row_h = 10;
         const uint32_t page_offset = app.seq_page * kStepsPerPage;
 
-        // Малюємо 16 рядків
+        // Малюємо 16 рядків з індивідуальною поліметрією та персональним Playhead
         for (int r = 0; r < kTotalRows; ++r) {
-            int t = r / kVoicesPerTrack;
-            int v = r % kVoicesPerTrack;
+            int t = audio_engine.getRowTrack(r);
+            int v = audio_engine.getRowVoice(r);
             int ry = grid_y + r * row_h;
             bool is_active_row = (r == cur_r);
+            uint32_t r_len = audio_engine.getRowLength(r);
 
-            // Розділювач між 4 доріжками
+            // Розділювач між доріжками
             if (v == 0 && r > 0) {
                 drawLine(0, ry - 1, w - 1, ry - 1, palette::kGridDim);
             }
@@ -342,41 +345,55 @@ void UiRenderer::renderWorkspace(
             if (trk.engine == EngineType::kDrumSyn) {
                 static constexpr const char* kDrumLabels[4] = {"BD", "SD", "CH", "OH"};
                 std::snprintf(lbl, sizeof(lbl), "1%s", kDrumLabels[v]);
+            } else if (trk.engine == EngineType::kAcid303) {
+                std::snprintf(lbl, sizeof(lbl), "2303"); // Монофонічний 303!
             } else {
                 std::snprintf(lbl, sizeof(lbl), "%d:%d", t + 1, v + 1);
             }
             ColorRGB lbl_col = is_active_row ? palette::kAccentOrange : (trk.muted ? palette::kGridDim : palette::kTextDim);
             drawText(4, ry + 1, lbl, lbl_col, 1);
 
+            // Персональний Playhead для цього рядка на основі його власної довжини!
+            uint32_t row_playhead_step = app.transport_playing ? (app.current_step % r_len) : 0;
+
             // Малюємо 64 кроки для цього рядка
             for (uint32_t s = 0; s < kStepsPerPage; ++s) {
                 uint32_t step_idx = page_offset + s;
                 int cx = grid_x + static_cast<int>(s) * 4;
-                auto step_data = audio_engine.getStep(r, step_idx);
                 bool is_cursor = (r == cur_r && step_idx == static_cast<uint32_t>(app.cursor_step));
-                bool is_playhead = app.transport_playing && (step_idx == (app.current_step % app.pattern_length));
+                bool is_playhead = app.transport_playing && (step_idx == row_playhead_step);
 
-                if (step_data.enabled) {
-                    if (step_data.is_param_trig) {
-                        // Жовтий Elektron Param Trig (Lock-only)
-                        fillRect(cx, ry + 1, 3, 7, palette::kParamTrig);
+                if (step_idx < r_len) {
+                    // Активна область патерну
+                    auto step_data = audio_engine.getStep(r, step_idx);
+                    if (step_data.enabled) {
+                        if (step_data.is_param_trig) {
+                            // Жовтий Elektron Param Trig (Lock-only)
+                            fillRect(cx, ry + 1, 3, 7, palette::kParamTrig);
+                        } else {
+                            // Зелений/Бірюзовий Note Trig
+                            ColorRGB trig_col = (t % 2 == 0) ? palette::kLevelOk : palette::kAccentCyan;
+                            fillRect(cx, ry + 1, 3, 7, trig_col);
+                        }
                     } else {
-                        // Зелений/Бірюзовий Note Trig
-                        ColorRGB trig_col = (t % 2 == 0) ? palette::kLevelOk : palette::kAccentCyan;
-                        fillRect(cx, ry + 1, 3, 7, trig_col);
+                        // Неактивна клітинка: розмітка тактів і долей
+                        if (s % 16 == 0) {
+                            fillRect(cx, ry + 3, 2, 3, palette::kTextDim);
+                        } else if (s % 4 == 0) {
+                            fillRect(cx, ry + 4, 1, 2, palette::kGridDim);
+                        }
                     }
-                } else {
-                    // Неактивна клітинка: розмітка тактів і долей
-                    if (s % 16 == 0) {
-                        fillRect(cx, ry + 3, 2, 3, palette::kTextDim);
-                    } else if (s % 4 == 0) {
-                        fillRect(cx, ry + 4, 1, 2, palette::kGridDim);
-                    }
-                }
 
-                if (is_playhead) {
-                    // Вертикальна лінія положення програвання (Playhead)
-                    drawLine(cx + 1, ry, cx + 1, ry + 8, palette::kTextMain);
+                    if (is_playhead) {
+                        // Вертикальна лінія положення програвання (Playhead)
+                        drawLine(cx + 1, ry, cx + 1, ry + 8, palette::kTextMain);
+                    }
+                } else if (step_idx == r_len) {
+                    // Маркер кінця патерну доріжки |
+                    drawLine(cx, ry, cx, ry + 8, palette::kAccentOrange);
+                } else {
+                    // Поза довжиною доріжки (затемнена неактивна область)
+                    // залишається темний фон kBgDark
                 }
 
                 if (is_cursor) {
@@ -386,11 +403,12 @@ void UiRenderer::renderWorkspace(
             }
         }
 
-        // Вертикальні маркери сторінок та тактів справа
+        // Вертикальні маркери сторінок та тактів справа для активного рядка
+        bool has_p2 = (cur_row_len > 64);
         drawText(grid_x + 258, grid_y + 4,  (app.seq_page == 0) ? "[P1]" : " P1 ", (app.seq_page == 0) ? palette::kLevelOk : palette::kGridDim, 1);
-        drawText(grid_x + 258, grid_y + 14, (app.seq_page == 1) ? "[P2]" : " P2 ", (app.seq_page == 1) ? palette::kLevelOk : palette::kGridDim, 1);
+        drawText(grid_x + 258, grid_y + 14, (app.seq_page == 1) ? "[P2]" : " P2 ", has_p2 ? ((app.seq_page == 1) ? palette::kLevelOk : palette::kTextDim) : palette::kGridDim, 1);
         char len_buf[16];
-        std::snprintf(len_buf, sizeof(len_buf), "L%03u", app.pattern_length);
+        std::snprintf(len_buf, sizeof(len_buf), "L%03u", cur_row_len);
         drawText(grid_x + 258, grid_y + 26, len_buf, palette::kAccentOrange, 1);
 
         // --- STEP INSPECTOR MODAL POPUP (Утримання кнопки A > 200 мс) ---

@@ -90,50 +90,53 @@ void AudioEngine::initDefaultPattern() {
 
     // 4 доріжки з повною ADSR-огинаючою (за дефолтом сустейн 0.0, перкусійний спад):
     // T1: Оркестрові литаври / маршовий ритм (4 голоси: Kick, Snare, Cl-Hat, Op-Hat)
-    // T2: Класичний бас Альберті (VA Synth, 4 голоси)
-    // T3: Віртуозна тема "Rondo Alla Turca" KV 331 (Acid 303 Lead, 4 голоси з жовтими Param Trigs)
+    // T2: 303 Acid Mono (1 голос, 1 рядок)
+    // T3: Класичний бас Альберті (VA Synth, 4 голоси)
     // T4: Клавесин / гармонія акордів (2-Op FM, 4 голоси)
     tracks_[0] = {EngineType::kDrumSyn,  {0.30f, 0.50f, 0.40f, 0.15f, 0.35f, 0.50f}, 0.005f, 0.35f, 0.00f, 0.05f, 0.90f,  0.00f, 0.08f, false};
-    tracks_[1] = {EngineType::kVaMono,   {0.45f, 0.28f, 0.48f, 0.25f, 0.50f, 0.45f}, 0.008f, 0.30f, 0.00f, 0.05f, 0.82f, -0.15f, 0.15f, false};
-    tracks_[2] = {EngineType::kAcid303,  {0.62f, 0.55f, 0.60f, 0.22f, 0.70f, 0.00f}, 0.005f, 0.28f, 0.00f, 0.05f, 0.85f,  0.15f, 0.25f, false};
+    tracks_[1] = {EngineType::kAcid303,  {0.62f, 0.55f, 0.60f, 0.22f, 0.70f, 0.00f}, 0.005f, 0.28f, 0.00f, 0.05f, 0.85f,  0.15f, 0.25f, false};
+    tracks_[2] = {EngineType::kVaMono,   {0.45f, 0.28f, 0.48f, 0.25f, 0.50f, 0.45f}, 0.008f, 0.30f, 0.00f, 0.05f, 0.82f, -0.15f, 0.15f, false};
     tracks_[3] = {EngineType::kFm2Op,    {0.55f, 0.35f, 0.45f, 0.28f, 0.25f, 0.40f}, 0.010f, 0.45f, 0.00f, 0.05f, 0.75f, -0.20f, 0.30f, false};
 
     pattern_length_.store(64);
 
-    // Очищаємо всі 16 рядків x 128 кроків
+    // Мапінг 16 рядків: Drum (4 рядки), 303 Mono (1 рядок!), VA (4 рядки), FM (4 рядки), Spare (3 рядки)
+    for (int i = 0; i < 4; ++i) { row_track_[i] = 0; row_voice_[i] = i; }
+    row_track_[4] = 1; row_voice_[4] = 0; // 303 Mono - рівно 1 рядок!
+    for (int i = 0; i < 4; ++i) { row_track_[5 + i] = 2; row_voice_[5 + i] = i; }
+    for (int i = 0; i < 4; ++i) { row_track_[9 + i] = 3; row_voice_[9 + i] = i; }
+    for (int i = 13; i < 16; ++i) { row_track_[i] = 0; row_voice_[i] = 0; }
+
+    // Дефолтна довжина для всіх рядків: 16 кроків!
     for (int r = 0; r < kTotalRows; ++r) {
+        row_lengths_[r].store(16, std::memory_order_relaxed);
         for (uint32_t s = 0; s < kMaxSteps; ++s) {
             pattern_[r][s] = {false, false, false, 48, 0.85f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
         }
     }
 
-    // 1. T1: Ритм-секція (рядки 0..3) на 64 кроки
+    // 1. T1: Ритм-секція (рядки 0..3) на 16 кроків
+    row_lengths_[0].store(16);
+    row_lengths_[1].store(16);
+    row_lengths_[2].store(16);
+    row_lengths_[3].store(16);
     // Row 0: Kick (нота 36)
-    for (int s = 0; s < 64; s += 8) {
+    for (int s = 0; s < 16; s += 8) {
         pattern_[0][s] = {true, false, false, 36, 0.95f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
     }
     // Row 1: Snare (нота 38)
-    for (int s = 4; s < 64; s += 8) {
+    for (int s = 4; s < 16; s += 8) {
         pattern_[1][s] = {true, false, false, 38, 0.90f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
     }
     // Row 2: Closed Hat (нота 42)
-    for (int s = 2; s < 64; s += 4) {
+    for (int s = 2; s < 16; s += 4) {
         pattern_[2][s] = {true, false, false, 42, 0.75f, 0.40f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
     }
     // Row 3: Open Hat / Tom (нота 46)
-    for (int s = 14; s < 64; s += 16) {
-        pattern_[3][s] = {true, false, false, 46, 0.85f, 0.75f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
-    }
+    pattern_[3][14] = {true, false, false, 46, 0.85f, 0.75f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
 
-    // 2. T2: Бас Альберті (рядки 4..5)
-    static constexpr int kAlberti[16] = {45, 52, 48, 52, 45, 52, 48, 52, 45, 52, 48, 52, 45, 52, 48, 52};
-    for (int s = 0; s < 64; ++s) {
-        int note = kAlberti[s % 16];
-        int r = (s % 2 == 0) ? 4 : 5;
-        pattern_[r][s] = {true, false, false, static_cast<uint8_t>(note), 0.82f, 0.50f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
-    }
-
-    // 3. T3: Мелодія "Rondo Alla Turca" (рядок 8) + Жовті Param Trigs (Elektron style) + Slide
+    // 2. T2: 303 Mono "Rondo Alla Turca" (рядок 4) на 64 кроки!
+    row_lengths_[4].store(64);
     static constexpr int kLead[32] = {
         71, 69, 68, 69, 72, 0, 72, 0, 74, 72, 71, 72, 76, 0, 76, 0,
         77, 76, 74, 76, 79, 0, 79, 0, 81, 79, 77, 76, 74, 0, 74, 0
@@ -141,19 +144,31 @@ void AudioEngine::initDefaultPattern() {
     for (int s = 0; s < 64; ++s) {
         int note = kLead[s % 32];
         if (note > 0) {
-            bool is_slide = (s % 8 == 2 || s % 8 == 3); // 303 constant-time slide on fast ornamental turns
-            pattern_[8][s] = {true, false, is_slide, static_cast<uint8_t>(note), 0.90f, 0.70f, (s % 4 == 0), 0.82f, 0.5f, -1.0f, -1.0f, -1.0f, -1.0f};
+            bool is_slide = (s % 8 == 2 || s % 8 == 3); // 303 constant-time slide
+            pattern_[4][s] = {true, false, is_slide, static_cast<uint8_t>(note), 0.90f, 0.70f, (s % 4 == 0), 0.82f, 0.5f, -1.0f, -1.0f, -1.0f, -1.0f};
         } else if (s % 8 == 6) {
-            // Жовтий крок Elektron (Param Trig): не тригерить ноту, але відкриває фільтр на хвості!
-            pattern_[8][s] = {true, true, false, 72, 0.0f, 0.50f, true, 0.92f, 0.5f, -1.0f, -1.0f, -1.0f, -1.0f};
+            pattern_[4][s] = {true, true, false, 72, 0.0f, 0.50f, true, 0.92f, 0.5f, -1.0f, -1.0f, -1.0f, -1.0f};
         }
     }
 
-    // 4. T4: Гармонія FM (рядки 12..14, поліфонічні акорди)
-    for (int s = 0; s < 64; s += 16) {
-        pattern_[12][s] = {true, false, false, 57, 0.75f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f}; // A3
-        pattern_[13][s] = {true, false, false, 60, 0.70f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f}; // C4
-        pattern_[14][s] = {true, false, false, 64, 0.72f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f}; // E4
+    // 3. T3: Бас Альберті (рядки 5..6) на 32 кроки
+    row_lengths_[5].store(32);
+    row_lengths_[6].store(32);
+    static constexpr int kAlberti[16] = {45, 52, 48, 52, 45, 52, 48, 52, 45, 52, 48, 52, 45, 52, 48, 52};
+    for (int s = 0; s < 32; ++s) {
+        int note = kAlberti[s % 16];
+        int r = (s % 2 == 0) ? 5 : 6;
+        pattern_[r][s] = {true, false, false, static_cast<uint8_t>(note), 0.82f, 0.50f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
+    }
+
+    // 4. T4: Гармонія FM (рядки 9..11, акорди) на 32 кроки
+    row_lengths_[9].store(32);
+    row_lengths_[10].store(32);
+    row_lengths_[11].store(32);
+    for (int s = 0; s < 32; s += 16) {
+        pattern_[9][s]  = {true, false, false, 57, 0.75f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f}; // A3
+        pattern_[10][s] = {true, false, false, 60, 0.70f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f}; // C4
+        pattern_[11][s] = {true, false, false, 64, 0.72f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f}; // E4
     }
 }
 
@@ -262,11 +277,46 @@ void AudioEngine::panic() {
     for (auto& t : track_vu_) t.store(0.0f, std::memory_order_relaxed);
 }
 
+uint32_t AudioEngine::getRowLength(int row) const {
+    int r = std::clamp(row, 0, kTotalRows - 1);
+    return row_lengths_[r].load(std::memory_order_relaxed);
+}
+
+void AudioEngine::setRowLength(int row, uint32_t len) {
+    int r = std::clamp(row, 0, kTotalRows - 1);
+    row_lengths_[r].store(std::clamp(len, 1u, 128u), std::memory_order_relaxed);
+}
+
+uint32_t AudioEngine::cycleRowLength(int row) {
+    static constexpr uint32_t kLens[] = {16, 24, 32, 48, 64, 72, 80, 96, 112, 128};
+    int r = std::clamp(row, 0, kTotalRows - 1);
+    uint32_t cur = row_lengths_[r].load(std::memory_order_relaxed);
+    uint32_t next = 16;
+    for (size_t i = 0; i < sizeof(kLens) / sizeof(kLens[0]); ++i) {
+        if (kLens[i] == cur) {
+            next = (i + 1 < sizeof(kLens) / sizeof(kLens[0])) ? kLens[i + 1] : kLens[0];
+            break;
+        }
+    }
+    row_lengths_[r].store(next, std::memory_order_relaxed);
+    return next;
+}
+
+int AudioEngine::getRowTrack(int row) const {
+    int r = std::clamp(row, 0, kTotalRows - 1);
+    return row_track_[r];
+}
+
+int AudioEngine::getRowVoice(int row) const {
+    int r = std::clamp(row, 0, kTotalRows - 1);
+    return row_voice_[r];
+}
+
 void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plock_cutoff, bool slide, float gate_len) {
     if (row < 0 || row >= kTotalRows) return;
     std::lock_guard<std::mutex> lock(state_mutex_);
-    int t = row / kVoicesPerTrack;
-    int v_idx = row % kVoicesPerTrack;
+    int t = row_track_[row];
+    int v_idx = row_voice_[row];
     if (tracks_[t].muted) return;
 
     auto& v = voices_[row];
@@ -312,15 +362,14 @@ void AudioEngine::triggerNote(int track, int midi_note, float velocity, float pl
     triggerVoice(row, midi_note, velocity, plock_cutoff, slide, gate_len);
 }
 
-void AudioEngine::triggerSequencerStep(uint32_t step_idx) {
-    uint32_t len = pattern_length_.load(std::memory_order_relaxed);
-    if (len == 0) len = 64;
-    const uint32_t st = step_idx % len;
-
+void AudioEngine::triggerSequencerStep(uint32_t master_tick) {
     std::array<SequencerStep, kTotalRows> steps;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         for (int r = 0; r < kTotalRows; ++r) {
+            uint32_t r_len = row_lengths_[r].load(std::memory_order_relaxed);
+            if (r_len == 0) r_len = 16;
+            uint32_t st = master_tick % r_len;
             steps[r] = pattern_[r][st];
         }
     }
@@ -524,8 +573,8 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
 
         for (int r = 0; r < kTotalRows; ++r) {
             auto& v = voices_[r];
-            int t = r / kVoicesPerTrack;
-            int v_idx = r % kVoicesPerTrack;
+            int t = row_track_[r];
+            int v_idx = row_voice_[r];
             const auto& tp = local_tracks[t];
             if (tp.muted || !v.active) continue;
 

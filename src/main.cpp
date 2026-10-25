@@ -185,16 +185,27 @@ int main(int argc, char* argv[]) {
             audio_engine.cycleBufferSize();
             ui_dirty = true;
         } else if (app.dev_shortcuts_enabled && in.btn_select && in.y_pressed) {
-            // SELECT + Y: перемикання сторінки секвенсора (Page 1 <-> Page 2 для 128 кроків)
-            app.seq_page = (app.seq_page == 0) ? 1 : 0;
-            app.cursor_step = app.seq_page * groovebox::kStepsPerPage + (app.cursor_step % groovebox::kStepsPerPage);
+            // SELECT + Y: перемикання сторінки секвенсора (Page 1 <-> Page 2 активується ТІЛЬКИ якщо довжина > 64!)
+            uint32_t r_len = audio_engine.getRowLength(app.cursor_row);
+            if (r_len > 64) {
+                app.seq_page = (app.seq_page == 0) ? 1 : 0;
+                app.cursor_step = app.seq_page * groovebox::kStepsPerPage + (app.cursor_step % groovebox::kStepsPerPage);
+                if (app.cursor_step >= static_cast<int>(r_len)) {
+                    app.cursor_step = static_cast<int>(r_len - 1);
+                }
+            } else {
+                app.seq_page = 0;
+            }
             ui_dirty = true;
         } else if (app.dev_shortcuts_enabled && in.btn_select && in.x_pressed) {
-            // SELECT + X: зміна активної довжини патерну (16 -> 32 -> 64 -> 128)
-            uint32_t cur_len = app.pattern_length;
-            uint32_t next_len = (cur_len == 16) ? 32 : ((cur_len == 32) ? 64 : ((cur_len == 64) ? 128 : 16));
-            app.pattern_length = next_len;
-            audio_engine.setPatternLength(next_len);
+            // SELECT + X: зміна довжини патерну поточного рядка (16 -> 24 -> 32 -> 48 -> 64 -> 72 -> 80 -> 96 -> 112 -> 128)
+            uint32_t next_len = audio_engine.cycleRowLength(app.cursor_row);
+            if (app.cursor_step >= static_cast<int>(next_len)) {
+                app.cursor_step = static_cast<int>(next_len - 1);
+            }
+            if (next_len <= 64) {
+                app.seq_page = 0;
+            }
             ui_dirty = true;
         } else if (app.active_tab == groovebox::WorkspaceTab::kSeq && !in.btn_select) {
             // --- Step Inspector: Детекція Hold A (>200мс) vs короткий клік (<200мс) ---
@@ -342,29 +353,40 @@ int main(int argc, char* argv[]) {
                 ui_dirty = true;
             }
         } else if (app.active_tab == groovebox::WorkspaceTab::kSeq) {
-            // [L1] SEQ: Up/Down = вибір рядка 1..16, Left/Right = навігація по кроках 1..64/128
+            // [L1] SEQ: Up/Down = вибір рядка 1..16, Left/Right = навігація по кроках
             if (in.up_pressed) {
                 int jump = in.btn_select ? 4 : 1; // З SELECT: стрибок на цілий трек (4 рядки)!
                 app.cursor_row = (app.cursor_row + groovebox::kTotalRows - jump) % groovebox::kTotalRows;
-                app.selected_track = app.cursor_row / groovebox::kVoicesPerTrack;
+                app.selected_track = audio_engine.getRowTrack(app.cursor_row);
+                uint32_t r_len = audio_engine.getRowLength(app.cursor_row);
+                if (app.cursor_step >= static_cast<int>(r_len)) {
+                    app.cursor_step = static_cast<int>(r_len - 1);
+                }
+                if (r_len <= 64) app.seq_page = 0;
                 ui_dirty = true;
             }
             if (in.down_pressed) {
                 int jump = in.btn_select ? 4 : 1;
                 app.cursor_row = (app.cursor_row + jump) % groovebox::kTotalRows;
-                app.selected_track = app.cursor_row / groovebox::kVoicesPerTrack;
+                app.selected_track = audio_engine.getRowTrack(app.cursor_row);
+                uint32_t r_len = audio_engine.getRowLength(app.cursor_row);
+                if (app.cursor_step >= static_cast<int>(r_len)) {
+                    app.cursor_step = static_cast<int>(r_len - 1);
+                }
+                if (r_len <= 64) app.seq_page = 0;
                 ui_dirty = true;
             }
+            uint32_t cur_r_len = audio_engine.getRowLength(app.cursor_row);
             if (in.left_pressed) {
                 int jump = in.btn_select ? 16 : 1; // З SELECT: стрибок на такт (16 кроків)!
                 if (app.cursor_step >= jump) app.cursor_step -= jump;
-                else app.cursor_step = static_cast<int>(app.pattern_length - 1);
+                else app.cursor_step = static_cast<int>(cur_r_len - 1);
                 app.seq_page = (app.cursor_step >= static_cast<int>(groovebox::kStepsPerPage)) ? 1 : 0;
                 ui_dirty = true;
             }
             if (in.right_pressed) {
                 int jump = in.btn_select ? 16 : 1;
-                app.cursor_step = (app.cursor_step + jump) % app.pattern_length;
+                app.cursor_step = (app.cursor_step + jump) % cur_r_len;
                 app.seq_page = (app.cursor_step >= static_cast<int>(groovebox::kStepsPerPage)) ? 1 : 0;
                 ui_dirty = true;
             }
