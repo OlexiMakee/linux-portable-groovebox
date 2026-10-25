@@ -1,0 +1,24 @@
+# --- Secrets & device backups (NEVER commit) ---
+backups/
+*.pem
+*_id_ed25519*
+.env
+.env.*
+
+# --- Build outputs ---
+build-*/
+build/
+
+# --- Cross-compile sysroot (pulled from the device, vendor binaries) ---
+sysroot/
+
+# --- Local Python env (memory_os) ---
+venv_auto/
+__pycache__/
+*.pyc
+
+# --- OS / editor noise ---
+.DS_Store
+*.swp
+.vscode/
+.idea/
