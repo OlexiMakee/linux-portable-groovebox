@@ -46,6 +46,10 @@ public:
     void updateRouting(int card_index, bool is_usb_48k, bool headphones_plugged);
     void adjustMasterVolume(float delta);
 
+    // Оверрайд аудіовиходу: Auto (USB за наявності) <-> Force Internal (RK817)
+    void toggleOutputOverride();
+    bool isOutputForcedInternal() const;
+
     // Доступ та модифікація модульних параметрів 4 доріжок і 16 кроків секвенсора
     TrackParameters getTrackParams(int track) const;
     void setTrackParams(int track, const TrackParameters& tp);
@@ -112,6 +116,7 @@ private:
     std::atomic<int> current_card_{-1};
     std::atomic<bool> current_usb_48k_{false};
     std::atomic<bool> current_hp_{false};
+    std::atomic<bool> force_internal_{false};
     std::atomic<uint32_t> active_sample_rate_{32000};
     std::atomic<uint32_t> active_period_frames_{128};
 

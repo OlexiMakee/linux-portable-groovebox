@@ -160,9 +160,8 @@ int main(int argc, char* argv[]) {
             hw_monitor.toggleUsbRole();
             ui_dirty = true;
         } else if (app.dev_shortcuts_enabled && in.btn_select && in.y_pressed) {
-            // SELECT + Y: миттєва зміна роздільної здатності 320x240 <-> 160x120
-            app.high_res_mode = !app.high_res_mode;
-            ui.applyLogicalResolution(app.high_res_mode);
+            // SELECT + Y: тимчасове перемикання аудіовиходу (AUTO / USB <-> FORCE INTERNAL RK817)
+            audio_engine.toggleOutputOverride();
             ui_dirty = true;
         } else if (app.dev_shortcuts_enabled && in.btn_select && in.x_pressed) {
             hw_monitor.toggleMockDigitakt();

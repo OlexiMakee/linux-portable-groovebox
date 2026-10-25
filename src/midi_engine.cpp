@@ -85,7 +85,7 @@ void MidiEngine::workerLoop() {
                 if (ports[c].fd < 0) {
                     char path[32];
                     std::snprintf(path, sizeof(path), "/dev/snd/midiC%dD0", c);
-                    int fd = ::open(path, O_RDONLY | O_NONBLOCK);
+                    int fd = ::open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
                     if (fd >= 0) {
                         ports[c].fd = fd;
                         ports[c].status_byte = 0;

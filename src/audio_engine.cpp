@@ -213,7 +213,8 @@ bool AudioEngine::start(int card_index, bool is_usb_48k, bool headphones_plugged
     current_card_.store(card_index);
     current_usb_48k_.store(is_usb_48k);
     const auto& prof = activeProfile();
-    const uint32_t target_rate = is_usb_48k ? static_cast<uint32_t>(prof.usb_rate) : static_cast<uint32_t>(prof.internal_rate);
+    const bool use_usb = (card_index > 0) && is_usb_48k && !force_internal_.load(std::memory_order_relaxed);
+    const uint32_t target_rate = use_usb ? static_cast<uint32_t>(prof.usb_rate) : static_cast<uint32_t>(prof.internal_rate);
     active_sample_rate_.store(target_rate);
     active_period_frames_.store(256);
 
@@ -275,9 +276,22 @@ void AudioEngine::adjustMasterVolume(float delta) {
     float cur = params_.master_volume.load();
     float next = std::clamp(cur + delta, 0.0f, 1.0f);
     params_.master_volume.store(next);
-    if (current_card_.load() == 0) {
+    if (current_card_.load() == 0 || force_internal_.load(std::memory_order_relaxed)) {
         applyRk817HardwareVolume(next);
     }
+}
+
+void AudioEngine::toggleOutputOverride() {
+    bool next = !force_internal_.load(std::memory_order_relaxed);
+    force_internal_.store(next, std::memory_order_relaxed);
+    int card = current_card_.load();
+    bool is_usb = current_usb_48k_.load();
+    bool hp = current_hp_.load();
+    start(card, is_usb, hp);
+}
+
+bool AudioEngine::isOutputForcedInternal() const {
+    return force_internal_.load(std::memory_order_relaxed);
 }
 
 void AudioEngine::triggerNote(int track, int midi_note, float velocity, float plock_cutoff) {
@@ -517,13 +531,14 @@ void AudioEngine::alsaThreadLoop() {
     snd_pcm_format_t active_fmt = SND_PCM_FORMAT_S16_LE;
 
     int card = current_card_.load();
+    const bool use_usb = (card > 0) && !force_internal_.load(std::memory_order_relaxed);
     const uint32_t rate = active_sample_rate_.load();
-    // 24 мс буфер (4.5 періоди по 256 семплів) для стабільного USB Isochronous потоку через контролер dwc2 без XRUN
-    const unsigned int latency_us = current_usb_48k_.load() ? 24000u : 16000u;
+    // 21.3 мс (1024 семпли = 4 періоди по 256 семплів) для стабільного USB Isochronous потоку
+    const unsigned int latency_us = use_usb ? 21333u : 16000u;
 
-    // 1. Якщо підключено зовнішній USB Audio інтерфейс (Digitakt II або інший Class-Compliant card > 0),
+    // 1. Якщо підключено зовнішній USB Audio інтерфейс і не ввімкнено оверрайд FORCE INTERNAL,
     //    відкриваємо ВИКЛЮЧНО його (щоб не було конфлікту двох різних кварцових генераторів USB vs I2S RK817!)
-    if (card > 0) {
+    if (use_usb) {
         char usb_dev[32];
         std::snprintf(usb_dev, sizeof(usb_dev), "hw:%d,0", card);
         int err = snd_pcm_open(&pcm, usb_dev, SND_PCM_STREAM_PLAYBACK, 0);
@@ -539,18 +554,19 @@ void AudioEngine::alsaThreadLoop() {
             };
             bool ok = false;
             for (snd_pcm_format_t fmt : kTryFormats) {
+                // soft_resample = 0 (прямий апаратний лок частоти дискретизації)
                 if (snd_pcm_set_params(
                         pcm,
                         fmt,
                         SND_PCM_ACCESS_RW_INTERLEAVED,
                         2,
                         rate,
-                        1,
+                        0,
                         latency_us
                     ) >= 0) {
                     active_fmt = fmt;
                     ok = true;
-                    std::printf("[ALSA] Opened EXCLUSIVE USB %s at %u Hz stereo (fmt=%d, latency=%u us)\n",
+                    std::printf("[ALSA] Opened EXCLUSIVE USB %s at %u Hz stereo (fmt=%d, latency=%u us, soft_resample=0)\n",
                                 usb_dev, rate, static_cast<int>(fmt), latency_us);
                     break;
                 }
@@ -637,11 +653,13 @@ AudioEngineTelemetry AudioEngine::getTelemetry() const {
     AudioEngineTelemetry t;
     t.sample_rate = active_sample_rate_.load(std::memory_order_relaxed);
     t.period_frames = active_period_frames_.load(std::memory_order_relaxed);
-    if (current_usb_48k_.load(std::memory_order_relaxed)) {
-        t.device_label = "USB Audio (" + std::to_string(t.sample_rate) + " Hz)";
+    const bool forced_int = force_internal_.load(std::memory_order_relaxed);
+    if (!forced_int && current_usb_48k_.load(std::memory_order_relaxed)) {
+        t.device_label = "OUT: USB (" + std::to_string(t.sample_rate) + " Hz)";
     } else {
         const auto& prof = activeProfile();
-        t.device_label = prof.name + (current_hp_.load(std::memory_order_relaxed) ? " HP (" : " SPK (")
+        std::string tag = forced_int ? "OUT: [INT-FORCE] " : "OUT: ";
+        t.device_label = tag + prof.name + (current_hp_.load(std::memory_order_relaxed) ? " HP (" : " SPK (")
                          + std::to_string(t.sample_rate) + " Hz)";
     }
     t.vu_left = vu_l_.load(std::memory_order_relaxed);
