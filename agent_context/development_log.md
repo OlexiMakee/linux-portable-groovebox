@@ -160,3 +160,14 @@
   * Додано метод `AudioEngine::cycleBufferSize()` та комбінацію гарячих клавіш **`SELECT + A`** для циклічної зміни розміру блоку та буфера на льоту: `128 -> 256 -> 512 -> 1024 -> 2048 семплів`.
   * Буфер ALSA адаптивно розраховується з коефіцієнтом $\times 6$ періодів для USB Audio (`latency_us = max(64ms, block * 6)`), гарантуючи стабільну чергу URB.
   * Поточний розмір буфера виводиться в статусному рядку інтерфейсу (`BUF: %u`) та відображається в підказці при затисканні `SELECT` (`SEL:[A=BUF B=USB]`).
+
+## [2026-10-25 14:43] USB dwc2 IRQ CPU 2 Isolation & URB nrpacks=1 Tuning
+* **USB Controller IRQ Affinity (CPU 2):**
+  * Перенаправлено апаратні переривання контролера `dwc2` (IRQ 26) на виділене ядро CPU 2 (`echo 4 > /proc/irq/26/smp_affinity`).
+  * Тепер 3 ядра виконують суворо розмежовані задачі:
+    * **CPU 0:** KMSDRM Display Scanout, Linux Kernel, Evdev Input.
+    * **CPU 2:** USB `dwc2` Isochronous Interrupts (SOF 125 µs).
+    * **CPU 3:** Real-Time DSP Audio Synthesis (`SCHED_FIFO 85`).
+* **Kernel snd-usb-audio nrpacks=1:**
+  * Зафіксовано параметр `nrpacks=1` у `/storage/.config/modprobe.d/snd-usb-audio.conf` та `src/hw_monitor.cpp`.
+  * Передача кожного ізохронного URB без затримки групування зменшує навантаження на обмежені FIFO-буфери `dwc2`.
