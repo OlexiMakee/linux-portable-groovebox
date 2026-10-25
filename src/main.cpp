@@ -143,12 +143,20 @@ int main(int argc, char* argv[]) {
         audio_engine.params().resonance_macro.store(std::clamp(-in.ry * 0.45f, -0.45f, 0.45f), std::memory_order_relaxed);
         audio_engine.params().fm_macro.store(std::clamp(in.rx * 0.45f, -0.45f, 0.45f), std::memory_order_relaxed);
 
-        // Керування гучністю кнопками VOL+ / VOL-
-        if (in.vol_up_pressed) {
+        // Оновлення стану FILL mode для умовних тригерів Elektron (утримання L3)
+        audio_engine.setFillMode(in.l3);
+
+        // Керування гучністю кнопками VOL+ / VOL- або зміна темпу BPM через SELECT + VOL:
+        if (in.btn_select && in.vol_up_pressed) {
+            app.bpm = std::min(200.0f, app.bpm + 1.0f);
+            ui_dirty = true;
+        } else if (in.btn_select && in.vol_down_pressed) {
+            app.bpm = std::max(60.0f, app.bpm - 1.0f);
+            ui_dirty = true;
+        } else if (in.vol_up_pressed) {
             audio_engine.adjustMasterVolume(+0.05f);
             ui_dirty = true;
-        }
-        if (in.vol_down_pressed) {
+        } else if (in.vol_down_pressed) {
             audio_engine.adjustMasterVolume(-0.05f);
             ui_dirty = true;
         }
@@ -162,7 +170,7 @@ int main(int argc, char* argv[]) {
             }
             ui_dirty = true;
         }
-        if (in.l2_pressed) { app.active_tab = groovebox::WorkspaceTab::kSynth; ui_dirty = true; }
+        // L2 звільнено під майбутні модулі (L2 не дублює Synth!)
         if (in.r2_pressed) { app.active_tab = groovebox::WorkspaceTab::kMixFx; ui_dirty = true; }
         if (in.r1_pressed) { app.active_tab = groovebox::WorkspaceTab::kScope; ui_dirty = true; }
 
@@ -177,20 +185,18 @@ int main(int argc, char* argv[]) {
             ui_dirty = true;
         }
 
-        // 2. Гарячі комбінації клавіш із затиснутим SELECT:
+        // 2. Гарячі комбінації клавіш із затиснутим SELECT (Elektron Style):
         if (app.dev_shortcuts_enabled && in.btn_select && in.b_pressed) {
-            // SELECT + B: PANIC / KILL SOUND (миттєве скидання всіх 16 голосів та delay)
-            audio_engine.panic();
-            ui_dirty = true;
-        } else if (app.dev_shortcuts_enabled && in.btn_select && in.start_pressed) {
-            // SELECT + START: STOP + REWIND + PANIC
-            app.transport_playing = false;
-            app.current_step = 0;
-            audio_engine.panic();
+            // SELECT + B: CLEAR TRACK (повне очищення активної доріжки)
+            audio_engine.clearRow(app.cursor_row);
             ui_dirty = true;
         } else if (app.dev_shortcuts_enabled && in.btn_select && in.a_pressed) {
-            // SELECT + A: циклічне перемикання розміру буфера (96 -> 128 -> 256 -> 512 -> 1024 -> 2048)
-            audio_engine.cycleBufferSize();
+            // SELECT + A: STEP PREVIEW (прослухати виділений крок із P-Lock)
+            audio_engine.previewStep(app.cursor_row, app.cursor_step);
+            ui_dirty = true;
+        } else if (app.dev_shortcuts_enabled && in.btn_select && in.start_pressed) {
+            // SELECT + START: RANDOMIZE TRACK (рандомізувати тригери доріжки)
+            audio_engine.randomizeRow(app.cursor_row);
             ui_dirty = true;
         } else if (app.dev_shortcuts_enabled && in.btn_select && in.y_pressed) {
             // SELECT + Y: перемикання сторінки секвенсора (до 4 сторінок P1..P4 залежно від довжини рядка)
@@ -261,9 +267,8 @@ int main(int argc, char* argv[]) {
 
             if (!app.step_inspector_open) {
                 if (in.b_pressed) {
-                    // Кнопка B: Parameter Lock для фільтра
-                    float lock_val = std::clamp(0.50f + in.lx * 0.45f, 0.05f, 0.95f);
-                    audio_engine.lockStepCutoff(app.cursor_row, app.cursor_step, lock_val);
+                    // Кнопка B: Видалити крок під курсором (Elektron Clear Step / Trig OFF)
+                    audio_engine.clearStep(app.cursor_row, app.cursor_step);
                     ui_dirty = true;
                 }
                 if (in.x_pressed) {
@@ -292,8 +297,9 @@ int main(int argc, char* argv[]) {
                 }
             } else if (app.active_tab == groovebox::WorkspaceTab::kSys) {
                 if (in.a_pressed) {
-                    // Перемикання USB роутингу HOST <-> DEVICE
-                    hw_monitor.toggleUsbRole();
+                    // Перемикання виділеного пункту списку системних налаштувань
+                    if (app.sys_menu_cursor == 0) audio_engine.cycleBufferSize();
+                    else if (app.sys_menu_cursor == 1) hw_monitor.toggleUsbRole();
                     ui_dirty = true;
                 }
                 if (in.b_pressed) {
@@ -325,8 +331,8 @@ int main(int argc, char* argv[]) {
         // 5. Контекстна навігація на Хрестовині (D-Pad) для кожної вкладки:
         if (app.step_inspector_open) {
             // --- Керування у вікні Step Inspector (лівою рукою при затиснутій кнопці A) ---
-            if (in.up_pressed)   { app.step_inspector_param = (app.step_inspector_param + 9) % 10; ui_dirty = true; }
-            if (in.down_pressed) { app.step_inspector_param = (app.step_inspector_param + 1) % 10; ui_dirty = true; }
+            if (in.up_pressed)   { app.step_inspector_param = (app.step_inspector_param + 11) % 12; ui_dirty = true; }
+            if (in.down_pressed) { app.step_inspector_param = (app.step_inspector_param + 1) % 12; ui_dirty = true; }
 
             int delta = 0;
             if (in.left_pressed) delta = in.btn_select ? -8 : -1;
@@ -378,14 +384,27 @@ int main(int argc, char* argv[]) {
                         st.plock_cutoff = std::clamp(((st.plock_cutoff >= 0.0f) ? st.plock_cutoff : 0.5f) + (delta > 0 ? step_norm : -step_norm), 0.05f, 0.95f);
                         audio_engine.setStep(app.cursor_row, app.cursor_step, st);
                         break;
+                    case 10: { // PROBABILITY (0% .. 100%)
+                        int p = static_cast<int>(st.probability) + (delta > 0 ? (in.btn_select ? 10 : 1) : (in.btn_select ? -10 : -1));
+                        st.probability = static_cast<uint8_t>(std::clamp(p, 0, 100));
+                        audio_engine.setStep(app.cursor_row, app.cursor_step, st);
+                        break;
+                    }
+                    case 11: { // CONDITION (Elektron Trig Conditions)
+                        int c = static_cast<int>(st.condition) + (delta > 0 ? 1 : -1) + static_cast<int>(groovebox::TrigCondition::kCount);
+                        st.condition = static_cast<groovebox::TrigCondition>(c % static_cast<int>(groovebox::TrigCondition::kCount));
+                        audio_engine.setStep(app.cursor_row, app.cursor_step, st);
+                        break;
+                    }
                 }
                 ui_dirty = true;
             }
         } else if (app.active_tab == groovebox::WorkspaceTab::kSeq) {
-            // [L1] SEQ: Up/Down = вибір рядка 1..16, Left/Right = навігація по кроках
+            // [L1] SEQ: Up/Down = вибір активного рядка (0..7), Left/Right = навігація по кроках
+            const int active_rows = audio_engine.getActiveRowCount();
             if (in.up_pressed) {
-                int jump = in.btn_select ? 4 : 1; // З SELECT: стрибок на цілий трек (4 рядки)!
-                app.cursor_row = (app.cursor_row + groovebox::kTotalRows - jump) % groovebox::kTotalRows;
+                int jump = in.btn_select ? 4 : 1;
+                app.cursor_row = (app.cursor_row + active_rows - jump) % active_rows;
                 app.selected_track = audio_engine.getRowTrack(app.cursor_row);
                 uint32_t r_len = audio_engine.getRowLength(app.cursor_row);
                 if (app.cursor_step >= static_cast<int>(r_len)) {
@@ -398,7 +417,7 @@ int main(int argc, char* argv[]) {
             }
             if (in.down_pressed) {
                 int jump = in.btn_select ? 4 : 1;
-                app.cursor_row = (app.cursor_row + jump) % groovebox::kTotalRows;
+                app.cursor_row = (app.cursor_row + jump) % active_rows;
                 app.selected_track = audio_engine.getRowTrack(app.cursor_row);
                 uint32_t r_len = audio_engine.getRowLength(app.cursor_row);
                 if (app.cursor_step >= static_cast<int>(r_len)) {
@@ -456,12 +475,21 @@ int main(int argc, char* argv[]) {
                 ui_dirty = true;
             }
         } else if (app.active_tab == groovebox::WorkspaceTab::kSys) {
-            // [G] SYS: Up/Down = вибір доріжки, Left/Right = зміна BPM
-            if (in.up_pressed)    { app.selected_track = (app.selected_track + 3) % 4; ui_dirty = true; }
-            if (in.down_pressed)  { app.selected_track = (app.selected_track + 1) % 4; ui_dirty = true; }
-            float bpm_step = in.btn_select ? 8.0f : 1.0f;
-            if (in.left_pressed)  { app.bpm = std::max(60.0f, app.bpm - bpm_step); ui_dirty = true; }
-            if (in.right_pressed) { app.bpm = std::min(200.0f, app.bpm + bpm_step); ui_dirty = true; }
+            // [G] SYS: Elektron Settings вертикальний список
+            if (in.up_pressed)   { app.sys_menu_cursor = (app.sys_menu_cursor + 4) % 5; ui_dirty = true; }
+            if (in.down_pressed) { app.sys_menu_cursor = (app.sys_menu_cursor + 1) % 5; ui_dirty = true; }
+            if (in.left_pressed || in.right_pressed || in.a_pressed) {
+                if (app.sys_menu_cursor == 0) {
+                    audio_engine.cycleBufferSize();
+                    ui_dirty = true;
+                } else if (app.sys_menu_cursor == 1) {
+                    hw_monitor.toggleUsbRole();
+                    ui_dirty = true;
+                } else if (app.sys_menu_cursor == 2) {
+                    audio_engine.panic();
+                    ui_dirty = true;
+                }
+            }
         }
 
         auto midi_tel = midi_engine.getTelemetry();

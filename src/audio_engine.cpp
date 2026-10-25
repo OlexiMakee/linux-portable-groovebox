@@ -88,87 +88,35 @@ AudioEngine::~AudioEngine() {
 void AudioEngine::initDefaultPattern() {
     std::lock_guard<std::mutex> lock(state_mutex_);
 
-    // 4 доріжки з повною ADSR-огинаючою (за дефолтом сустейн 0.0, перкусійний спад):
-    // T1: Оркестрові литаври / маршовий ритм (4 голоси: Kick, Snare, Cl-Hat, Op-Hat)
-    // T2: 303 Acid Mono (1 голос, 1 рядок)
-    // T3: Класичний бас Альберті (VA Synth, 4 голоси)
-    // T4: Клавесин / гармонія акордів (2-Op FM, 4 голоси)
+    // За замовчуванням рівно 2 чисті інструменти (без Моцарта):
+    // T1 (рядки 0..3): ANALOG DRUMS (BD, SD, CH, OH)
+    // T2 (рядки 4..7): VIRTUAL ANALOG SYNTH (4 голоси: V1..V4)
     tracks_[0] = {EngineType::kDrumSyn,  {0.30f, 0.50f, 0.40f, 0.15f, 0.35f, 0.50f}, 0.005f, 0.35f, 0.00f, 0.05f, 0.90f,  0.00f, 0.08f, false};
-    tracks_[1] = {EngineType::kAcid303,  {0.62f, 0.55f, 0.60f, 0.22f, 0.70f, 0.00f}, 0.005f, 0.28f, 0.00f, 0.05f, 0.85f,  0.15f, 0.25f, false};
-    tracks_[2] = {EngineType::kVaMono,   {0.45f, 0.28f, 0.48f, 0.25f, 0.50f, 0.45f}, 0.008f, 0.30f, 0.00f, 0.05f, 0.82f, -0.15f, 0.15f, false};
+    tracks_[1] = {EngineType::kVaMono,   {0.45f, 0.28f, 0.48f, 0.25f, 0.50f, 0.45f}, 0.008f, 0.30f, 0.00f, 0.05f, 0.82f, -0.15f, 0.15f, false};
+    tracks_[2] = {EngineType::kAcid303,  {0.62f, 0.55f, 0.60f, 0.22f, 0.70f, 0.00f}, 0.005f, 0.28f, 0.00f, 0.05f, 0.85f,  0.15f, 0.25f, false};
     tracks_[3] = {EngineType::kFm2Op,    {0.55f, 0.35f, 0.45f, 0.28f, 0.25f, 0.40f}, 0.010f, 0.45f, 0.00f, 0.05f, 0.75f, -0.20f, 0.30f, false};
 
     pattern_length_.store(64);
+    active_rows_count_ = 8; // Тільки 8 активних рядків за замовчуванням!
 
-    // Мапінг 16 рядків: Drum (4 рядки), 303 Mono (1 рядок!), VA (4 рядки), FM (4 рядки), Spare (3 рядки)
+    // Мапінг 8 рядків: Drums (рядки 0..3) та VA Synth (рядки 4..7)
     for (int i = 0; i < 4; ++i) { row_track_[i] = 0; row_voice_[i] = i; }
-    row_track_[4] = 1; row_voice_[4] = 0; // 303 Mono - рівно 1 рядок!
-    for (int i = 0; i < 4; ++i) { row_track_[5 + i] = 2; row_voice_[5 + i] = i; }
-    for (int i = 0; i < 4; ++i) { row_track_[9 + i] = 3; row_voice_[9 + i] = i; }
-    for (int i = 13; i < 16; ++i) { row_track_[i] = 0; row_voice_[i] = 0; }
+    for (int i = 0; i < 4; ++i) { row_track_[4 + i] = 1; row_voice_[4 + i] = i; }
+    for (int i = 8; i < kTotalRows; ++i) { row_track_[i] = 0; row_voice_[i] = 0; }
 
-    // Дефолтна довжина для всіх рядків: 16 кроків!
+    // Дефолтна довжина для всіх рядків: 16 кроків, усі кроки чисті та порожні (нуль хардкоду Моцарта)
     for (int r = 0; r < kTotalRows; ++r) {
         row_lengths_[r].store(16, std::memory_order_relaxed);
         for (uint32_t s = 0; s < kMaxSteps; ++s) {
-            pattern_[r][s] = {false, false, false, 48, 0.85f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
+            uint8_t def_note = 48;
+            if (r < 4) {
+                static constexpr uint8_t kDefDrum[4] = {36, 38, 42, 46};
+                def_note = kDefDrum[r];
+            } else {
+                def_note = 48 + (r - 4) * 4;
+            }
+            pattern_[r][s] = {false, false, false, def_note, 0.90f, 0.60f, 100, TrigCondition::kNone, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
         }
-    }
-
-    // 1. T1: Ритм-секція (рядки 0..3) на 16 кроків
-    row_lengths_[0].store(16);
-    row_lengths_[1].store(16);
-    row_lengths_[2].store(16);
-    row_lengths_[3].store(16);
-    // Row 0: Kick (нота 36)
-    for (int s = 0; s < 16; s += 8) {
-        pattern_[0][s] = {true, false, false, 36, 0.95f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
-    }
-    // Row 1: Snare (нота 38)
-    for (int s = 4; s < 16; s += 8) {
-        pattern_[1][s] = {true, false, false, 38, 0.90f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
-    }
-    // Row 2: Closed Hat (нота 42)
-    for (int s = 2; s < 16; s += 4) {
-        pattern_[2][s] = {true, false, false, 42, 0.75f, 0.40f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
-    }
-    // Row 3: Open Hat / Tom (нота 46)
-    pattern_[3][14] = {true, false, false, 46, 0.85f, 0.75f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
-
-    // 2. T2: 303 Mono "Rondo Alla Turca" (рядок 4) на 64 кроки!
-    row_lengths_[4].store(64);
-    static constexpr int kLead[32] = {
-        71, 69, 68, 69, 72, 0, 72, 0, 74, 72, 71, 72, 76, 0, 76, 0,
-        77, 76, 74, 76, 79, 0, 79, 0, 81, 79, 77, 76, 74, 0, 74, 0
-    };
-    for (int s = 0; s < 64; ++s) {
-        int note = kLead[s % 32];
-        if (note > 0) {
-            bool is_slide = (s % 8 == 2 || s % 8 == 3); // 303 constant-time slide
-            pattern_[4][s] = {true, false, is_slide, static_cast<uint8_t>(note), 0.90f, 0.70f, (s % 4 == 0), 0.82f, 0.5f, -1.0f, -1.0f, -1.0f, -1.0f};
-        } else if (s % 8 == 6) {
-            pattern_[4][s] = {true, true, false, 72, 0.0f, 0.50f, true, 0.92f, 0.5f, -1.0f, -1.0f, -1.0f, -1.0f};
-        }
-    }
-
-    // 3. T3: Бас Альберті (рядки 5..6) на 32 кроки
-    row_lengths_[5].store(32);
-    row_lengths_[6].store(32);
-    static constexpr int kAlberti[16] = {45, 52, 48, 52, 45, 52, 48, 52, 45, 52, 48, 52, 45, 52, 48, 52};
-    for (int s = 0; s < 32; ++s) {
-        int note = kAlberti[s % 16];
-        int r = (s % 2 == 0) ? 5 : 6;
-        pattern_[r][s] = {true, false, false, static_cast<uint8_t>(note), 0.82f, 0.50f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
-    }
-
-    // 4. T4: Гармонія FM (рядки 9..11, акорди) на 32 кроки
-    row_lengths_[9].store(32);
-    row_lengths_[10].store(32);
-    row_lengths_[11].store(32);
-    for (int s = 0; s < 32; s += 16) {
-        pattern_[9][s]  = {true, false, false, 57, 0.75f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f}; // A3
-        pattern_[10][s] = {true, false, false, 60, 0.70f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f}; // C4
-        pattern_[11][s] = {true, false, false, 64, 0.72f, 0.60f, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f}; // E4
     }
 }
 
@@ -225,6 +173,107 @@ void AudioEngine::toggleStep(int row, int step_idx) {
     } else {
         st.enabled = false;
         st.is_param_trig = false; // Вимкнено
+    }
+}
+
+void AudioEngine::clearStep(int row, int step_idx) {
+    int r = std::clamp(row, 0, kTotalRows - 1);
+    uint32_t s = std::clamp(static_cast<uint32_t>(step_idx), 0u, kMaxSteps - 1);
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    pattern_[r][s].enabled = false;
+    pattern_[r][s].is_param_trig = false;
+    pattern_[r][s].has_plock = false;
+    pattern_[r][s].plock_cutoff = -1.0f;
+    pattern_[r][s].plock_val = -1.0f;
+}
+
+void AudioEngine::clearRow(int row) {
+    int r = std::clamp(row, 0, kTotalRows - 1);
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    for (uint32_t s = 0; s < kMaxSteps; ++s) {
+        pattern_[r][s].enabled = false;
+        pattern_[r][s].is_param_trig = false;
+        pattern_[r][s].has_plock = false;
+        pattern_[r][s].plock_cutoff = -1.0f;
+        pattern_[r][s].plock_val = -1.0f;
+    }
+}
+
+void AudioEngine::previewStep(int row, int step_idx) {
+    int r = std::clamp(row, 0, kTotalRows - 1);
+    uint32_t s = std::clamp(static_cast<uint32_t>(step_idx), 0u, kMaxSteps - 1);
+    SequencerStep st;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        st = pattern_[r][s];
+    }
+    uint8_t note = st.note;
+    if (!st.enabled) {
+        int t = getRowTrack(r);
+        int v = getRowVoice(r);
+        if (t < 4 && tracks_[t].engine == EngineType::kDrumSyn) {
+            static constexpr uint8_t kDrumNotes[4] = {36, 38, 42, 46};
+            note = kDrumNotes[std::clamp(v, 0, 3)];
+        } else {
+            note = 48 + (r % 4) * 4;
+        }
+    }
+    float vel = st.enabled ? st.velocity : 0.85f;
+    float cut = st.has_plock ? st.plock_cutoff : -1.0f;
+    triggerVoice(r, note, vel, cut, st.slide, st.gate_len);
+}
+
+void AudioEngine::randomizeRow(int row) {
+    int r = std::clamp(row, 0, kTotalRows - 1);
+    int t = getRowTrack(r);
+    int v = getRowVoice(r);
+    uint32_t len = getRowLength(r);
+    std::lock_guard<std::mutex> lock(state_mutex_);
+
+    auto randByte = [this]() -> uint32_t {
+        rng_state_ = rng_state_ * 1664525u + 1013904223u;
+        return (rng_state_ >> 16) & 0xFF;
+    };
+
+    bool is_drum = (t < 4 && tracks_[t].engine == EngineType::kDrumSyn);
+
+    for (uint32_t s = 0; s < len; ++s) {
+        uint32_t rnd = randByte();
+        bool trig = false;
+        uint8_t note = 48;
+        float vel = 0.80f + (randByte() % 20) * 0.01f;
+        float gate = 0.50f + (randByte() % 30) * 0.01f;
+
+        if (is_drum) {
+            static constexpr uint8_t kDrumNotes[4] = {36, 38, 42, 46};
+            note = kDrumNotes[std::clamp(v, 0, 3)];
+            if (v == 0) { // BD
+                trig = (s % 4 == 0) || ((s % 16 == 10 || s % 16 == 14) && (rnd < 90));
+            } else if (v == 1) { // SD
+                trig = (s % 8 == 4) || ((s % 8 == 7 || s % 8 == 2) && (rnd < 70));
+            } else if (v == 2) { // CH
+                trig = (s % 2 == 0) || (rnd < 90);
+                vel = (s % 4 == 0) ? 0.90f : 0.65f;
+            } else { // OH
+                trig = (s % 4 == 2) && (rnd < 150);
+            }
+        } else {
+            // Мелодійний синт: пентатоніка
+            static constexpr uint8_t kScale[8] = {36, 39, 41, 43, 46, 48, 51, 53};
+            trig = (rnd < 110);
+            note = kScale[rnd % 8];
+        }
+
+        pattern_[r][s].enabled = trig;
+        pattern_[r][s].is_param_trig = false;
+        pattern_[r][s].slide = !is_drum && (randByte() < 40);
+        pattern_[r][s].note = note;
+        pattern_[r][s].velocity = vel;
+        pattern_[r][s].gate_len = gate;
+        pattern_[r][s].probability = 100;
+        pattern_[r][s].condition = TrigCondition::kNone;
+        pattern_[r][s].has_plock = false;
+        pattern_[r][s].plock_cutoff = -1.0f;
     }
 }
 
@@ -363,33 +412,85 @@ void AudioEngine::triggerNote(int track, int midi_note, float velocity, float pl
 }
 
 void AudioEngine::triggerSequencerStep(uint32_t master_tick) {
+    bool is_fill = fill_mode_.load(std::memory_order_relaxed);
     std::array<SequencerStep, kTotalRows> steps;
+    int num_rows = active_rows_count_;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        for (int r = 0; r < kTotalRows; ++r) {
+        if (master_tick == 0) {
+            cycle_counter_ = 0;
+        } else if (master_tick % 16 == 0) {
+            cycle_counter_++;
+        }
+        for (int r = 0; r < num_rows; ++r) {
             uint32_t r_len = row_lengths_[r].load(std::memory_order_relaxed);
             if (r_len == 0) r_len = 16;
             uint32_t st = master_tick % r_len;
             steps[r] = pattern_[r][st];
         }
     }
-    for (int r = 0; r < kTotalRows; ++r) {
-        if (steps[r].enabled) {
-            if (steps[r].is_param_trig) {
-                // Жовтий Elektron Trig (Param Trig / P-Lock): лише оновлюємо параметри, без нової ноти!
-                std::lock_guard<std::mutex> lock(state_mutex_);
-                voices_[r].plock_cutoff = steps[r].has_plock ? steps[r].plock_cutoff : -1.0f;
-            } else {
-                // Звичайний Note Trig
-                triggerVoice(
-                    r,
-                    steps[r].note,
-                    steps[r].velocity,
-                    steps[r].has_plock ? steps[r].plock_cutoff : -1.0f,
-                    steps[r].slide,
-                    steps[r].gate_len
-                );
+
+    auto randByte = [this]() -> uint32_t {
+        rng_state_ = rng_state_ * 1664525u + 1013904223u;
+        return (rng_state_ >> 16) & 0xFF;
+    };
+
+    for (int r = 0; r < num_rows; ++r) {
+        if (!steps[r].enabled) {
+            prev_step_fired_[r] = false;
+            continue;
+        }
+
+        // Перевірка Elektron Probability (0..100%)
+        if (steps[r].probability < 100) {
+            uint32_t roll = (randByte() % 100);
+            if (roll >= steps[r].probability) {
+                prev_step_fired_[r] = false;
+                continue;
             }
+        }
+
+        // Перевірка Elektron Trig Conditions
+        bool condition_met = true;
+        uint32_t c = cycle_counter_;
+        switch (steps[r].condition) {
+            case TrigCondition::kNone:     condition_met = true; break;
+            case TrigCondition::kFill:     condition_met = is_fill; break;
+            case TrigCondition::kNotFill:  condition_met = !is_fill; break;
+            case TrigCondition::kPre:      condition_met = prev_step_fired_[r]; break;
+            case TrigCondition::kNotPre:   condition_met = !prev_step_fired_[r]; break;
+            case TrigCondition::k1_2:      condition_met = ((c % 2) == 0); break;
+            case TrigCondition::k2_2:      condition_met = ((c % 2) == 1); break;
+            case TrigCondition::k1_4:      condition_met = ((c % 4) == 0); break;
+            case TrigCondition::k2_4:      condition_met = ((c % 4) == 1); break;
+            case TrigCondition::k3_4:      condition_met = ((c % 4) == 2); break;
+            case TrigCondition::k4_4:      condition_met = ((c % 4) == 3); break;
+            case TrigCondition::kFirst:    condition_met = (c == 0); break;
+            case TrigCondition::kNotFirst: condition_met = (c > 0); break;
+            default: condition_met = true; break;
+        }
+
+        if (!condition_met) {
+            prev_step_fired_[r] = false;
+            continue;
+        }
+
+        prev_step_fired_[r] = true;
+
+        if (steps[r].is_param_trig) {
+            // Жовтий Elektron Trig (Param Trig / P-Lock): лише оновлюємо параметри, без нової ноти!
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            voices_[r].plock_cutoff = steps[r].has_plock ? steps[r].plock_cutoff : -1.0f;
+        } else {
+            // Звичайний Note Trig
+            triggerVoice(
+                r,
+                steps[r].note,
+                steps[r].velocity,
+                steps[r].has_plock ? steps[r].plock_cutoff : -1.0f,
+                steps[r].slide,
+                steps[r].gate_len
+            );
         }
     }
 }
@@ -571,9 +672,9 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
         float send_l = 0.0f;
         float send_r = 0.0f;
 
-        for (int r = 0; r < kTotalRows; ++r) {
+        for (int r = 0; r < active_rows_count_; ++r) {
             auto& v = voices_[r];
-            int t = row_track_[r];
+            int t = std::clamp(static_cast<int>(row_track_[r]), 0, 3);
             int v_idx = row_voice_[r];
             const auto& tp = local_tracks[t];
             if (tp.muted || !v.active) continue;

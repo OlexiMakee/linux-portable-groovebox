@@ -263,3 +263,24 @@
 * **L1 Single-Tap Tab Toggle & Drum Track Slide Suppression:**
   * Одиночне натискання кнопки `L1` перемикає робоче вікно між `[L1] SEQ` та `[L1] SYNTH`.
   * Для барабанних доріжок (`kDrumSyn`) параметр `SLIDE` вимкнено та замінено на маркер `N/A (DRUM)`.
+
+## [2026-10-25 17:55] Elektron OS Design Overhaul: Trig Probability & Conditions, Graphical HUD, Clean 8-Row Setup & Global Settings List
+* **Clean 2-Instrument Default Preset & 8 Active Rows (src/audio_engine.cpp, src/audio_engine.hpp):**
+  * Видалено весь хардкод Моцарта: секвенсор запускається повністю чистим із порожніми патернами.
+  * За дефолтом активні рівно 2 інструменти: Drums (рядки 0..3: `BD`, `SD`, `CH`, `OH`) та VA Synth (рядки 4..7: `V1`..`V4`) — всього 8 рядків (`active_rows_count_ = 8`).
+  * Курсор D-Pad обмежується активними 8 рядками без порожніх дублікатів унизу.
+* **Elektron Probability & Trig Conditions (src/synth_engines.hpp, src/audio_engine.cpp, src/ui_renderer.cpp, src/main.cpp):**
+  * До структури `SequencerStep` інтегровано `probability` ($0\%..100\%$) та `TrigCondition` (`kNone`, `kFill`, `kNotFill`, `k1_2`, `k2_2`, `k1_4`, `k2_4`, `k3_4`, `k4_4`, `kFirst`, `kNotFirst`, `kPre`, `kNotPre`).
+  * Розрахунок умов у реальному часі в `triggerSequencerStep()` із лічильником циклів патерну та станом `L3` (Fill Mode).
+  * У Step Inspector додано параметри 10 (`PROBABILITY`) та 11 (`CONDITION`).
+* **Elektron Trig Keymap (src/main.cpp, src/audio_engine.cpp):**
+  * `A`: Встановлення/перемикання тригера (`Note` $\rightarrow$ `Param Trig`); утримання `A` + стік $\rightarrow$ живий P-Lock.
+  * `B`: Миттєве видалення тригера під курсором (`Trig Clear / OFF`).
+  * `SELECT + A`: **Step Preview** — передпрослуховування виділеного кроку секвенсора з урахуванням ноти та P-Lock параметрів.
+  * `SELECT + B`: **Clear Track** — повне очищення активної доріжки (`clearRow`).
+  * `SELECT + START`: **Randomize Track** — музичний евристичний рандомайзер ритму та нот для активної доріжки.
+  * `SELECT + VOL+` / `SELECT + VOL-`: Швидке регулювання BPM темпу ($60..200$).
+* **Graphical Low-Res HUD & Right Sidebar (src/ui_renderer.cpp):**
+  * Повністю усунуто текстовий шум: нижній бар переведено на 5 мікро-віджетів (D-Pad хрестик 14×14 px з підсвіткою напрямків, L-Stick 2D-приціл 16×16 px, центральний статус транспорту/BPM/HP, R-Stick 2D-приціл 16×16 px, ромб кнопок ABXY).
+  * Праворуч від сітки виділено сегмент доріжок шириною 44 px (рівно під вкладкою `[G] SYS`) з переліком активних інструментів, довжини та сторінок (`BD L16 P1`, `VA1 L16 P1`).
+  * Вкладка `[G] SYS` зменшена до 44 px; усередині меню реалізовано вертикальний список Elektron Global Settings (Buffer, USB Role, Sample Rate, HP Mux, Telemetry).

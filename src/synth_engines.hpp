@@ -155,7 +155,44 @@ inline constexpr const char* getParamName(EngineType type, int param_idx) {
     return kParamNames[e][idx];
 }
 
-// Крок 64/128-крокового секвенсора з підтримкою Elektron Trig моделі (Note Trig vs Yellow Param Trig, Slide, Gate)
+// Elektron Trig Conditions (умовні тригери кроку секвенсора)
+enum class TrigCondition : uint8_t {
+    kNone = 0,   // Безумовне спрацьовування (за probability)
+    kFill,       // Тільки в режимі FILL (утримання L3)
+    kNotFill,    // Завжди, КРІМ режиму FILL (/FILL)
+    kPre,        // PRE: якщо попередній крок цієї доріжки зіграв
+    kNotPre,     // /PRE: якщо попередній крок не зіграв
+    k1_2,        // 1:2 (1-й з 2 циклів)
+    k2_2,        // 2:2 (2-й з 2 циклів)
+    k1_4,        // 1:4 (1-й з 4 циклів)
+    k2_4,        // 2:4 (2-й з 4 циклів)
+    k3_4,        // 3:4 (3-й з 4 циклів)
+    k4_4,        // 4:4 (4-й з 4 циклів)
+    kFirst,      // FIRST: тільки найперший цикл після старту
+    kNotFirst,   // /FIRST: усі цикли, крім найпершого
+    kCount
+};
+
+inline constexpr const char* getConditionName(TrigCondition cond) {
+    switch (cond) {
+        case TrigCondition::kNone:     return "---";
+        case TrigCondition::kFill:     return "FILL";
+        case TrigCondition::kNotFill:  return "/FILL";
+        case TrigCondition::kPre:      return "PRE";
+        case TrigCondition::kNotPre:   return "/PRE";
+        case TrigCondition::k1_2:      return "1:2";
+        case TrigCondition::k2_2:      return "2:2";
+        case TrigCondition::k1_4:      return "1:4";
+        case TrigCondition::k2_4:      return "2:4";
+        case TrigCondition::k3_4:      return "3:4";
+        case TrigCondition::k4_4:      return "4:4";
+        case TrigCondition::kFirst:    return "1ST";
+        case TrigCondition::kNotFirst: return "/1ST";
+        default: return "---";
+    }
+}
+
+// Крок 64/128-крокового секвенсора з підтримкою Elektron Trig моделі (Note Trig vs Yellow Param Trig, Slide, Gate, Probability & Conditions)
 struct SequencerStep {
     bool enabled = false;        // Чи активний крок
     bool is_param_trig = false;  // Жовтий крок Elektron: НЕ тригерить ноту/MIDI, тільки змінює параметри звуку!
@@ -163,6 +200,8 @@ struct SequencerStep {
     uint8_t note = 48;           // MIDI нота (0..127)
     float velocity = 0.90f;      // 0.0 .. 1.0
     float gate_len = 0.60f;      // 0.1 .. 1.0+ (довжина кроку, усуває нескінченний сустейн)
+    uint8_t probability = 100;   // Elektron Probability: 0% .. 100%
+    TrigCondition condition = TrigCondition::kNone; // Elektron Trig Condition
     bool has_plock = false;      // Чи зафіксовано P-Lock
     float plock_cutoff = -1.0f;  // P-Lock фільтра (-1 = дефолт доріжки)
     float plock_val = -1.0f;     // P-Lock додаткового параметра (-1 = дефолт)

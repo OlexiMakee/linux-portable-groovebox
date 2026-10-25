@@ -38,6 +38,7 @@ struct AppModel {
     bool a_long_press_triggered = false;
     bool stick_plock_tweaked = false;
     float plock_cutoff_live = -1.0f;
+    int sys_menu_cursor = 0; // Курсор вертикального списку меню налаштувань [G] SYS
 };
 
 class UiRenderer {

@@ -64,9 +64,17 @@ public:
     SequencerStep getStep(int row, int step_idx) const;
     void setStep(int row, int step_idx, const SequencerStep& step);
     void toggleStep(int row, int step_idx);
+    void clearStep(int row, int step_idx);
+    void clearRow(int row);
+    void randomizeRow(int row);
+    void previewStep(int row, int step_idx);
     void toggleParamTrig(int row, int step_idx); // Жовтий Elektron Trig (Parameter Lock без Note-On)
     void adjustStepNote(int row, int step_idx, int semitones);
     void lockStepCutoff(int row, int step_idx, float cutoff_val);
+
+    // Кількість активних рядків секвенсора (за замовчуванням 8: 4 drums + 4 VA)
+    int getActiveRowCount() const { return active_rows_count_; }
+    void setActiveRowCount(int count) { active_rows_count_ = std::clamp(count, 1, kTotalRows); }
 
     // Повне скидання звуку (Panic / Kill all voices + clear delay)
     void panic();
@@ -88,6 +96,10 @@ public:
     // Мапінг рядків на треки та голоси (моно-девайси займають 1 рядок, полі - кілька)
     int getRowTrack(int row) const;
     int getRowVoice(int row) const;
+
+    // Elektron Fill Mode (активується затисканням кліка лівого стіка L3)
+    void setFillMode(bool fill) { fill_mode_.store(fill, std::memory_order_relaxed); }
+    bool getFillMode() const { return fill_mode_.load(std::memory_order_relaxed); }
 
     SynthParams& params() { return params_; }
     const SynthParams& params() const { return params_; }
@@ -112,6 +124,10 @@ private:
     std::array<uint8_t, kTotalRows> row_track_{};
     std::array<uint8_t, kTotalRows> row_voice_{};
     std::array<std::array<SequencerStep, kMaxSteps>, kTotalRows> pattern_{};
+    int active_rows_count_ = 8;
+    std::atomic<bool> fill_mode_{false};
+    uint32_t cycle_counter_ = 0;
+    std::array<bool, kTotalRows> prev_step_fired_{};
 
     struct VoiceState {
         bool active = false;
