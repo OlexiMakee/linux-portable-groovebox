@@ -46,13 +46,14 @@ namespace palette {
     inline constexpr ColorRGB kCursorWhite   = {255, 255, 255};  // #FFFFFF - курсор редагування
 } // namespace palette
 
-// 4 головні вкладки (відповідають фізичним бамперам L1, L2, R2, R1) + системне меню по бічній кнопці G
+// 5 головних вкладок: L1 (SEQ/SYNTH тогл), L2: FX, R1: MOD, R2: MIX + [G] SYS
 enum class WorkspaceTab : uint8_t {
-    kSeq      = 0, // [L1] SEQ: 16-рядковий матричний секвенсор x 64/128 кроків (Головний екран)
-    kSynth    = 1, // [L2] SYNTH: Параметри синтезатора (4 доріжки, осцилятори, фільтр, ADSR)
-    kMixFx    = 2, // [R2] MIX/FX: Мікшер доріжок, панорама, Send FX, загальний VU-метр
-    kScope    = 3, // [R1] SCOPE: Осцилограф у реальному часі + монітор стереовиходу
-    kSys      = 4  // [G]  SYS: Системні налаштування, буфер, USB роутинг, апаратний монітор
+    kSeq      = 0, // [L1] SEQ: 16-рядковий матричний секвенсор x 64/128 кроків
+    kSynth    = 1, // [L1] SYNTH: Параметри синтезатора (осцилятори, фільтр, ADSR, модуляція)
+    kFx       = 2, // [L2] FX: Сенд та майстер ефекти (Stereo Delay, Reverb, Limiter)
+    kMod      = 3, // [R1] MOD: Модуляція (LFO 1/2, роутинг стіків) + живий Mini-Scope
+    kMixFx    = 4, // [R2] MIX: Компактний мікшер + Master FX Bus
+    kSys      = 5  // [G]  SYS: Системні налаштування, буфер, USB роутинг, монітор
 };
 
 } // namespace groovebox

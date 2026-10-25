@@ -12,6 +12,7 @@ add_executable(xu10_groovebox
     src/hw_monitor.cpp
     src/input_manager.cpp
     src/midi_engine.cpp
+    src/net_audio_streamer.cpp
     src/ui_renderer.cpp
 )
 

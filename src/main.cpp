@@ -147,6 +147,10 @@ int main(int argc, char* argv[]) {
         audio_engine.params().env_mod_macro.store(std::clamp(-in.ly * 0.45f, -0.45f, 0.45f), std::memory_order_relaxed);
         audio_engine.params().resonance_macro.store(std::clamp(-in.ry * 0.45f, -0.45f, 0.45f), std::memory_order_relaxed);
         audio_engine.params().fm_macro.store(std::clamp(in.rx * 0.45f, -0.45f, 0.45f), std::memory_order_relaxed);
+        audio_engine.params().stick_lx.store(std::clamp(in.lx * 0.45f, -0.45f, 0.45f), std::memory_order_relaxed);
+        audio_engine.params().stick_ly.store(std::clamp(-in.ly * 0.45f, -0.45f, 0.45f), std::memory_order_relaxed);
+        audio_engine.params().stick_rx.store(std::clamp(in.rx * 0.45f, -0.45f, 0.45f), std::memory_order_relaxed);
+        audio_engine.params().stick_ry.store(std::clamp(-in.ry * 0.45f, -0.45f, 0.45f), std::memory_order_relaxed);
 
         // Оновлення стану FILL mode для умовних тригерів Elektron (утримання L3)
         audio_engine.setFillMode(in.l3);
@@ -179,9 +183,9 @@ int main(int argc, char* argv[]) {
             }
             ui_dirty = true;
         }
-        // L2 звільнено під майбутні модулі (L2 не дублює Synth!)
+        if (in.l2_pressed) { app.active_tab = groovebox::WorkspaceTab::kFx; ui_dirty = true; }
+        if (in.r1_pressed) { app.active_tab = groovebox::WorkspaceTab::kMod; ui_dirty = true; }
         if (in.r2_pressed) { app.active_tab = groovebox::WorkspaceTab::kMixFx; ui_dirty = true; }
-        if (in.r1_pressed) { app.active_tab = groovebox::WorkspaceTab::kScope; ui_dirty = true; }
 
         // Бокова кнопка G (key.fn 0x2c0): відкриття/закриття системного меню [G] SYS!
         if (in.fn_pressed) {
@@ -366,21 +370,35 @@ int main(int argc, char* argv[]) {
                         else if (sel_col == 3) tp.release = std::clamp(tp.release + dir * 0.05f, 0.01f, 1.8f);
                         audio_engine.setTrackParams(app.selected_track, tp);
                     } else if (sel_row == 4) {
-                        // MOD / LFO
+                        // MOD / LFO 1
+                        auto tp = audio_engine.getTrackParams(app.selected_track);
+                        if (sel_col == 0) {
+                            int nw = (static_cast<int>(tp.lfo1.wave) + dir + static_cast<int>(groovebox::LfoWave::kCount)) % static_cast<int>(groovebox::LfoWave::kCount);
+                            tp.lfo1.wave = static_cast<groovebox::LfoWave>(nw);
+                        } else if (sel_col == 1) {
+                            tp.lfo1.rate = std::clamp(tp.lfo1.rate + dir * 0.05f, 0.05f, 2.0f);
+                        } else if (sel_col == 2) {
+                            tp.lfo1.depth = std::clamp(tp.lfo1.depth + dir * 0.05f, 0.0f, 1.0f);
+                        } else if (sel_col == 3) {
+                            int nd = (static_cast<int>(tp.lfo1.dest) + dir + static_cast<int>(groovebox::StickDest::kCount)) % static_cast<int>(groovebox::StickDest::kCount);
+                            tp.lfo1.dest = static_cast<groovebox::StickDest>(nd);
+                        }
+                        audio_engine.setTrackParams(app.selected_track, tp);
                     } else if (sel_row == 5) {
                         // SENDS & STICKS
                         auto tp = audio_engine.getTrackParams(app.selected_track);
                         if (sel_col == 0) {
                             tp.delay_send = std::clamp(tp.delay_send + delta, 0.0f, 1.0f);
-                            audio_engine.setTrackParams(app.selected_track, tp);
                         } else if (sel_col == 1) {
-                            tp.pan = std::clamp(tp.pan + dir * 0.1f, -1.0f, 1.0f);
-                            audio_engine.setTrackParams(app.selected_track, tp);
+                            tp.reverb_send = std::clamp(tp.reverb_send + delta, 0.0f, 1.0f);
                         } else if (sel_col == 2) {
-                            groovebox::g_stick_l_mode = (groovebox::g_stick_l_mode + dir + 4) % 4;
+                            int nd = (static_cast<int>(tp.stick_left_x) + dir + static_cast<int>(groovebox::StickDest::kCount)) % static_cast<int>(groovebox::StickDest::kCount);
+                            tp.stick_left_x = static_cast<groovebox::StickDest>(nd);
                         } else if (sel_col == 3) {
-                            groovebox::g_stick_r_mode = (groovebox::g_stick_r_mode + dir + 4) % 4;
+                            int nd = (static_cast<int>(tp.stick_right_x) + dir + static_cast<int>(groovebox::StickDest::kCount)) % static_cast<int>(groovebox::StickDest::kCount);
+                            tp.stick_right_x = static_cast<groovebox::StickDest>(nd);
                         }
+                        audio_engine.setTrackParams(app.selected_track, tp);
                     }
                     ui_dirty = true;
                 };
@@ -406,6 +424,49 @@ int main(int argc, char* argv[]) {
                         ui_dirty = true;
                     }
                 }
+            } else if (app.active_tab == groovebox::WorkspaceTab::kFx) {
+                if (in.a_pressed) {
+                    float cur_dm = audio_engine.params().delay_mix.load(std::memory_order_relaxed);
+                    float next_dm = (cur_dm > 0.85f) ? 0.0f : (cur_dm + 0.15f);
+                    audio_engine.params().delay_mix.store(next_dm, std::memory_order_relaxed);
+                    ui_dirty = true;
+                } else if (in.b_pressed) {
+                    float cur_rm = audio_engine.params().reverb_mix.load(std::memory_order_relaxed);
+                    float next_rm = (cur_rm > 0.85f) ? 0.0f : (cur_rm + 0.15f);
+                    audio_engine.params().reverb_mix.store(next_rm, std::memory_order_relaxed);
+                    ui_dirty = true;
+                } else if (in.x_pressed) {
+                    float cur_fb = audio_engine.params().delay_feedback.load(std::memory_order_relaxed);
+                    float next_fb = (cur_fb > 0.85f) ? 0.20f : (cur_fb + 0.15f);
+                    audio_engine.params().delay_feedback.store(next_fb, std::memory_order_relaxed);
+                    ui_dirty = true;
+                } else if (in.y_pressed) {
+                    float cur_rd = audio_engine.params().reverb_decay.load(std::memory_order_relaxed);
+                    float next_rd = (cur_rd > 0.85f) ? 0.20f : (cur_rd + 0.15f);
+                    audio_engine.params().reverb_decay.store(next_rd, std::memory_order_relaxed);
+                    ui_dirty = true;
+                }
+            } else if (app.active_tab == groovebox::WorkspaceTab::kMod) {
+                auto tp = audio_engine.getTrackParams(app.selected_track);
+                if (in.a_pressed) {
+                    tp.lfo1.depth = std::clamp(tp.lfo1.depth + 0.10f, 0.0f, 1.0f);
+                    audio_engine.setTrackParams(app.selected_track, tp);
+                    ui_dirty = true;
+                } else if (in.b_pressed) {
+                    tp.lfo1.depth = std::clamp(tp.lfo1.depth - 0.10f, 0.0f, 1.0f);
+                    audio_engine.setTrackParams(app.selected_track, tp);
+                    ui_dirty = true;
+                } else if (in.x_pressed) {
+                    int nd = (static_cast<int>(tp.lfo1.dest) + 1) % static_cast<int>(groovebox::StickDest::kCount);
+                    tp.lfo1.dest = static_cast<groovebox::StickDest>(nd);
+                    audio_engine.setTrackParams(app.selected_track, tp);
+                    ui_dirty = true;
+                } else if (in.y_pressed) {
+                    int nw = (static_cast<int>(tp.lfo1.wave) + 1) % static_cast<int>(groovebox::LfoWave::kCount);
+                    tp.lfo1.wave = static_cast<groovebox::LfoWave>(nw);
+                    audio_engine.setTrackParams(app.selected_track, tp);
+                    ui_dirty = true;
+                }
             } else if (app.active_tab == groovebox::WorkspaceTab::kMixFx) {
                 auto tp = audio_engine.getTrackParams(app.selected_track);
                 if (in.a_pressed) { tp.muted = !tp.muted; audio_engine.setTrackParams(app.selected_track, tp); ui_dirty = true; }
@@ -418,19 +479,7 @@ int main(int argc, char* argv[]) {
                     ui_dirty = true;
                 }
             } else if (app.active_tab == groovebox::WorkspaceTab::kSys) {
-                auto tp = audio_engine.getTrackParams(app.selected_track);
-                if (in.a_pressed) { tp.muted = !tp.muted; audio_engine.setTrackParams(app.selected_track, tp); ui_dirty = true; }
-                if (in.b_pressed) { tp.delay_send = 0.0f; audio_engine.setTrackParams(app.selected_track, tp); ui_dirty = true; }
-                if (in.x_pressed) { tp.delay_send = std::clamp(tp.delay_send - 0.10f, 0.0f, 1.0f); audio_engine.setTrackParams(app.selected_track, tp); ui_dirty = true; }
-                if (in.y_pressed) {
-                    float cur_fb = audio_engine.params().delay_feedback.load(std::memory_order_relaxed);
-                    float next_fb = (cur_fb > 0.70f) ? 0.20f : (cur_fb + 0.15f);
-                    audio_engine.params().delay_feedback.store(next_fb, std::memory_order_relaxed);
-                    ui_dirty = true;
-                }
-            } else if (app.active_tab == groovebox::WorkspaceTab::kSys) {
                 if (in.a_pressed) {
-                    // Перемикання виділеного пункту списку системних налаштувань
                     if (app.sys_menu_cursor == 0) audio_engine.cycleBufferSize();
                     else if (app.sys_menu_cursor == 1) hw_monitor.toggleUsbRole();
                     ui_dirty = true;

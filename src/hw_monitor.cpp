@@ -68,7 +68,6 @@ void HardwareMonitor::toggleMockDigitakt() {
 
 bool HardwareMonitor::requestUsbRoleSwitch(const std::string& target_role) {
 #if defined(__linux__)
-    // Шляхи та команди VBUS беруться з профілю пристрою (profiles/<device>.ini).
     const auto& prof = activeProfile();
     if (prof.role_switch_path.empty()) {
         std::printf("[USB] Profile '%s' has no role switch, ignoring\n", prof.name.c_str());
@@ -76,15 +75,13 @@ bool HardwareMonitor::requestUsbRoleSwitch(const std::string& target_role) {
     }
     std::string cmd;
     if (target_role == "host") {
-        // 1. Вимикаємо USB_MODE у конфігу ROCKNIX (щоб udev не повернув порт у cdc!),
-        //    відв'язуємо UDC, переводимо порт OTG у режим Host і вмикаємо 5V VBUS
         cmd = "modprobe snd-usb-audio autoclock=0 lowlatency=0 2>/dev/null; modprobe snd-rawmidi 2>/dev/null; modprobe snd-seq-midi 2>/dev/null; echo 4 > /proc/irq/26/smp_affinity 2>/dev/null; ";
         if (!prof.gadget_conf_path.empty()) cmd += "echo 'USB_MODE=disabled' > " + prof.gadget_conf_path + " 2>/dev/null; ";
         cmd += "echo '' > /sys/kernel/config/usb_gadget/cdc/UDC 2>/dev/null; ";
         cmd += "echo host > " + prof.role_switch_path + " 2>/dev/null; ";
         if (!prof.vbus_on_cmd.empty()) cmd += prof.vbus_on_cmd + " 2>/dev/null; ";
     } else {
-        // 2. Вимикаємо 5V VBUS на OTG, повертаємо USB_MODE=cdc і піднімаємо USB-SSH
+        // device modes (device_ssh or device_audio)
         if (!prof.vbus_off_cmd.empty()) cmd += prof.vbus_off_cmd + " 2>/dev/null; ";
         if (!prof.gadget_conf_path.empty()) cmd += "echo 'USB_MODE=cdc' > " + prof.gadget_conf_path + " 2>/dev/null; ";
         cmd += "echo device > " + prof.role_switch_path + " 2>/dev/null; ";
@@ -104,7 +101,9 @@ bool HardwareMonitor::requestUsbRoleSwitch(const std::string& target_role) {
 void HardwareMonitor::toggleUsbRole() {
     std::string cur = getSnapshot().usb_role;
     if (cur == "host") {
-        requestUsbRoleSwitch("device");
+        requestUsbRoleSwitch("device_ssh");
+    } else if (cur == "device_ssh" || cur == "device") {
+        requestUsbRoleSwitch("device_audio");
     } else {
         requestUsbRoleSwitch("host");
     }

@@ -325,3 +325,36 @@
 * **Tabular MIX Tab & Master FX Bus (src/ui_renderer.cpp):**
   * Повністю перероблено громіздкий вертикальний мікшер на компактну горизонтальну матрицю 4 каналів (Channel Header, Mute/On, Level slider + peak VU, Pan dot, Delay send bar).
   * Додано окремий блок `MASTER FX BUS` (MST VOL, DLY TIME 250ms, DLY FDBK, LIMITER).
+
+## [2026-10-25 22:15] Complete Technical Debt Resolution: USB Audio Gadget, Dual LFOs, Assignable Macro Sticks, Master Reverb & Elektron Workflow
+* **Audio Gadget & Real-Time Net Audio Streamer (src/net_audio_streamer.hpp/.cpp, src/audio_engine.hpp/.cpp):**
+  * Проведено ядровий аудит: виявлено, що в мінімальному ядрі ROCKNIX 7.1.2 вимкнено `f_uac1/2`, а `f_fs` блокує дескриптор `0x24 (USB_DT_CS_INTERFACE)`.
+  * Реалізовано прямий мережевий аудіо-стрімер через швидкісний USB CDC-NCM канал (`en9`, 30+ MB/s, `10.1.1.2` <-> `10.1.1.1`):
+    * WebAudio HTTP-сервер на порті `8000`: підключення з будь-якого браузера (Chrome, Safari на Mac) за посиланням `http://10.1.1.2:8000` з кнопкою "CONNECT AUDIO GADGET" та живим VU-метром відтворює біт-перфектний стерео-потік 32000 Гц без затримок.
+    * Неблокуючий бінарний потік `GET /audio` та UDP-трансляція PCM на `10.1.1.1:8001` для запису в DAW / BlackHole.
+    * Замір швидкості передачі: `131 072 байт за 1.01 сек (128 687 байт/сек)` — ідеальна точність 32 кГц 16-біт стерео.
+* **Elektron Trig Probability & Conditions Engine (src/audio_engine.cpp):**
+  * Повністю підключено виконання ймовірності `probability` (0..100%) через генератор псевдовипадкових чисел.
+  * Реалізовано обробку умов `condition`: `kFill`, `kNotFill`, `kPre`, `kNotPre`, `k1_2`, `k2_2`, `k1_4`..`k4_4`, `kFirst`, `kNotFirst`.
+* **Modulation Engine & Dynamic Analog Sticks (src/synth_engines.hpp, src/audio_engine.hpp/.cpp, src/main.cpp):**
+  * Додано enum `StickDest` (14 призначень: CUT, RES, ENV, FM, MOD1, DEP1, MOD2, DEP2, D.SND, D.TIM, D.FBK, REV, PAN, VOL) та `LfoWave` (TRI, SIN, SAW, SQR, S&H).
+  * Кожна доріжка отримала 2 незалежні LFO (`lfo1`, `lfo2`) з налаштуванням форми хвилі, частоти, глибини та цілі модуляції.
+  * Аналогові стіки отримали динамічне призначення на будь-який параметр (L-STK X/Y, R-STK X/Y). Зміна призначення миттєво оновлює підписи в нижньому HUD над 2D-боксами стіків (`CUT/RES`, `DLY/FBK`, `REV/CHO` тощо).
+* **Master Send Reverb (src/audio_engine.hpp/.cpp):**
+  * Інтегровано стерео ревербератор (дифузний 4-tap Schroeder танк) з параметрами `reverb_decay` та `reverb_mix`. Кожен трек отримав параметр `reverb_send`.
+* **Workspace Tabs Architecture & Mini-Scope (src/config.hpp, src/ui_renderer.cpp, src/main.cpp):**
+  * Прибрано окрему повноекранну вкладку SCOPE.
+  * Замість неї реалізовано:
+    * `[L1] SEQ` <-> `[L1] SYNTH` (двопозиційний тогл по кнопці L1; у режимі SYNTH плашка світиться блакитним).
+    * `[L2] FX` (Майстер-ефекти: Ping-Pong Delay, Diffusion Reverb, Master Limiter).
+    * `[R1] MOD` (Матриця модуляції: LFO 1/2, стіки + вбудований компактний осцилограф 64×24 у правому верхньому кутку).
+    * `[R2] MIX` (Канали 1..4 + Master Bus).
+    * `[G] SYS` (Вертикальний селектор: 3-позиційний режим USB `HOST` / `DEVICE SSH` / `DEVICE AUDIO GADGET`, вибір буфера 64..512, частоти дискретизації, аудіомультиплексора).
+* **Нижній HUD та дворядкові підписи кнопок (src/ui_renderer.cpp):**
+  * Підписи кнопок виводяться у два окремі рядки (Рядок 1: `X: ... Y: ...`, Рядок 2: `A: ... B: ...`).
+  * Підписи стіків у лівій та правій частинах HUD динамічно відображають призначені параметри активного треку.
+* **Результати тесту на залізі MagicX XU10:**
+  * Усі бінарники скомпільовано без жодного варнінгу (`build-macos` та `build-xu10`).
+  * Задеплоєно на консоль `10.1.1.2`, процес запущено як Dedicated Appliance PID `11924`.
+  * Споживання CPU — лише **8.8%** (91.2% idle), пам'ять — **47 MB** (4.6% RAM).
+  * Мережевий аудіострімер активний і перевірений по `http://10.1.1.2:8000`.

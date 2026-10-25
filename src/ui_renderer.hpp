@@ -82,7 +82,7 @@ private:
         int h,
         int s
     );
-    void renderBottomHud(const AppModel& app, const HardwareSnapshot& hw, const InputState& input, int w, int h, int s);
+    void renderBottomHud(const AppModel& app, const HardwareSnapshot& hw, const InputState& input, const AudioEngine& audio_engine, int w, int h, int s);
 
     SDL_Window* window_ = nullptr;
     SDL_Renderer* renderer_ = nullptr;

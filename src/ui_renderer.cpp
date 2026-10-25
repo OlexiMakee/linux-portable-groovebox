@@ -269,20 +269,20 @@ void UiRenderer::renderTopBar(const AppModel& app, const InputState& input, int 
         return;
     }
 
-    // 5 вкладок: L1 (SEQ/SYNTH тогл), L2:FX, R2:MIX, R1:SCOPE, G:SYS
+    // 5 вкладок: L1 (SEQ/SYNTH тогл), L2:FX, R1:MOD, R2:MIX, G:SYS
     char l1_label[24];
     if (app.active_tab == WorkspaceTab::kSynth) {
-        std::snprintf(l1_label, sizeof(l1_label), "[L1] SYNTH/seq");
+        std::snprintf(l1_label, sizeof(l1_label), "[L1] SYNTH");
     } else {
-        std::snprintf(l1_label, sizeof(l1_label), "[L1] SEQ/synth");
+        std::snprintf(l1_label, sizeof(l1_label), "[L1] SEQ");
     }
 
-    const char* labels_320[5] = {l1_label, "[L2] FX", "[R2] MIX", "[R1] SCOPE", "[G] SYS"};
-    const char* labels_160[5] = {"L1:SEQ", "L2:FX", "R2:MIX", "R1:SCP", "G:SYS"};
-    const bool held[5] = {input.l1, input.l2, input.r2, input.r1, input.btn_fn};
+    const char* labels_320[5] = {l1_label, "[L2] FX", "[R1] MOD", "[R2] MIX", "[G] SYS"};
+    const char* labels_160[5] = {"L1:SYN", "L2:FX", "R1:MOD", "R2:MIX", "G:SYS"};
+    const bool held[5] = {input.l1, input.l2, input.r1, input.r2, input.btn_fn};
 
-    // Пропорційне розбиття: G-SYS звужено до 44 px (на 1/3 менше), L1 розширено до 84 px, інші по 64 px
-    const int tab_widths[5] = {84, 64, 64, 64, 44};
+    // Пропорційне розбиття: G-SYS звужено до 44 px, L1 розширено до 76 px, інші по 66 px
+    const int tab_widths[5] = {76, 66, 66, 66, 46};
     int tx = 0;
 
     for (int i = 0; i < 5; ++i) {
@@ -291,11 +291,11 @@ void UiRenderer::renderTopBar(const AppModel& app, const InputState& input, int 
         if (i == 0) {
             is_active = (app.active_tab == WorkspaceTab::kSeq || app.active_tab == WorkspaceTab::kSynth);
         } else if (i == 1) {
-            is_active = false; // [L2] FX зарезервовано під майбутні модулі FX
+            is_active = (app.active_tab == WorkspaceTab::kFx);
         } else if (i == 2) {
-            is_active = (app.active_tab == WorkspaceTab::kMixFx);
+            is_active = (app.active_tab == WorkspaceTab::kMod);
         } else if (i == 3) {
-            is_active = (app.active_tab == WorkspaceTab::kScope);
+            is_active = (app.active_tab == WorkspaceTab::kMixFx);
         } else if (i == 4) {
             is_active = (app.active_tab == WorkspaceTab::kSys);
         }
@@ -740,50 +740,161 @@ void UiRenderer::renderWorkspace(
             drawText(mx + 4, my + 17, m_titles[c], palette::kAccentCyan, 1);
             drawText(mx + 4, my + 28, m_vals[c], palette::kTextMain, 1);
         }
-    } else if (app.active_tab == WorkspaceTab::kScope) {
-        // [R1] SCOPE: Повноекранний осцилограф звукової хвилі + стерео VU
-        std::snprintf(
-            buf, sizeof(buf), "REAL-TIME OSCILLOSCOPE | RATE:%u Hz | BUF:%u | VOL:%3.0f%%",
-            audio.sample_rate, audio.period_frames, master_vol * 100.0f
-        );
-        drawText(8, top_y + 6, buf, palette::kAccentOrange, 1);
+    } else if (app.active_tab == WorkspaceTab::kFx) {
+        // [L2] FX: Master Send Effects (Stereo Ping-Pong Delay & Reverb & Master Limiter)
+        drawText(8, top_y + 4, "MASTER SEND EFFECTS & MASTER BUS", palette::kAccentOrange, 1);
+        drawLine(6, top_y + 14, w - 6, top_y + 14, palette::kGridDim);
 
-        const int sc_x = 8;
-        const int sc_y = top_y + 20;
-        const int sc_w = w - 16;
-        const int sc_h = ws_h - 45;
+        float cur_fb = audio_engine.params().delay_feedback.load(std::memory_order_relaxed);
+        float cur_dm = audio_engine.params().delay_mix.load(std::memory_order_relaxed);
+        float cur_rd = audio_engine.params().reverb_decay.load(std::memory_order_relaxed);
+        float cur_rm = audio_engine.params().reverb_mix.load(std::memory_order_relaxed);
 
-        drawRect(sc_x, sc_y, sc_w, sc_h, palette::kGridDim);
-        drawLine(sc_x + 1, sc_y + sc_h / 2, sc_x + sc_w - 2, sc_y + sc_h / 2, palette::kPanelBg);
+        // Блок 1: STEREO PING-PONG DELAY (top_y + 20..80)
+        fillRect(6, top_y + 20, w - 12, 54, palette::kPanelBg);
+        drawRect(6, top_y + 20, w - 12, 54, palette::kAccentCyan);
+        drawText(12, top_y + 24, "STEREO PING-PONG DELAY", palette::kAccentCyan, 1);
 
-        int prev_y = sc_y + sc_h / 2;
-        for (int px = 1; px < sc_w - 1; ++px) {
-            uint32_t s_idx = (static_cast<uint32_t>(px) * 255u) / static_cast<uint32_t>(sc_w);
-            float v = audio.scope_samples[s_idx];
-            int cur_y = sc_y + (sc_h / 2) - static_cast<int>(v * (sc_h / 2 - 6));
-            cur_y = std::clamp(cur_y, sc_y + 2, sc_y + sc_h - 2);
-            drawLine(sc_x + px - 1, prev_y, sc_x + px, cur_y, palette::kAccentCyan);
-            prev_y = cur_y;
+        const int col_w = (w - 24) / 4;
+        const char* dly_titles[4] = {"TIME", "FEEDBACK", "MIX", "CROSS"};
+        char dly_vals[4][16];
+        std::snprintf(dly_vals[0], sizeof(dly_vals[0]), "250 ms");
+        std::snprintf(dly_vals[1], sizeof(dly_vals[1]), "%3.0f%%", cur_fb * 100.0f);
+        std::snprintf(dly_vals[2], sizeof(dly_vals[2]), "%3.0f%%", cur_dm * 100.0f);
+        std::snprintf(dly_vals[3], sizeof(dly_vals[3]), "PING-PONG");
+
+        for (int c = 0; c < 4; ++c) {
+            int cx = 10 + c * col_w;
+            drawRect(cx, top_y + 36, col_w - 4, 32, palette::kGridDim);
+            drawText(cx + 4, top_y + 40, dly_titles[c], palette::kTextDim, 1);
+            drawText(cx + 4, top_y + 52, dly_vals[c], palette::kTextMain, 1);
         }
 
-        // Подвійний стерео VU метр (L / R) внизу
-        const int vu_y = sc_y + sc_h + 6;
-        drawText(8, vu_y + 1, "L:", palette::kTextDim, 1);
-        drawRect(24, vu_y, w - 32, 6, palette::kGridDim);
-        int fill_l = static_cast<int>(std::clamp(audio.vu_left * 1.3f, 0.0f, 1.0f) * (w - 34));
-        if (fill_l > 0) fillRect(25, vu_y + 1, fill_l, 4, palette::kLevelOk);
+        // Блок 2: DIFFUSION REVERB (top_y + 80..140)
+        fillRect(6, top_y + 80, w - 12, 54, palette::kPanelBg);
+        drawRect(6, top_y + 80, w - 12, 54, palette::kAccentOrange);
+        drawText(12, top_y + 84, "SCHROEDER DIFFUSION STEREO REVERB", palette::kAccentOrange, 1);
 
-        drawText(8, vu_y + 9, "R:", palette::kTextDim, 1);
-        drawRect(24, vu_y + 8, w - 32, 6, palette::kGridDim);
-        int fill_r = static_cast<int>(std::clamp(audio.vu_right * 1.3f, 0.0f, 1.0f) * (w - 34));
-        if (fill_r > 0) fillRect(25, vu_y + 9, fill_r, 4, palette::kLevelOk);
+        const char* rev_titles[4] = {"DECAY", "DAMPING", "RETURN", "SPACE"};
+        char rev_vals[4][16];
+        std::snprintf(rev_vals[0], sizeof(rev_vals[0]), "%3.0f%%", cur_rd * 100.0f);
+        std::snprintf(rev_vals[1], sizeof(rev_vals[1]), "60%%");
+        std::snprintf(rev_vals[2], sizeof(rev_vals[2]), "%3.0f%%", cur_rm * 100.0f);
+        std::snprintf(rev_vals[3], sizeof(rev_vals[3]), "HALL");
+
+        for (int c = 0; c < 4; ++c) {
+            int cx = 10 + c * col_w;
+            drawRect(cx, top_y + 96, col_w - 4, 32, palette::kGridDim);
+            drawText(cx + 4, top_y + 100, rev_titles[c], palette::kTextDim, 1);
+            drawText(cx + 4, top_y + 112, rev_vals[c], palette::kTextMain, 1);
+        }
+
+        // Блок 3: MASTER LIMITER & METERS (top_y + 140..176)
+        fillRect(6, top_y + 140, w - 12, 38, palette::kPanelBg);
+        drawRect(6, top_y + 140, w - 12, 38, palette::kGridDim);
+        drawText(12, top_y + 144, "MASTER BUS LIMITER & OUTPUT STAGE", palette::kTextMain, 1);
+
+        char mst_str[32];
+        std::snprintf(mst_str, sizeof(mst_str), "OUT: %3.0f%% | PEAK: %3.0f%%", master_vol * 100.0f, audio.peak_hold * 100.0f);
+        drawText(12, top_y + 158, mst_str, (audio.peak_hold > 0.95f) ? palette::kLevelWarnClip : palette::kLevelOk, 1);
+        drawRect(180, top_y + 156, w - 192, 10, palette::kGridDim);
+        int m_bar = static_cast<int>(std::clamp(audio.peak_hold, 0.0f, 1.0f) * (w - 196));
+        if (m_bar > 0) {
+            fillRect(182, top_y + 158, m_bar, 6, (m_bar > (w - 205)) ? palette::kLevelWarnClip : palette::kLevelOk);
+        }
+
+    } else if (app.active_tab == WorkspaceTab::kMod) {
+        // [R1] MOD: Модуляція (2x LFO + Macro Sticks) + живий Mini-Scope у правому кутку
+        const auto tp = audio_engine.getTrackParams(app.selected_track);
+        std::snprintf(buf, sizeof(buf), "MODULATION MATRIX | TRK %d [%s]", app.selected_track + 1, getEngineTypeName(tp.engine));
+        drawText(8, top_y + 4, buf, palette::kAccentOrange, 1);
+
+        // Вбудований живий Mini-Scope (64x24 px) у правому верхньому кутку
+        const int mini_x = w - 74;
+        const int mini_y = top_y + 2;
+        const int mini_w = 68;
+        const int mini_h = 24;
+        fillRect(mini_x, mini_y, mini_w, mini_h, palette::kBgDark);
+        drawRect(mini_x, mini_y, mini_w, mini_h, palette::kAccentCyan);
+        int prev_my = mini_y + mini_h / 2;
+        for (int px = 1; px < mini_w - 1; ++px) {
+            uint32_t s_idx = (static_cast<uint32_t>(px) * 255u) / static_cast<uint32_t>(mini_w);
+            float sv = audio.scope_samples[s_idx];
+            int cur_my = mini_y + (mini_h / 2) - static_cast<int>(sv * (mini_h / 2 - 2));
+            cur_my = std::clamp(cur_my, mini_y + 1, mini_y + mini_h - 2);
+            drawLine(mini_x + px - 1, prev_my, mini_x + px, cur_my, palette::kAccentCyan);
+            prev_my = cur_my;
+        }
+
+        drawLine(6, top_y + 28, w - 6, top_y + 28, palette::kGridDim);
+
+        // Блок 1: LFO 1 (top_y + 32..80)
+        fillRect(6, top_y + 32, w - 12, 44, palette::kPanelBg);
+        drawRect(6, top_y + 32, w - 12, 44, palette::kAccentCyan);
+        drawText(12, top_y + 36, "LFO 1 (TRACK ASSIGNABLE)", palette::kAccentCyan, 1);
+        const int l_col = (w - 24) / 4;
+        const char* l1_titles[4] = {"WAVE", "RATE", "DEPTH", "DESTINATION"};
+        char l1_vals[4][16];
+        std::snprintf(l1_vals[0], sizeof(l1_vals[0]), "%s", getLfoWaveName(tp.lfo1.wave));
+        std::snprintf(l1_vals[1], sizeof(l1_vals[1]), "%2.1f Hz", tp.lfo1.rate * 10.0f);
+        std::snprintf(l1_vals[2], sizeof(l1_vals[2]), "%3.0f%%", tp.lfo1.depth * 100.0f);
+        std::snprintf(l1_vals[3], sizeof(l1_vals[3]), "%s", getStickDestShortName(tp.lfo1.dest));
+
+        for (int c = 0; c < 4; ++c) {
+            int cx = 10 + c * l_col;
+            drawRect(cx, top_y + 46, l_col - 4, 26, palette::kGridDim);
+            drawText(cx + 4, top_y + 48, l1_titles[c], palette::kTextDim, 1);
+            drawText(cx + 4, top_y + 58, l1_vals[c], palette::kTextMain, 1);
+        }
+
+        // Блок 2: LFO 2 (top_y + 80..128)
+        fillRect(6, top_y + 80, w - 12, 44, palette::kPanelBg);
+        drawRect(6, top_y + 80, w - 12, 44, palette::kAccentOrange);
+        drawText(12, top_y + 84, "LFO 2 (TRACK ASSIGNABLE)", palette::kAccentOrange, 1);
+        const char* l2_titles[4] = {"WAVE", "RATE", "DEPTH", "DESTINATION"};
+        char l2_vals[4][16];
+        std::snprintf(l2_vals[0], sizeof(l2_vals[0]), "%s", getLfoWaveName(tp.lfo2.wave));
+        std::snprintf(l2_vals[1], sizeof(l2_vals[1]), "%2.1f Hz", tp.lfo2.rate * 10.0f);
+        std::snprintf(l2_vals[2], sizeof(l2_vals[2]), "%3.0f%%", tp.lfo2.depth * 100.0f);
+        std::snprintf(l2_vals[3], sizeof(l2_vals[3]), "%s", getStickDestShortName(tp.lfo2.dest));
+
+        for (int c = 0; c < 4; ++c) {
+            int cx = 10 + c * l_col;
+            drawRect(cx, top_y + 94, l_col - 4, 26, palette::kGridDim);
+            drawText(cx + 4, top_y + 96, l2_titles[c], palette::kTextDim, 1);
+            drawText(cx + 4, top_y + 106, l2_vals[c], palette::kTextMain, 1);
+        }
+
+        // Блок 3: DYNAMIC ANALOG STICK MACRO ROUTING (top_y + 128..176)
+        fillRect(6, top_y + 128, w - 12, 46, palette::kPanelBg);
+        drawRect(6, top_y + 128, w - 12, 46, palette::kGridDim);
+        drawText(12, top_y + 132, "DYNAMIC ANALOG STICK MACRO ROUTING", palette::kTextMain, 1);
+        const char* stk_titles[4] = {"L-STICK X", "L-STICK Y", "R-STICK X", "R-STICK Y"};
+        char stk_vals[4][16];
+        std::snprintf(stk_vals[0], sizeof(stk_vals[0]), "%s", getStickDestShortName(tp.stick_left_x));
+        std::snprintf(stk_vals[1], sizeof(stk_vals[1]), "%s", getStickDestShortName(tp.stick_left_y));
+        std::snprintf(stk_vals[2], sizeof(stk_vals[2]), "%s", getStickDestShortName(tp.stick_right_x));
+        std::snprintf(stk_vals[3], sizeof(stk_vals[3]), "%s", getStickDestShortName(tp.stick_right_y));
+
+        for (int c = 0; c < 4; ++c) {
+            int cx = 10 + c * l_col;
+            drawRect(cx, top_y + 142, l_col - 4, 26, palette::kGridDim);
+            drawText(cx + 4, top_y + 144, stk_titles[c], palette::kTextDim, 1);
+            drawText(cx + 4, top_y + 154, stk_vals[c], palette::kAccentCyan, 1);
+        }
 
     } else {
         // [G] SYS: Elektron System Settings Menu (вертикальний список налаштувань)
         drawText(8, top_y + 4, "GLOBAL SYSTEM SETTINGS", palette::kAccentOrange, 1);
         drawLine(6, top_y + 14, w - 6, top_y + 14, palette::kGridDim);
 
-        const bool is_host = (hw.usb_role == "host");
+        const char* usb_mode_str = "DEVICE (MAC SSH 10.1.1.2)";
+        if (hw.usb_role == "host") {
+            usb_mode_str = "HOST (OTG 5V ON: MIDI/AUDIO)";
+        } else if (hw.usb_role == "device_audio") {
+            usb_mode_str = "DEVICE (AUDIO GADGET http://10.1.1.2:8000)";
+        }
+
         const char* menu_titles[5] = {
             "AUDIO BUFFER SIZE",
             "USB PORT ROLE",
@@ -794,14 +905,13 @@ void UiRenderer::renderWorkspace(
         char menu_values[5][64];
         std::snprintf(menu_values[0], sizeof(menu_values[0]), "< %u SAMPLES (%2.1f ms) >",
                       audio.period_frames, (audio.sample_rate > 0) ? (audio.period_frames * 1000.0f) / audio.sample_rate : 0.0f);
-        std::snprintf(menu_values[1], sizeof(menu_values[1]), "< %s >",
-                      is_host ? "HOST (5V ON: AUDIO/MIDI)" : "DEVICE (MAC SSH 10.1.1.2)");
+        std::snprintf(menu_values[1], sizeof(menu_values[1]), "< %s >", usb_mode_str);
         std::snprintf(menu_values[2], sizeof(menu_values[2]), "%u Hz (%s)",
-                      audio.sample_rate, is_host ? "DIGITAKT II UAC2" : "RK817 DAC");
+                      audio.sample_rate, (hw.usb_role == "host") ? "DIGITAKT II UAC2" : "RK817 DAC");
         std::snprintf(menu_values[3], sizeof(menu_values[3]), "%s",
                       input.headphones_plugged ? "HEADPHONES INSERTED [HP]" : "INTERNAL SPEAKER [SPK]");
-        std::snprintf(menu_values[4], sizeof(menu_values[4]), "CPU: %.1f%% (%dC) | RAM: %d/%d MB",
-                      hw.cpu_load_percent, hw.cpu_temp_c, hw.ram_used_mb, hw.ram_total_mb);
+        std::snprintf(menu_values[4], sizeof(menu_values[4]), "CPU: %.1f%% (%dC) | NET AUDIO: :8000",
+                      hw.cpu_load_percent, hw.cpu_temp_c);
 
         for (int i = 0; i < 5; ++i) {
             int iy = top_y + 22 + i * 18;
@@ -822,6 +932,7 @@ void UiRenderer::renderBottomHud(
     const AppModel& app,
     const HardwareSnapshot& hw,
     const InputState& input,
+    const AudioEngine& audio_engine,
     int w,
     int h,
     int s
@@ -845,9 +956,13 @@ void UiRenderer::renderBottomHud(
     fillRect(dpad_cx - 2, dpad_cy - 2, 4, 4, palette::kHeaderSel);
 
     // 2. L-Stick 2D Box (16x16 px) з динамічним підписом мішені
+    const auto tp = audio_engine.getTrackParams(app.selected_track);
+    std::string stick_l_name = std::string(getStickDestShortName(tp.stick_left_x)) + "/" + getStickDestShortName(tp.stick_left_y);
+    std::string stick_r_name = std::string(getStickDestShortName(tp.stick_right_x)) + "/" + getStickDestShortName(tp.stick_right_y);
+
     const int lbox_x = 28;
     const int lbox_y = hud_y + 12;
-    drawText(26, hud_y + 2, getStickLName(g_stick_l_mode), palette::kAccentCyan, 1);
+    drawText(26, hud_y + 2, stick_l_name.c_str(), palette::kAccentCyan, 1);
     drawRect(lbox_x, lbox_y, 16, 16, palette::kGridDim);
     drawLine(lbox_x + 1, lbox_y + 8, lbox_x + 14, lbox_y + 8, palette::kBgDark);
     drawLine(lbox_x + 8, lbox_y + 1, lbox_x + 8, lbox_y + 14, palette::kBgDark);
@@ -883,7 +998,13 @@ void UiRenderer::renderBottomHud(
     } else if (app.active_tab == WorkspaceTab::kSynth) {
         std::snprintf(ctx_buf, sizeof(ctx_buf), "SYNTH EDITOR | TRK %d", app.selected_track + 1);
         drawText(60, hud_y + 13, ctx_buf, palette::kAccentOrange, 1);
-        drawText(60, hud_y + 22, "DPAD:CELL | STICK:TWEAK", palette::kTextDim, 1);
+        drawText(60, hud_y + 22, "DPAD:CELL | A:VAL+ B:VAL-", palette::kTextDim, 1);
+    } else if (app.active_tab == WorkspaceTab::kFx) {
+        drawText(60, hud_y + 13, "MASTER FX BUS & REVERB", palette::kAccentCyan, 1);
+        drawText(60, hud_y + 22, "DPAD:CELL | STICK:MACRO", palette::kTextDim, 1);
+    } else if (app.active_tab == WorkspaceTab::kMod) {
+        drawText(60, hud_y + 13, "DUAL LFO & STICK MATRIX", palette::kAccentOrange, 1);
+        drawText(60, hud_y + 22, "DPAD:NAV | A/B:ADJUST", palette::kTextDim, 1);
     } else {
         drawText(60, hud_y + 13, "ACTIVE WORKSPACE", palette::kTextMain, 1);
         drawText(60, hud_y + 22, "ELEKTRON WORKFLOW", palette::kTextDim, 1);
@@ -892,7 +1013,7 @@ void UiRenderer::renderBottomHud(
     // 4. R-Stick 2D Box (16x16 px) з динамічним підписом мішені
     const int rbox_x = 212;
     const int rbox_y = hud_y + 12;
-    drawText(206, hud_y + 2, getStickRName(g_stick_r_mode), palette::kAccentOrange, 1);
+    drawText(206, hud_y + 2, stick_r_name.c_str(), palette::kAccentOrange, 1);
     drawRect(rbox_x, rbox_y, 16, 16, palette::kGridDim);
     drawLine(rbox_x + 1, rbox_y + 8, rbox_x + 14, rbox_y + 8, palette::kBgDark);
     drawLine(rbox_x + 8, rbox_y + 1, rbox_x + 8, rbox_y + 14, palette::kBgDark);
@@ -941,16 +1062,21 @@ void UiRenderer::renderBottomHud(
         func_y = "DEL";
         func_a = "VAL+";
         func_b = "VAL-";
+    } else if (app.active_tab == WorkspaceTab::kFx) {
+        func_x = "TIME";
+        func_y = "REV";
+        func_a = "VAL+";
+        func_b = "VAL-";
+    } else if (app.active_tab == WorkspaceTab::kMod) {
+        func_x = "DEST";
+        func_y = "WAVE";
+        func_a = "RATE+";
+        func_b = "RATE-";
     } else if (app.active_tab == WorkspaceTab::kMixFx) {
         func_x = "MUTE";
         func_y = "SOLO";
         func_a = "SET";
         func_b = "RESET";
-    } else if (app.active_tab == WorkspaceTab::kScope) {
-        func_x = "ZOOM+";
-        func_y = "ZOOM-";
-        func_a = "HOLD";
-        func_b = "MODE";
     } else if (app.active_tab == WorkspaceTab::kSys) {
         func_x = "--";
         func_y = "--";
@@ -982,7 +1108,7 @@ void UiRenderer::render(
 
     renderTopBar(app, input, logical_w_, 1);
     renderWorkspace(app, hw, input, audio_engine, audio, midi, master_vol, logical_w_, logical_h_, 1);
-    renderBottomHud(app, hw, input, logical_w_, logical_h_, 1);
+    renderBottomHud(app, hw, input, audio_engine, logical_w_, logical_h_, 1);
 
     SDL_RenderPresent(renderer_);
 }

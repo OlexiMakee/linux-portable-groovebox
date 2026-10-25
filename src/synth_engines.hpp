@@ -123,6 +123,73 @@ struct AdsrEnvelope {
     bool isActive() const { return stage != AdsrStage::kIdle; }
 };
 
+enum class StickDest : uint8_t {
+    kCutoff = 0,
+    kResonance,
+    kEnvMod,
+    kFmIndex,
+    kLfo1Rate,
+    kLfo1Depth,
+    kLfo2Rate,
+    kLfo2Depth,
+    kDelaySend,
+    kDelayTime,
+    kDelayFeedback,
+    kReverbSend,
+    kPan,
+    kLevel,
+    kCount
+};
+
+inline constexpr const char* getStickDestShortName(StickDest dest) {
+    switch (dest) {
+        case StickDest::kCutoff:        return "CUT";
+        case StickDest::kResonance:     return "RES";
+        case StickDest::kEnvMod:        return "ENV";
+        case StickDest::kFmIndex:       return "FM";
+        case StickDest::kLfo1Rate:      return "MOD1";
+        case StickDest::kLfo1Depth:     return "DEP1";
+        case StickDest::kLfo2Rate:      return "MOD2";
+        case StickDest::kLfo2Depth:     return "DEP2";
+        case StickDest::kDelaySend:     return "D.SND";
+        case StickDest::kDelayTime:     return "D.TIM";
+        case StickDest::kDelayFeedback: return "D.FBK";
+        case StickDest::kReverbSend:    return "REV";
+        case StickDest::kPan:           return "PAN";
+        case StickDest::kLevel:         return "VOL";
+        default:                        return "OFF";
+    }
+}
+
+enum class LfoWave : uint8_t {
+    kTriangle = 0,
+    kSine,
+    kSaw,
+    kSquare,
+    kRandomSnh,
+    kCount
+};
+
+inline constexpr const char* getLfoWaveName(LfoWave wave) {
+    switch (wave) {
+        case LfoWave::kTriangle:  return "TRI";
+        case LfoWave::kSine:      return "SIN";
+        case LfoWave::kSaw:       return "SAW";
+        case LfoWave::kSquare:    return "SQR";
+        case LfoWave::kRandomSnh: return "S&H";
+        default:                  return "TRI";
+    }
+}
+
+struct LfoParameters {
+    LfoWave wave = LfoWave::kTriangle;
+    float rate = 0.25f;        // 0.05 Hz .. 20.0 Hz
+    float depth = 0.0f;       // 0.0 .. 1.0
+    StickDest dest = StickDest::kCutoff;
+    float phase = 0.0f;
+    float value = 0.0f;
+};
+
 struct TrackParameters {
     EngineType engine = EngineType::kVaMono;
     std::array<float, kParamsPerTrack> p{0.55f, 0.35f, 0.50f, 0.35f, 0.30f, 0.40f};
@@ -133,7 +200,14 @@ struct TrackParameters {
     float level = 0.85f;
     float pan = 0.0f;       // -1.0 (L) .. +1.0 (R)
     float delay_send = 0.2f;
+    float reverb_send = 0.15f;
     bool muted = false;
+    StickDest stick_left_x = StickDest::kCutoff;
+    StickDest stick_left_y = StickDest::kResonance;
+    StickDest stick_right_x = StickDest::kLfo1Rate;
+    StickDest stick_right_y = StickDest::kLfo2Rate;
+    LfoParameters lfo1{.wave = LfoWave::kTriangle, .rate = 0.25f, .depth = 0.0f, .dest = StickDest::kCutoff};
+    LfoParameters lfo2{.wave = LfoWave::kSine, .rate = 0.40f, .depth = 0.0f, .dest = StickDest::kResonance};
 };
 
 inline constexpr const char* kParamNames[static_cast<int>(EngineType::kCount)][kParamsPerTrack] = {

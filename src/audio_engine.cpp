@@ -75,14 +75,18 @@ inline float polyBlep(float t, float dt) {
 
 AudioEngine::AudioEngine()
     : delay_buf_l_(16384, 0.0f),
-      delay_buf_r_(16384, 0.0f) {
+      delay_buf_r_(16384, 0.0f),
+      reverb_buf_l_(16384, 0.0f),
+      reverb_buf_r_(16384, 0.0f) {
     for (auto& s : scope_ring_) s.store(0.0f, std::memory_order_relaxed);
     for (auto& t : track_vu_) t.store(0.0f, std::memory_order_relaxed);
     initDefaultPattern();
+    net_streamer_.start(8000, 32000);
 }
 
 AudioEngine::~AudioEngine() {
     stop();
+    net_streamer_.stop();
 }
 
 void AudioEngine::initDefaultPattern() {
@@ -654,14 +658,70 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
     const float res_macro = params_.resonance_macro.load(std::memory_order_relaxed);
     const float env_macro = params_.env_mod_macro.load(std::memory_order_relaxed);
     const float fm_macro  = params_.fm_macro.load(std::memory_order_relaxed);
+    const float raw_lx    = params_.stick_lx.load(std::memory_order_relaxed);
+    const float raw_ly    = params_.stick_ly.load(std::memory_order_relaxed);
+    const float raw_rx    = params_.stick_rx.load(std::memory_order_relaxed);
+    const float raw_ry    = params_.stick_ry.load(std::memory_order_relaxed);
     const float dly_fb    = params_.delay_feedback.load(std::memory_order_relaxed);
     const float dly_mix   = params_.delay_mix.load(std::memory_order_relaxed);
+    const float rev_dec   = params_.reverb_decay.load(std::memory_order_relaxed);
+    const float rev_mix   = params_.reverb_mix.load(std::memory_order_relaxed);
 
     std::array<TrackParameters, 4> local_tracks;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         local_tracks = tracks_;
     }
+
+    auto computeLfo = [](LfoParameters& lfo, float dt) -> float {
+        if (lfo.depth <= 0.001f) return 0.0f;
+        lfo.phase += lfo.rate * dt;
+        if (lfo.phase >= 1.0f) lfo.phase -= std::floor(lfo.phase);
+        float p = lfo.phase;
+        float raw = 0.0f;
+        switch (lfo.wave) {
+            case LfoWave::kSine:
+                raw = std::sin(p * 6.2831853f);
+                break;
+            case LfoWave::kTriangle:
+                raw = 4.0f * std::fabs(p - 0.5f) - 1.0f;
+                break;
+            case LfoWave::kSaw:
+                raw = 2.0f * p - 1.0f;
+                break;
+            case LfoWave::kSquare:
+                raw = (p < 0.5f) ? 1.0f : -1.0f;
+                break;
+            case LfoWave::kRandomSnh:
+                if (p < 0.05f) lfo.value = ((float)(rand() % 1000) / 500.0f) - 1.0f;
+                raw = lfo.value;
+                break;
+            default:
+                raw = 0.0f;
+                break;
+        }
+        return raw * lfo.depth * 0.40f;
+    };
+
+    float dt_block = inv_sr * static_cast<float>(frames);
+    std::array<float, 4> lfo1_val{0.0f, 0.0f, 0.0f, 0.0f};
+    std::array<float, 4> lfo2_val{0.0f, 0.0f, 0.0f, 0.0f};
+    for (int t = 0; t < 4; ++t) {
+        lfo1_val[t] = computeLfo(local_tracks[t].lfo1, dt_block);
+        lfo2_val[t] = computeLfo(local_tracks[t].lfo2, dt_block);
+    }
+
+    auto getTrackMod = [&](int trk, StickDest dest) -> float {
+        const auto& tp = local_tracks[trk];
+        float val = 0.0f;
+        if (tp.stick_left_x == dest) val += raw_lx;
+        if (tp.stick_left_y == dest) val += raw_ly;
+        if (tp.stick_right_x == dest) val += raw_rx;
+        if (tp.stick_right_y == dest) val += raw_ry;
+        if (tp.lfo1.dest == dest) val += lfo1_val[trk];
+        if (tp.lfo2.dest == dest) val += lfo2_val[trk];
+        return val;
+    };
 
     float max_l = 0.0f;
     float max_r = 0.0f;
@@ -674,6 +734,8 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
         float mix_r = 0.0f;
         float send_l = 0.0f;
         float send_r = 0.0f;
+        float rev_l = 0.0f;
+        float rev_r = 0.0f;
 
         for (int r = 0; r < active_rows_count_; ++r) {
             auto& v = voices_[r];
@@ -802,14 +864,18 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                 }
             }
 
-            // Резонансний SVF-фільтр з урахуванням P-Lock кроку та стіків
+            // Резонансний SVF-фільтр з урахуванням P-Lock кроку, стіків та LFO
             float base_cut = (v.plock_cutoff >= 0.0f) ? v.plock_cutoff : tp.p[0];
+            float cut_offset = cut_macro + getTrackMod(t, StickDest::kCutoff);
+            float env_offset = env_macro + getTrackMod(t, StickDest::kEnvMod);
+            float res_offset = res_macro + getTrackMod(t, StickDest::kResonance);
+
             float f_cut = std::clamp(
-                base_cut + cut_macro + f_env * std::clamp(tp.p[2] + env_macro, 0.0f, 1.0f) * 0.58f,
+                base_cut + cut_offset + f_env * std::clamp(tp.p[2] + env_offset, 0.0f, 1.0f) * 0.58f,
                 0.04f,
                 0.88f
             );
-            float reso = std::clamp(tp.p[1] + res_macro, 0.0f, 0.90f);
+            float reso = std::clamp(tp.p[1] + res_offset, 0.0f, 0.90f);
             float q_damp = std::clamp(1.0f - reso * 0.88f, 0.10f, 1.0f);
 
             v.svf_low += f_cut * v.svf_band;
@@ -817,17 +883,25 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             v.svf_band += f_cut * high;
             v.svf_band = std::clamp(v.svf_band, -1.85f, 1.85f);
 
-            float out_s = ((tp.engine == EngineType::kDrumSyn && v_idx == 2) ? high : v.svf_low) * amp * v.velocity * tp.level;
+            float trk_level = std::clamp(tp.level + getTrackMod(t, StickDest::kLevel), 0.0f, 1.0f);
+            float out_s = ((tp.engine == EngineType::kDrumSyn && v_idx == 2) ? high : v.svf_low) * amp * v.velocity * trk_level;
 
             float abs_s = std::fabs(out_s);
             if (abs_s > trk_peak[t]) trk_peak[t] = abs_s;
 
-            float pan_l = std::clamp(1.0f - tp.pan, 0.0f, 1.0f) * 0.5f;
-            float pan_r = std::clamp(1.0f + tp.pan, 0.0f, 1.0f) * 0.5f;
+            float trk_pan = std::clamp(tp.pan + getTrackMod(t, StickDest::kPan), -1.0f, 1.0f);
+            float pan_l = std::clamp(1.0f - trk_pan, 0.0f, 1.0f) * 0.5f;
+            float pan_r = std::clamp(1.0f + trk_pan, 0.0f, 1.0f) * 0.5f;
+
+            float d_send = std::clamp(tp.delay_send + getTrackMod(t, StickDest::kDelaySend), 0.0f, 1.0f);
+            float r_send = std::clamp(tp.reverb_send + getTrackMod(t, StickDest::kReverbSend), 0.0f, 1.0f);
+
             mix_l += out_s * pan_l;
             mix_r += out_s * pan_r;
-            send_l += out_s * tp.delay_send * pan_l;
-            send_r += out_s * tp.delay_send * pan_r;
+            send_l += out_s * d_send * pan_l;
+            send_r += out_s * d_send * pan_r;
+            rev_l  += out_s * r_send * pan_l;
+            rev_r  += out_s * r_send * pan_r;
         }
 
         // Майстер стерео пінг-понг ділей
@@ -838,8 +912,17 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
         delay_buf_r_[delay_idx_] = std::clamp(send_r + d_l * dly_fb, -0.95f, 0.95f);
         delay_idx_ = (delay_idx_ + 1) % delay_buf_l_.size();
 
-        mix_l = std::clamp((mix_l + d_l * dly_mix) * master_vol, -0.98f, 0.98f);
-        mix_r = std::clamp((mix_r + d_r * dly_mix) * master_vol, -0.98f, 0.98f);
+        // Майстер стерео ревербератор (дифузний Schroeder танк)
+        uint32_t rev_len = (sample_rate == 48000u) ? 14400u : 9600u;
+        uint32_t r_read = (reverb_idx_ + reverb_buf_l_.size() - rev_len) % reverb_buf_l_.size();
+        float rv_l = reverb_buf_l_[r_read];
+        float rv_r = reverb_buf_r_[r_read];
+        reverb_buf_l_[reverb_idx_] = std::clamp(rev_l + (rv_r * 0.60f + rv_l * 0.30f) * rev_dec, -0.95f, 0.95f);
+        reverb_buf_r_[reverb_idx_] = std::clamp(rev_r + (rv_l * 0.60f + rv_r * 0.30f) * rev_dec, -0.95f, 0.95f);
+        reverb_idx_ = (reverb_idx_ + 1) % reverb_buf_l_.size();
+
+        mix_l = std::clamp((mix_l + d_l * dly_mix + rv_l * rev_mix) * master_vol, -0.98f, 0.98f);
+        mix_r = std::clamp((mix_r + d_r * dly_mix + rv_r * rev_mix) * master_vol, -0.98f, 0.98f);
 
         max_l = std::max(max_l, std::fabs(mix_l));
         max_r = std::max(max_r, std::fabs(mix_r));
@@ -852,6 +935,8 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
         out_interleaved[i * 2]     = static_cast<int16_t>(mix_l * 32000.0f);
         out_interleaved[i * 2 + 1] = static_cast<int16_t>(mix_r * 32000.0f);
     }
+
+    net_streamer_.pushAudioBlock(out_interleaved, frames);
 
     scope_write_idx_.store(sc_idx & 255u, std::memory_order_relaxed);
 

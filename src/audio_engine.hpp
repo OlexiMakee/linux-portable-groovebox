@@ -1,5 +1,6 @@
 #pragma once
 
+#include "net_audio_streamer.hpp"
 #include "synth_engines.hpp"
 
 #include <array>
@@ -19,8 +20,14 @@ struct SynthParams {
     std::atomic<float> resonance_macro{0.0f}; // -0.45 .. +0.45 (правий стік Y — офсет резонансу)
     std::atomic<float> env_mod_macro{0.0f};   // -0.45 .. +0.45 (лівий стік Y — офсет Env Mod)
     std::atomic<float> fm_macro{0.0f};        // -0.45 .. +0.45 (правий стік X — офсет FM/Detune)
+    std::atomic<float> stick_lx{0.0f};        // -0.45 .. +0.45 (raw left stick X)
+    std::atomic<float> stick_ly{0.0f};        // -0.45 .. +0.45 (raw left stick Y)
+    std::atomic<float> stick_rx{0.0f};        // -0.45 .. +0.45 (raw right stick X)
+    std::atomic<float> stick_ry{0.0f};        // -0.45 .. +0.45 (raw right stick Y)
     std::atomic<float> delay_feedback{0.42f}; // Стерео-ділей фідбек
     std::atomic<float> delay_mix{0.25f};      // Рівень повернення стерео-ділею
+    std::atomic<float> reverb_decay{0.50f};   // Рівень реверберації
+    std::atomic<float> reverb_mix{0.20f};     // Повернення реверберації
 };
 
 // Стан аудіорушія для відображення в UI, осцилографі та VU-метрі
@@ -104,6 +111,8 @@ public:
     SynthParams& params() { return params_; }
     const SynthParams& params() const { return params_; }
 
+    NetAudioStreamer& netStreamer() { return net_streamer_; }
+
     AudioEngineTelemetry getTelemetry() const;
 
 private:
@@ -158,6 +167,13 @@ private:
     std::vector<float> delay_buf_l_;
     std::vector<float> delay_buf_r_;
     uint32_t delay_idx_ = 0;
+
+    // Стерео ревербератор
+    std::vector<float> reverb_buf_l_;
+    std::vector<float> reverb_buf_r_;
+    uint32_t reverb_idx_ = 0;
+
+    NetAudioStreamer net_streamer_;
 
     std::atomic<bool> running_{false};
     std::atomic<int> current_card_{-1};
