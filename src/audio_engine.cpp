@@ -303,11 +303,12 @@ void AudioEngine::toggleOutputOverride() {
 void AudioEngine::cycleBufferSize() {
     uint32_t cur = target_period_frames_.load(std::memory_order_relaxed);
     uint32_t next = 1024;
-    if (cur == 128) next = 256;
+    if (cur == 96) next = 128;
+    else if (cur == 128) next = 256;
     else if (cur == 256) next = 512;
     else if (cur == 512) next = 1024;
     else if (cur == 1024) next = 2048;
-    else next = 128;
+    else next = 96;
     target_period_frames_.store(next, std::memory_order_relaxed);
     std::printf("[AudioEngine] Buffer size cycled to %u frames (%.1f ms)\n",
                 next, (next * 1000.0f) / active_sample_rate_.load());

@@ -171,3 +171,11 @@
 * **Kernel snd-usb-audio nrpacks=1:**
   * Зафіксовано параметр `nrpacks=1` у `/storage/.config/modprobe.d/snd-usb-audio.conf` та `src/hw_monitor.cpp`.
   * Передача кожного ізохронного URB без затримки групування зменшує навантаження на обмежені FIFO-буфери `dwc2`.
+
+## [2026-10-25 15:16] MIDI Bulk Read Optimization (64-byte Buffer) & 96-Sample Low-Latency Mode
+* **MIDI Block-Read Optimization (src/midi_engine.cpp):**
+  * Замінено побайтове читання `read(fd, &byte, 1)` на блоковий виклик `read(fd, rx_buf, 64)` з послідовним розбором у пам'яті.
+  * Усунуто лавину системних викликів та одиночних запитів Bulk IN на контролер `dwc2`, які переривали ізохронний планувальник аудіо при отриманні потоків MIDI Clock та CC/NRPN.
+* **96-Sample Buffer Option (2.0 ms @ 48k):**
+  * Додано розмір блоку 96 семплів у послідовність перемикання `cycleBufferSize()`: `96 -> 128 -> 256 -> 512 -> 1024 -> 2048`.
+  * Перевірено успішну роботу ультранизької затримки на інтерфейсі M-Vave Cube Baby.

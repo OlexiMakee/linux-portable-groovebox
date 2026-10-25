@@ -111,8 +111,8 @@ void MidiEngine::workerLoop() {
             auto& p = ports[c];
             if (p.fd < 0) continue;
 
-            uint8_t byte = 0;
-            ssize_t n = ::read(p.fd, &byte, 1);
+            uint8_t rx_buf[64];
+            ssize_t n = ::read(p.fd, rx_buf, sizeof(rx_buf));
             if (n < 0) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     continue;
@@ -126,76 +126,80 @@ void MidiEngine::workerLoop() {
 
             any_bytes_read = true;
 
-            // 1. System Real-Time Messages (0xF8..0xFF) — обробляються миттєво без скидання Running Status!
-            if (byte >= 0xF8) {
-                if (byte == 0xF8) {
-                    // MIDI Clock Tick (24 PPQN) -> PLL фільтр оцінки BPM
-                    auto now = std::chrono::steady_clock::now();
-                    float dt_sec = std::chrono::duration<float>(now - last_clock_tp).count();
-                    last_clock_tp = now;
-                    if (dt_sec > 0.005f && dt_sec < 0.25f) {
-                        float inst_bpm = 60.0f / (dt_sec * 24.0f);
-                        float cur_bpm = pll_bpm_.load(std::memory_order_relaxed);
-                        // One-pole low-pass PLL filter для усунення USB-джитеру
-                        pll_bpm_.store(cur_bpm * 0.90f + inst_bpm * 0.10f, std::memory_order_relaxed);
-                        ext_sync_.store(true, std::memory_order_relaxed);
-                    }
-                    rx_clocks_.fetch_add(1, std::memory_order_relaxed);
-                    // Кожні 6 тіків (24 PPQN / 4 = 6 тіків на 1/16 ноту) просуваємо секвенсор
-                    if (++clock_subdiv >= 6) {
+            for (ssize_t b = 0; b < n; ++b) {
+                uint8_t byte = rx_buf[b];
+
+                // 1. System Real-Time Messages (0xF8..0xFF) — обробляються миттєво без скидання Running Status!
+                if (byte >= 0xF8) {
+                    if (byte == 0xF8) {
+                        // MIDI Clock Tick (24 PPQN) -> PLL фільтр оцінки BPM
+                        auto now = std::chrono::steady_clock::now();
+                        float dt_sec = std::chrono::duration<float>(now - last_clock_tp).count();
+                        last_clock_tp = now;
+                        if (dt_sec > 0.005f && dt_sec < 0.25f) {
+                            float inst_bpm = 60.0f / (dt_sec * 24.0f);
+                            float cur_bpm = pll_bpm_.load(std::memory_order_relaxed);
+                            // One-pole low-pass PLL filter для усунення USB-джитеру
+                            pll_bpm_.store(cur_bpm * 0.90f + inst_bpm * 0.10f, std::memory_order_relaxed);
+                            ext_sync_.store(true, std::memory_order_relaxed);
+                        }
+                        rx_clocks_.fetch_add(1, std::memory_order_relaxed);
+                        // Кожні 6 тіків (24 PPQN / 4 = 6 тіків на 1/16 ноту) просуваємо секвенсор
+                        if (++clock_subdiv >= 6) {
+                            clock_subdiv = 0;
+                            if (on_step16_) on_step16_();
+                        }
+                    } else if (byte == 0xFA) {
+                        // MIDI Start -> Скидаємо секвенсор на крок 0 і запускаємо Play!
                         clock_subdiv = 0;
-                        if (on_step16_) on_step16_();
+                        ext_sync_.store(true, std::memory_order_relaxed);
+                        if (on_transport_) on_transport_(true, true);
+                    } else if (byte == 0xFB) {
+                        // MIDI Continue -> Продовжуємо Play з поточного кроку
+                        ext_sync_.store(true, std::memory_order_relaxed);
+                        if (on_transport_) on_transport_(true, false);
+                    } else if (byte == 0xFC) {
+                        // MIDI Stop -> Зупиняємо секвенсор
+                        if (on_transport_) on_transport_(false, false);
                     }
-                } else if (byte == 0xFA) {
-                    // MIDI Start -> Скидаємо секвенсор на крок 0 і запускаємо Play!
-                    clock_subdiv = 0;
-                    ext_sync_.store(true, std::memory_order_relaxed);
-                    if (on_transport_) on_transport_(true, true);
-                } else if (byte == 0xFB) {
-                    // MIDI Continue -> Продовжуємо Play з поточного кроку
-                    ext_sync_.store(true, std::memory_order_relaxed);
-                    if (on_transport_) on_transport_(true, false);
-                } else if (byte == 0xFC) {
-                    // MIDI Stop -> Зупиняємо секвенсор
-                    if (on_transport_) on_transport_(false, false);
+                    continue;
                 }
-                continue;
-            }
 
-            // 2. System Common (0xF0..0xF7) — ігноруємо дані SysEx до наступного статусу
-            if (byte >= 0xF0) {
-                p.status_byte = 0;
-                p.data_idx = 0;
-                continue;
-            }
+                // 2. System Common (0xF0..0xF7) — ігноруємо дані SysEx до наступного статусу
+                if (byte >= 0xF0) {
+                    p.status_byte = 0;
+                    p.data_idx = 0;
+                    continue;
+                }
 
-            // 3. Channel Voice Messages (0x80..0xEF)
-            if (byte & 0x80) {
-                p.status_byte = byte;
-                p.data_idx = 0;
-                continue;
-            }
+                // 3. Channel Voice Messages (0x80..0xEF)
+                if (byte & 0x80) {
+                    p.status_byte = byte;
+                    p.data_idx = 0;
+                    continue;
+                }
 
-            if (p.status_byte == 0) continue;
-            p.data_buf[p.data_idx++] = byte;
+                if (p.status_byte == 0) continue;
+                p.data_buf[p.data_idx++] = byte;
 
-            uint8_t msg_type = p.status_byte & 0xF0;
-            uint8_t channel = p.status_byte & 0x0F; // 0..15
+                uint8_t msg_type = p.status_byte & 0xF0;
+                uint8_t channel = p.status_byte & 0x0F; // 0..15
 
-            if (msg_type == 0xC0 || msg_type == 0xD0) {
-                p.data_idx = 0; // 1-byte messages
-            } else if (p.data_idx >= 2) {
-                p.data_idx = 0;
-                if (msg_type == 0x90 && p.data_buf[1] > 0) {
-                    // Note On на каналах 1..4 -> тригерить відповідну доріжку 0..3
-                    if (channel < 4 && on_note_) {
-                        rx_notes_.fetch_add(1, std::memory_order_relaxed);
-                        on_note_(channel, p.data_buf[0], static_cast<float>(p.data_buf[1]) / 127.0f);
-                    }
-                } else if (msg_type == 0xB0 && on_cc_) {
-                    // Control Change (CC) на каналах 1..4
-                    if (channel < 4) {
-                        on_cc_(channel, p.data_buf[0], static_cast<float>(p.data_buf[1]) / 127.0f);
+                if (msg_type == 0xC0 || msg_type == 0xD0) {
+                    p.data_idx = 0; // 1-byte messages
+                } else if (p.data_idx >= 2) {
+                    p.data_idx = 0;
+                    if (msg_type == 0x90 && p.data_buf[1] > 0) {
+                        // Note On на каналах 1..4 -> тригерить відповідну доріжку 0..3
+                        if (channel < 4 && on_note_) {
+                            rx_notes_.fetch_add(1, std::memory_order_relaxed);
+                            on_note_(channel, p.data_buf[0], static_cast<float>(p.data_buf[1]) / 127.0f);
+                        }
+                    } else if (msg_type == 0xB0 && on_cc_) {
+                        // Control Change (CC) на каналах 1..4
+                        if (channel < 4) {
+                            on_cc_(channel, p.data_buf[0], static_cast<float>(p.data_buf[1]) / 127.0f);
+                        }
                     }
                 }
             }
