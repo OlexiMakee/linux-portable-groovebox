@@ -45,6 +45,8 @@ int snd_pcm_set_params(
 );
 snd_pcm_sframes_t snd_pcm_writei(snd_pcm_t* pcm, const void* buffer, snd_pcm_uframes_t size);
 int snd_pcm_recover(snd_pcm_t* pcm, int err, int silent);
+int snd_pcm_drop(snd_pcm_t* pcm);
+int snd_pcm_prepare(snd_pcm_t* pcm);
 const char* snd_strerror(int errnum);
 }
 #endif
@@ -86,29 +88,37 @@ AudioEngine::~AudioEngine() {
 void AudioEngine::initDefaultPattern() {
     std::lock_guard<std::mutex> lock(state_mutex_);
 
-    // Початкова розкладка 4 доріжок (кожну можна змінити в меню L2:SYNTH!)
-    tracks_[0] = {EngineType::kDrumSyn,  {0.32f, 0.65f, 0.42f, 0.15f, 0.45f, 0.50f}, 0.92f,  0.00f, 0.05f, false};
-    tracks_[1] = {EngineType::kVaMono,   {0.48f, 0.35f, 0.55f, 0.38f, 0.60f, 0.50f}, 0.85f, -0.15f, 0.18f, false};
-    tracks_[2] = {EngineType::kAcid303,  {0.42f, 0.68f, 0.72f, 0.28f, 0.65f, 0.00f}, 0.80f,  0.20f, 0.32f, false};
-    tracks_[3] = {EngineType::kFm2Op,    {0.65f, 0.45f, 0.50f, 0.30f, 0.25f, 0.45f}, 0.75f, -0.25f, 0.40f, false};
+    // Початкова розкладка 4 доріжок під класичну композицію Моцарта:
+    // T1: Оркестрові литаври / маршовий ритм (Drum Syn)
+    // T2: Класичний бас Альберті (VA Synth)
+    // T3: Віртуозна тема "Rondo Alla Turca" KV 331 (Acid 303 Lead)
+    // T4: Клавесин / гармонія струнних (2-Op FM)
+    tracks_[0] = {EngineType::kDrumSyn,  {0.28f, 0.50f, 0.40f, 0.12f, 0.35f, 0.50f}, 0.88f,  0.00f, 0.08f, false};
+    tracks_[1] = {EngineType::kVaMono,   {0.45f, 0.28f, 0.48f, 0.25f, 0.50f, 0.45f}, 0.82f, -0.15f, 0.15f, false};
+    tracks_[2] = {EngineType::kAcid303,  {0.62f, 0.55f, 0.60f, 0.22f, 0.70f, 0.00f}, 0.85f,  0.15f, 0.25f, false};
+    tracks_[3] = {EngineType::kFm2Op,    {0.55f, 0.35f, 0.45f, 0.28f, 0.25f, 0.40f}, 0.70f, -0.20f, 0.30f, false};
 
-    // 16-кроковий стартовий грув з Parameter Locks
-    static constexpr int kKick[16] = {36, 0, 0, 0,  36, 0, 0, 0,  36, 0, 0, 36,  36, 0, 48, 0};
-    static constexpr int kBass[16] = {0,  0, 36, 36, 0, 39, 36, 0,  0, 36, 48, 36, 0, 41, 43, 46};
-    static constexpr int kAcid[16] = {48, 0, 60, 48, 0, 55, 58, 0, 48, 60, 0, 55, 51, 0, 58, 60};
-    static constexpr int kFm[16]   = {0,  0, 0,  0, 67, 0,  0, 72,  0,  0, 0,  0, 67, 0, 70,  0};
+    // 16-кроковий класичний патерн: W. A. Mozart — "Rondo Alla Turca" (KV 331)
+    // Мелодія (T3): B4, A4, G#4, A4, C5, -, C5, -, D5, C5, B4, C5, E5, -, E5, -
+    static constexpr int kMozartLead[16] = {71, 69, 68, 69, 72, 0, 72, 0, 74, 72, 71, 72, 76, 0, 76, 0};
+    // Бас Альберті (T2): A2, E3, C3, E3, A2, E3, C3, E3, A2, E3, C3, E3, A2, E3, C3, E3
+    static constexpr int kAlbertiBass[16] = {45, 52, 48, 52, 45, 52, 48, 52, 45, 52, 48, 52, 45, 52, 48, 52};
+    // Гармонійна підкладка клавесину (T4): Am (69/72/76) на сильні долі
+    static constexpr int kMozartFm[16]   = {69, 0, 0, 0,  72, 0, 0, 0,  74, 0, 0, 0,  76, 0, 0, 0};
+    // Оркестрові литаври та маршовий ритм (T1)
+    static constexpr int kMozartDrums[16] = {36, 0, 42, 0, 38, 0, 42, 0, 36, 0, 42, 0, 38, 0, 42, 0};
 
     for (int s = 0; s < 16; ++s) {
-        pattern_[0][s] = {kKick[s] > 0, static_cast<uint8_t>(kKick[s] > 0 ? kKick[s] : 36), 0.95f, false, 0.5f};
-        pattern_[1][s] = {kBass[s] > 0, static_cast<uint8_t>(kBass[s] > 0 ? kBass[s] : 36), 0.85f, false, 0.5f};
+        pattern_[0][s] = {kMozartDrums[s] > 0, static_cast<uint8_t>(kMozartDrums[s] > 0 ? kMozartDrums[s] : 36), 0.90f, false, 0.5f};
+        pattern_[1][s] = {kAlbertiBass[s] > 0, static_cast<uint8_t>(kAlbertiBass[s] > 0 ? kAlbertiBass[s] : 45), 0.82f, false, 0.5f};
         pattern_[2][s] = {
-            kAcid[s] > 0,
-            static_cast<uint8_t>(kAcid[s] > 0 ? kAcid[s] : 48),
-            (s % 3 == 0) ? 1.0f : 0.75f,
-            (s == 2 || s == 9 || s == 15),
-            0.82f
+            kMozartLead[s] > 0,
+            static_cast<uint8_t>(kMozartLead[s] > 0 ? kMozartLead[s] : 72),
+            (s == 4 || s == 6 || s == 12 || s == 14) ? 0.95f : 0.80f,
+            (s == 4 || s == 12),
+            0.85f
         };
-        pattern_[3][s] = {kFm[s] > 0, static_cast<uint8_t>(kFm[s] > 0 ? kFm[s] : 67), 0.85f, false, 0.5f};
+        pattern_[3][s] = {kMozartFm[s] > 0, static_cast<uint8_t>(kMozartFm[s] > 0 ? kMozartFm[s] : 69), 0.75f, false, 0.5f};
     }
 }
 
@@ -216,7 +226,7 @@ bool AudioEngine::start(int card_index, bool is_usb_48k, bool headphones_plugged
     const bool use_usb = (card_index > 0) && is_usb_48k && !force_internal_.load(std::memory_order_relaxed);
     const uint32_t target_rate = use_usb ? static_cast<uint32_t>(prof.usb_rate) : static_cast<uint32_t>(prof.internal_rate);
     active_sample_rate_.store(target_rate);
-    active_period_frames_.store(256);
+    active_period_frames_.store(512);
 
     applyRk817HardwareMux(headphones_plugged);
     applyRk817HardwareVolume(params_.master_volume.load());
@@ -533,8 +543,8 @@ void AudioEngine::alsaThreadLoop() {
     int card = current_card_.load();
     const bool use_usb = (card > 0) && !force_internal_.load(std::memory_order_relaxed);
     const uint32_t rate = active_sample_rate_.load();
-    // 32 мс буфер (1536 семплів = 6 періодів по 256) для стабільної черги URB без обвалу dwc2
-    const unsigned int latency_us = use_usb ? 32000u : 16000u;
+    // 64 мс буфер (6 періодів по 512) для стабільної черги URB без обвалу dwc2
+    const unsigned int latency_us = use_usb ? 64000u : 16000u;
 
     // 1. Якщо підключено зовнішній USB Audio інтерфейс і не ввімкнено оверрайд FORCE INTERNAL,
     //    відкриваємо ВИКЛЮЧНО його (щоб не було конфлікту двох різних кварцових генераторів USB vs I2S RK817!)
@@ -604,7 +614,7 @@ void AudioEngine::alsaThreadLoop() {
         }
     }
 
-    constexpr uint32_t kBlockFrames = 256;
+    constexpr uint32_t kBlockFrames = 512;
     active_period_frames_.store(kBlockFrames, std::memory_order_relaxed);
     std::array<int16_t, kBlockFrames * 2> buf16{};
     std::array<int32_t, kBlockFrames * 2> buf32{};
@@ -635,7 +645,7 @@ void AudioEngine::alsaThreadLoop() {
         }
     };
 
-    // Pre-roll: заповнюємо апаратний буфер ALSA 4 періодами (1024 семпли = 21.3 мс)
+    // Pre-roll: заповнюємо апаратний буфер ALSA 4 періодами (2048 семплів = 42.6 мс)
     if (pcm) {
         for (int p = 0; p < 4; ++p) {
             renderBlock(buf16.data(), kBlockFrames, rate);
@@ -650,8 +660,13 @@ void AudioEngine::alsaThreadLoop() {
             snd_pcm_sframes_t written = writeBlock(buf16.data());
             if (written < 0) {
                 xrun_count_.fetch_add(1, std::memory_order_relaxed);
-                std::fprintf(stderr, "[ALSA] Write error %ld: %s, recovering...\n", written, snd_strerror(static_cast<int>(written)));
-                snd_pcm_recover(pcm, static_cast<int>(written), 1);
+                std::fprintf(stderr, "[ALSA] Write error %ld: %s, dropping DMA and recovering...\n",
+                             written, snd_strerror(static_cast<int>(written)));
+                snd_pcm_drop(pcm);
+                int prep_err = snd_pcm_prepare(pcm);
+                if (prep_err < 0) {
+                    snd_pcm_recover(pcm, prep_err, 1);
+                }
                 // Pre-roll після відновлення, щоб запобігти повторному спустошенню
                 for (int p = 0; p < 2; ++p) {
                     renderBlock(buf16.data(), kBlockFrames, rate);

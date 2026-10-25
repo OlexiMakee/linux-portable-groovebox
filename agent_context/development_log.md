@@ -135,3 +135,15 @@
 * **Peak CPU Session Monitoring:**
   * У `src/hw_monitor.hpp` та `src/hw_monitor.cpp` додано відстеження пікового значення CPU за всю поточну сесію (`cpu_max_percent`).
   * У `src/ui_renderer.cpp` на вкладці **[L1] HW/SYS** додано відображення піку: `SYSTEM : CPU %2.0f%% [MAX %2.0f%%]`.
+
+## [2026-10-25 14:08] Mozart Default Pattern (KV 331) & 512-Sample ALSA DMA Flush
+* **Mozart "Rondo Alla Turca" Default Sequence:**
+  * Запрограмовано класичну 16-крокову секвенцію В. А. Моцарта ("Rondo Alla Turca" KV 331 / Турецький марш) у `initDefaultPattern()`:
+    * T1 (Drum Syn): маршовий ритм та оркестрові литаври.
+    * T2 (VA Synth): класичний бас Альберті (A2, E3, C3, E3...).
+    * T3 (Acid 303 Lead): віртуозна партія Турецького маршу (B4, A4, G#4, A4, C5, D5, C5, B4, C5, E5...).
+    * T4 (2-Op FM): гармонійна підкладка клавесину (A-moll / D-moll).
+* **ALSA dwc2 DMA Flushing & 512-Frame Period:**
+  * Збільшено розмір блоку `kBlockFrames` до 512 семплів (10.66 мс), що знизило частоту переривань на процесор з 187 Гц до 93 Гц.
+  * Буфер USB розширено до 64 мс (`latency_us = 64000u`).
+  * При виникненні XRUN тепер викликається `snd_pcm_drop(pcm)` для повного скидання черги DMA перед `snd_pcm_prepare()`, що ліквідує зависання драйвера зі статусом `prepare failed: Broken pipe`.
