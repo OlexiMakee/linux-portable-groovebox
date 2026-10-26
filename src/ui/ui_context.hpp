@@ -6,6 +6,8 @@
 #include "hw_monitor.hpp"
 #include "input_manager.hpp"
 #include "midi_engine.hpp"
+#include "pattern_manager.hpp"
+#include "sampler_engine.hpp"
 
 #include <array>
 #include <cstdint>
@@ -59,6 +61,12 @@ struct AppModel {
 
     // Подвійний послідовний арпеджиратор та процедурний генератор
     Arpeggiator arpeggiator;
+
+    // Elektron 8-банківська система патернів та менеджер проєктів
+    PatternManager pattern_mgr;
+
+    // Семплер, лупер та слайсер
+    SamplerEngine sampler;
 
     // Курсор (рядок/колонка/скрол) для кожного табличного вікна
     std::array<int, kViewCount> grid_row{};

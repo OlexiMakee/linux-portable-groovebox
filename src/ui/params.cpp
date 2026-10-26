@@ -346,6 +346,95 @@ ParamRegistry::ParamRegistry() {
     }));
     add(info("SYS.XRUN", "XRUNS", [](const UiContext& c) { return std::to_string(c.tel.xrun_count); }));
 
+    // ===== ELEKTRON PATTERNS & PROJECT PERSISTENCE =====
+    {
+        Param p;
+        p.id = "SYS.BANK";
+        p.label = "BANK (A-H)";
+        p.value = [](const UiContext& c) {
+            char b[16];
+            std::snprintf(b, sizeof(b), "BANK %c", 'A' + c.app.pattern_mgr.currentBank());
+            return std::string(b);
+        };
+        p.step = [](UiContext& c, int dir, bool) {
+            int b = (c.app.pattern_mgr.currentBank() + dir + kNumBanks) % kNumBanks;
+            c.app.pattern_mgr.selectPattern(b, c.app.pattern_mgr.currentPattern(), false);
+            c.app.pattern_mgr.applyCurrent(c.audio, c.app.bpm);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SYS.PAT";
+        p.label = "PATTERN";
+        p.value = [](const UiContext& c) { return c.app.pattern_mgr.activePatternName(); };
+        p.step = [](UiContext& c, int dir, bool) {
+            int p_idx = (c.app.pattern_mgr.currentPattern() + dir + kPatternsPerBank) % kPatternsPerBank;
+            c.app.pattern_mgr.selectPattern(c.app.pattern_mgr.currentBank(), p_idx, false);
+            c.app.pattern_mgr.applyCurrent(c.audio, c.app.bpm);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SYS.SAVE";
+        p.label = "SAVE PROJ";
+        p.value = [](const UiContext&) { return "PRESS [A]"; };
+        p.step = [](UiContext& c, int, bool) {
+            c.app.pattern_mgr.saveProject(PatternManager::defaultProjectPath(), c.audio, c.app.bpm);
+            c.app.last_action = "PROJECT SAVED";
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SYS.LOAD";
+        p.label = "LOAD PROJ";
+        p.value = [](const UiContext&) { return "PRESS [A]"; };
+        p.step = [](UiContext& c, int, bool) {
+            c.app.pattern_mgr.loadProject(PatternManager::defaultProjectPath(), c.audio, c.app.bpm);
+            c.app.last_action = "PROJECT LOADED";
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SYS.SAMPLER";
+        p.label = "SAMPLER REC";
+        p.value = [](const UiContext& c) {
+            switch (c.app.sampler.recordingState()) {
+                case RecState::kArmed: return std::string("ARMED (THRESHOLD)");
+                case RecState::kRecording: return std::string("RECORDING...");
+                case RecState::kFinished: return std::string("SAMPLE READY");
+                default: return std::string("IDLE (A: ARM)");
+            }
+        };
+        p.step = [](UiContext& c, int, bool) {
+            if (c.app.sampler.recordingState() == RecState::kIdle) {
+                c.app.sampler.armRecording();
+                c.app.last_action = "REC ARMED";
+            } else if (c.app.sampler.recordingState() == RecState::kRecording) {
+                c.app.sampler.stopRecording();
+                c.app.last_action = "REC STOPPED";
+            } else {
+                c.app.sampler.armRecording();
+            }
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SYS.SLICES";
+        p.label = "SLICER GRID";
+        p.value = [](const UiContext& c) { return std::to_string(c.app.sampler.sliceCount()) + " SLICES"; };
+        p.step = [](UiContext& c, int dir, bool) {
+            int cnt = c.app.sampler.sliceCount();
+            cnt = dir > 0 ? (cnt < 16 ? 16 : 32) : (cnt > 16 ? 16 : 8);
+            c.app.sampler.sliceGrid(cnt);
+        };
+        add(std::move(p));
+    }
+
     // ===== STEP.* — крок під курсором секвенсора (INSPECT) =====
     add(stepParam("STEP.TYPE", "TYPE",
         [](const SequencerStep& s, const TrackParameters&) {

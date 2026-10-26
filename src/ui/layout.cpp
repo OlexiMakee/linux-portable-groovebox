@@ -100,6 +100,12 @@ void setupAppLayout(UiShell& shell) {
         sys_spec.tab_title = [](const UiContext&) { return "SYS"; };
         sys_spec.header = [](const UiContext&) { return "GLOBAL SYSTEM SETTINGS"; };
         sys_spec.rows = {
+            {"", {"SYS.BANK"}},
+            {"", {"SYS.PAT"}},
+            {"", {"SYS.SAVE"}},
+            {"", {"SYS.LOAD"}},
+            {"", {"SYS.SAMPLER"}},
+            {"", {"SYS.SLICES"}},
             {"", {"SYS.BUF"}},
             {"", {"SYS.USB"}},
             {"", {"SYS.SR"}},
