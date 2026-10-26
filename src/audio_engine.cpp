@@ -377,6 +377,17 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
     int v_idx = row_voice_[row];
     if (tracks_[t].muted) return;
 
+    if (tracks_[t].engine == EngineType::kMidiOut) {
+        int ch = std::clamp(static_cast<int>(tracks_[t].p[0] * 15.99f), 0, 15);
+        if (midi_out_cb_) {
+            midi_out_cb_(ch, midi_note, std::clamp(velocity, 0.05f, 1.0f), true);
+        }
+        voices_[row].active = true;
+        voices_[row].note_num = static_cast<uint8_t>(midi_note);
+        voices_[row].gate_samples_left = static_cast<int32_t>(0.125f * std::clamp(gate_len, 0.1f, 2.0f) * static_cast<float>(active_sample_rate_.load()));
+        return;
+    }
+
     auto& v = voices_[row];
     const float sr = static_cast<float>(active_sample_rate_.load());
     v.active = true;
@@ -842,10 +853,18 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             if (v.gate_samples_left > 0) {
                 v.gate_samples_left -= 1;
                 if (v.gate_samples_left <= 0) {
+                    if (tp.engine == EngineType::kMidiOut) {
+                        int ch = std::clamp(static_cast<int>(tp.p[0] * 15.99f), 0, 15);
+                        if (midi_out_cb_) midi_out_cb_(ch, v.note_num, 0.0f, false);
+                        v.active = false;
+                        continue;
+                    }
                     v.amp_adsr.release(tp.release, static_cast<float>(sample_rate));
                     v.filter_adsr.release(tp.release, static_cast<float>(sample_rate));
                 }
             }
+
+            if (tp.engine == EngineType::kMidiOut) continue;
 
             float amp = v.amp_adsr.process();
             float f_env = v.filter_adsr.process();

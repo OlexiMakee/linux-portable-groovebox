@@ -7,24 +7,30 @@
 
 namespace groovebox {
 
-// Типи синтезаторних движків (легко додавати нові — достатньо дописати enum та масив метаданих)
+// Типи синтезаторних та семплерних движків
 enum class EngineType : uint8_t {
-    kVaMono   = 0, // PolyBLEP Saw/Pulse + Sub Osc
-    kFm2Op    = 1, // 2-Operator FM (Ratio, Index, Feedback)
-    kAcid303  = 2, // Acid 303 Bassline (Waveform, Cutoff, Reso, EnvMod, Accent)
-    kChordPad = 3, // 4-Voice Chord Synth (Chord Type, Detune, Cutoff, Attack/Decay)
-    kDrumSyn  = 4, // Analog Drum Synth (Kick/Tom/Zap/Noise Perc)
-    kCount    = 5
+    kVaMono       = 0, // PolyBLEP Saw/Pulse + Sub Osc
+    kFm2Op        = 1, // 2-Operator FM (Ratio, Index, Feedback)
+    kAcid303      = 2, // Acid 303 Bassline (Waveform, Cutoff, Reso, EnvMod, Accent)
+    kChordPad     = 3, // 4-Voice Chord Synth (Chord Type, Detune, Cutoff, Attack/Decay)
+    kDrumSyn      = 4, // Analog Drum Synth (Kick/Tom/Zap/Noise Perc)
+    kMidiOut      = 5, // External MIDI Gear Sequencer Track
+    kSampleDrums  = 6, // Sample-based Classic Drum Machine Kit
+    kSliceSampler = 7, // Loop Slicer Sampler with P-Lock Slices
+    kCount        = 8
 };
 
 inline constexpr const char* getEngineTypeName(EngineType type) {
     switch (type) {
-        case EngineType::kVaMono:   return "VA SAW+SUB";
-        case EngineType::kFm2Op:    return "2-OP FM";
-        case EngineType::kAcid303:  return "ACID 303";
-        case EngineType::kChordPad: return "CHORD PAD";
-        case EngineType::kDrumSyn:  return "ANALOG DRUM";
-        default:                    return "UNKNOWN";
+        case EngineType::kVaMono:       return "VA SAW+SUB";
+        case EngineType::kFm2Op:        return "2-OP FM";
+        case EngineType::kAcid303:      return "ACID 303";
+        case EngineType::kChordPad:     return "CHORD PAD";
+        case EngineType::kDrumSyn:      return "ANALOG DRUM";
+        case EngineType::kMidiOut:      return "MIDI OUT";
+        case EngineType::kSampleDrums:  return "SAMPLE DRUMS";
+        case EngineType::kSliceSampler: return "SLICER";
+        default:                        return "UNKNOWN";
     }
 }
 
@@ -222,7 +228,13 @@ inline constexpr const char* kParamNames[static_cast<int>(EngineType::kCount)][k
     // kChordPad
     {"CUTOFF", "RESO", "CHORD", "DECAY", "DETUNE", "ENV MOD"},
     // kDrumSyn
-    {"TUNE", "SWEEP", "DECAY", "NOISE", "DRIVE", "CLICK"}
+    {"TUNE", "SWEEP", "DECAY", "NOISE", "DRIVE", "CLICK"},
+    // kMidiOut
+    {"CHANNEL", "CC A", "CC B", "CC C", "CC D", "PROGRAM"},
+    // kSampleDrums
+    {"KIT SEL", "PITCH", "DECAY", "FILTER", "DRIVE", "START"},
+    // kSliceSampler
+    {"SAMPLE", "SLICE", "PITCH", "DECAY", "FILTER", "REVERSE"}
 };
 
 inline constexpr const char* getParamName(EngineType type, int param_idx) {

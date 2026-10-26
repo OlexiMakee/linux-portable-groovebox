@@ -99,6 +99,9 @@ public:
     void noteOff(int track, int midi_note);
     void noteOffAll();
 
+    using MidiOutCallback = std::function<void(int channel, int note, float velocity, bool note_on)>;
+    void setMidiOutCallback(MidiOutCallback cb) { midi_out_cb_ = std::move(cb); }
+
     // Тригер кроку секвенсора (master_tick 0..unlimited)
     void triggerSequencerStep(uint32_t master_tick);
     uint32_t getPatternLength() const { return pattern_length_.load(std::memory_order_relaxed); }
@@ -148,6 +151,7 @@ private:
     std::array<bool, kTotalRows> prev_step_fired_{};
     uint32_t voice_alloc_counter_ = 0;
     int allocateVoice(int track, int midi_note);
+    MidiOutCallback midi_out_cb_;
 
     struct VoiceState {
         bool active = false;
