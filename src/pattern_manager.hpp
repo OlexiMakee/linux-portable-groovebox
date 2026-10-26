@@ -65,7 +65,7 @@ private:
     int queued_bank_ = -1;
     int queued_pattern_ = -1;
 
-    std::array<PatternData, kTotalPatterns> patterns_{};
+    std::vector<PatternData> patterns_;
 };
 
 } // namespace groovebox

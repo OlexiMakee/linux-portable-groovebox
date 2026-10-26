@@ -13,6 +13,7 @@ constexpr uint32_t kProjectVersion = 1u;
 } // namespace
 
 PatternManager::PatternManager() {
+    patterns_.resize(kTotalPatterns);
     for (int i = 0; i < kTotalPatterns; ++i) {
         int b = i / kPatternsPerBank;
         int p = i % kPatternsPerBank;

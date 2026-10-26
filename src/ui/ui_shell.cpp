@@ -216,9 +216,18 @@ void UiShell::renderHud(Canvas& cv, const UiContext& ctx) {
     std::string f_id = cur_v ? cur_v->focusId(ctx) : "GROOVEBOX";
     cv.textClip(60, hud_y + 13, f_id, 34, palette::kAccentOrange);
 
-    // Рядок 3: Останній статус/дія
-    std::string act_info = "ACT: " + ctx.app.last_action;
-    cv.textClip(60, hud_y + 22, act_info, 34, palette::kTextDim);
+    // Рядок 3: Підказки стіків L3/R3 та останній статус
+    const ViewId active_v_id = ctx.app.step_inspector_open ? ViewId::kInspect : ctx.app.active_view;
+    const bool is_arp = (active_v_id == ViewId::kArp);
+    const char* l3_label = is_arp ? "L3:BCK" : "L3:ARP";
+    const char* r3_label = (cur_layer == Layer::kSelect || is_arp || active_v_id == ViewId::kSynth) ? "R3:RND" : "R3:INIT";
+    ColorRGB l3_col = ctx.in.l3 ? palette::kParamTrig : (ctx.audio.getFillMode() ? palette::kLevelWarnClip : palette::kAccentCyan);
+    ColorRGB r3_col = ctx.in.r3 ? palette::kParamTrig : palette::kAccentOrange;
+
+    cv.text(60, hud_y + 22, l3_label, l3_col);
+    cv.text(90, hud_y + 22, r3_label, r3_col);
+    cv.line(120, hud_y + 22, 120, hud_y + 28, palette::kGridDim);
+    cv.textClip(124, hud_y + 22, ctx.app.last_action, 19, palette::kTextDim);
 
     // 4. R-Stick Box з динамічною мішенню
     cv.text(206, hud_y + 2, r_dest, palette::kAccentOrange);
@@ -228,7 +237,6 @@ void UiShell::renderHud(Canvas& cv, const UiContext& ctx) {
     widgets::abxy(cv, 244, hud_y + 18, ctx.in);
 
     // 6. Динамічні підписи кнопок (генеруються суворо з Keymap!)
-    const ViewId active_v_id = ctx.app.step_inspector_open ? ViewId::kInspect : ctx.app.active_view;
     std::string lbl_x = router_.keymap().actionLabel(active_v_id, cur_layer, Button::kX);
     std::string lbl_y = router_.keymap().actionLabel(active_v_id, cur_layer, Button::kY);
     std::string lbl_a = router_.keymap().actionLabel(active_v_id, cur_layer, Button::kA);
