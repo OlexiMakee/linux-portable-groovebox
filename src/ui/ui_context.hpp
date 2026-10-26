@@ -1,5 +1,6 @@
 #pragma once
 
+#include "arpeggiator.hpp"
 #include "audio_engine.hpp"
 #include "config.hpp"
 #include "hw_monitor.hpp"
@@ -17,10 +18,12 @@ class UiShell;
 enum class ViewId : uint8_t {
     kSeq = 0,  // SEQ     — матричний секвенсор
     kSynth,    // SYNTH   — таблиця параметрів інструмента обраного треку
+    kPerf,     // PERF    — жива гра (педи, октави, макроси)
     kFx,       // FX      — send-ефекти та вихідна шина
     kMix,      // MIX     — мікшер треків + MASTER
     kScope,    // SCOPE   — осцилограф + VU
     kSys,      // SYS     — системні налаштування
+    kArp,      // ARP     — параметри подвійного арпеджиратора та евклідового генератора
     kInspect,  // INSPECT — інспектор кроку (popup поверх SEQ, поки затиснута A)
     kCount
 };
@@ -28,7 +31,7 @@ enum class ViewId : uint8_t {
 inline constexpr int kViewCount = static_cast<int>(ViewId::kCount);
 
 inline constexpr const char* kViewNames[kViewCount] = {
-    "SEQ", "SYNTH", "FX", "MIX", "SCOPE", "SYS", "INSPECT"
+    "SEQ", "SYNTH", "PERF", "FX", "MIX", "SCOPE", "SYS", "ARP", "INSPECT"
 };
 
 inline constexpr const char* viewName(ViewId v) {
@@ -50,6 +53,12 @@ struct AppModel {
     int cursor_row = 0;     // 0..15 (+ слот [+])
     int cursor_step = 0;    // 0..127
     int seq_page = 0;
+
+    // Режим перформансу (жива гра на педах/інструментах)
+    int perf_octave = 3;    // Октава живої гри C2..C6
+
+    // Подвійний послідовний арпеджиратор та процедурний генератор
+    Arpeggiator arpeggiator;
 
     // Курсор (рядок/колонка/скрол) для кожного табличного вікна
     std::array<int, kViewCount> grid_row{};

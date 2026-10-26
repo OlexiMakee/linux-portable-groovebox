@@ -415,6 +415,161 @@ ParamRegistry::ParamRegistry() {
             const int n = static_cast<int>(TrigCondition::kCount);
             s.condition = static_cast<TrigCondition>((static_cast<int>(s.condition) + dir + n) % n);
         }));
+
+    // =========================================================================
+    // 7. ДВОКАСКАДНИЙ АРПЕДЖИРАТОР ТА ПРОЦЕДУРНИЙ ГЕНЕРАТОР (ARP.*)
+    // =========================================================================
+    {
+        Param p;
+        p.id = "ARP.SCALE";
+        p.label = "SCALE";
+        p.value = [](const UiContext& c) { return std::string(getScaleName(c.app.arpeggiator.config().scale)); };
+        p.step = [](UiContext& c, int dir, bool) {
+            auto& cfg = c.app.arpeggiator.config();
+            const int n = static_cast<int>(ScaleType::kCount);
+            cfg.scale = static_cast<ScaleType>((static_cast<int>(cfg.scale) + dir + n) % n);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "ARP.ROOT";
+        p.label = "ROOT";
+        p.value = [](const UiContext& c) { return noteName(c.app.arpeggiator.config().root_note); };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            auto& cfg = c.app.arpeggiator.config();
+            cfg.root_note = std::clamp(cfg.root_note + dir * (coarse ? 12 : 1), 24, 84);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "ARP.DIV1";
+        p.label = "ARP1 DIV";
+        p.value = [](const UiContext& c) { return std::string(getArp1DivisionName(c.app.arpeggiator.config().arp1_div)); };
+        p.step = [](UiContext& c, int dir, bool) {
+            auto& cfg = c.app.arpeggiator.config();
+            const int n = static_cast<int>(Arp1Division::kCount);
+            cfg.arp1_div = static_cast<Arp1Division>((static_cast<int>(cfg.arp1_div) + dir + n) % n);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "ARP.CHORD";
+        p.label = "CHORD";
+        p.value = [](const UiContext& c) { return std::string(getChordTypeName(c.app.arpeggiator.config().chord_type)); };
+        p.step = [](UiContext& c, int dir, bool) {
+            auto& cfg = c.app.arpeggiator.config();
+            const int n = static_cast<int>(ChordType::kCount);
+            cfg.chord_type = static_cast<ChordType>((static_cast<int>(cfg.chord_type) + dir + n) % n);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "ARP.PROG";
+        p.label = "PROG";
+        p.value = [](const UiContext& c) {
+            int pid = c.app.arpeggiator.config().progression_id;
+            switch (pid) {
+                case 1: return std::string("i-VI-III-VII");
+                case 2: return std::string("I-IV-V-I");
+                case 3: return std::string("i-iv-v-v");
+                default: return std::string("STATIC");
+            }
+        };
+        p.step = [](UiContext& c, int dir, bool) {
+            auto& cfg = c.app.arpeggiator.config();
+            cfg.progression_id = (cfg.progression_id + dir + 4) % 4;
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "ARP.DIV2";
+        p.label = "ARP2 DIV";
+        p.value = [](const UiContext& c) { return std::string(getArp2DivisionName(c.app.arpeggiator.config().arp2_div)); };
+        p.step = [](UiContext& c, int dir, bool) {
+            auto& cfg = c.app.arpeggiator.config();
+            const int n = static_cast<int>(Arp2Division::kCount);
+            cfg.arp2_div = static_cast<Arp2Division>((static_cast<int>(cfg.arp2_div) + dir + n) % n);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "ARP.PAT";
+        p.label = "PATTERN";
+        p.value = [](const UiContext& c) { return std::string(getArpPatternName(c.app.arpeggiator.config().pattern)); };
+        p.step = [](UiContext& c, int dir, bool) {
+            auto& cfg = c.app.arpeggiator.config();
+            const int n = static_cast<int>(ArpPattern::kCount);
+            cfg.pattern = static_cast<ArpPattern>((static_cast<int>(cfg.pattern) + dir + n) % n);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "ARP.OCT";
+        p.label = "OCTAVES";
+        p.value = [](const UiContext& c) { return std::to_string(c.app.arpeggiator.config().octaves) + " OCT"; };
+        p.step = [](UiContext& c, int dir, bool) {
+            auto& cfg = c.app.arpeggiator.config();
+            cfg.octaves = std::clamp(cfg.octaves + dir, 1, 4);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "ARP.GATE";
+        p.label = "GATE LEN";
+        p.value = [](const UiContext& c) { return fmtPct(c.app.arpeggiator.config().arp2_gate); };
+        p.norm = [](const UiContext& c) { return c.app.arpeggiator.config().arp2_gate; };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            auto& cfg = c.app.arpeggiator.config();
+            cfg.arp2_gate = std::clamp(cfg.arp2_gate + dir * (coarse ? 0.20f : 0.05f), 0.10f, 1.20f);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "ARP.EUCLID";
+        p.label = "EUCLID";
+        p.value = [](const UiContext& c) {
+            char b[16];
+            std::snprintf(b, sizeof(b), "%d/%d", c.app.arpeggiator.config().euclid_hits, c.app.arpeggiator.config().euclid_length);
+            return std::string(b);
+        };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            auto& cfg = c.app.arpeggiator.config();
+            cfg.euclid_hits = std::clamp(cfg.euclid_hits + dir * (coarse ? 4 : 1), 1, cfg.euclid_length);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "ARP.MUTATE";
+        p.label = "MUTATION";
+        p.value = [](const UiContext& c) { return std::to_string(c.app.arpeggiator.config().mutation_pct) + "%"; };
+        p.norm = [](const UiContext& c) { return static_cast<float>(c.app.arpeggiator.config().mutation_pct) / 100.0f; };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            auto& cfg = c.app.arpeggiator.config();
+            cfg.mutation_pct = std::clamp(cfg.mutation_pct + dir * (coarse ? 10 : 2), 0, 100);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "ARP.COMMIT";
+        p.label = "COMMIT";
+        p.value = [](const UiContext&) { return "PRESS [A]"; };
+        p.step = [](UiContext& c, int, bool) {
+            c.app.arpeggiator.commitToTrack(c.audio, c.app.cursor_row, 0, 16);
+            c.app.last_action = "ARP COMMITTED";
+        };
+        add(std::move(p));
+    }
 }
 
 } // namespace groovebox
