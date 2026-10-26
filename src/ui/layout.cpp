@@ -26,16 +26,17 @@ void setupAppLayout(UiShell& shell) {
             return std::string(b);
         };
         synth_spec.rows = {
-            // Row 0: Інструмент, рандомайзер, транспозиція та слайд
-            {"INST", {"TRK.ENGINE", "TRK.RND", "TRK.TRANSP", "TRK.GLIDE"}},
+            // Row 0: Інструмент, вибір форми хвилі / семпла, рандомайзер
+            {"INST", {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.RND"}},
             // Row 1: Фільтр та тембр (динамічні назви P1..P4)
             {"FLT",  {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4"}},
             // Row 2: Осцилятори
-            {"OSC",  {"TRK.P5", "TRK.P6", "LFO1.WAVE", "LFO1.RATE"}},
+            {"OSC",  {"TRK.P5", "TRK.P6"}},
             // Row 3: ADSR огинаюча
             {"ENV",  {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-            // Row 4: Модуляція LFO 1/2
-            {"MOD",  {"LFO1.RATE", "LFO1.DEPTH", "LFO2.RATE", "LFO2.DEPTH"}},
+            // Row 4: Модуляція LFO 1 та LFO 2 з призначенням DEST
+            {"LFO1", {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST"}},
+            {"LFO2", {"LFO2.WAVE", "LFO2.RATE", "LFO2.DEPTH", "LFO2.DEST"}},
             // Row 5: Посили та рівні
             {"SEND", {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
         };
@@ -90,29 +91,24 @@ void setupAppLayout(UiShell& shell) {
     shell.registerView(std::make_unique<ScopeView>());
 
     // =========================================================================
-    // 6. СИСТЕМНІ НАЛАШТУВАННЯ (SYS)
+    // 6. СИСТЕМНІ НАЛАШТУВАННЯ (SYS) — ТАБЛИЧНЕ МЕНЮ 4x3 ТА СТАТУС-ОВЕРЛЕЙ
     // =========================================================================
     {
         GridSpec sys_spec;
         sys_spec.id = ViewId::kSys;
-        sys_spec.style = GridStyle::kList;
+        sys_spec.style = GridStyle::kTable;
         sys_spec.accent = palette::kAccentOrange;
         sys_spec.tab_title = [](const UiContext&) { return "SYS"; };
-        sys_spec.header = [](const UiContext&) { return "GLOBAL SYSTEM SETTINGS"; };
+        sys_spec.header = [](const UiContext& c) {
+            char b[96];
+            std::snprintf(b, sizeof(b), "SYS STATS: CPU %3.1f%% | %2dC | RAM %d/%d MB | SR %u",
+                          c.hw.cpu_load_percent, c.hw.cpu_temp_c, c.hw.ram_used_mb, c.hw.ram_total_mb, c.tel.sample_rate);
+            return std::string(b);
+        };
         sys_spec.rows = {
-            {"", {"SYS.BANK"}},
-            {"", {"SYS.PAT"}},
-            {"", {"SYS.SAVE"}},
-            {"", {"SYS.LOAD"}},
-            {"", {"SYS.SAMPLER"}},
-            {"", {"SYS.SLICES"}},
-            {"", {"SYS.BUF"}},
-            {"", {"SYS.USB"}},
-            {"", {"SYS.SR"}},
-            {"", {"SYS.OUT"}},
-            {"", {"SYS.CPU"}},
-            {"", {"SYS.RAM"}},
-            {"", {"SYS.PANIC"}}
+            {"PROJ", {"SYS.BANK", "SYS.PAT", "SYS.SAVE", "SYS.LOAD"}},
+            {"SMPL", {"SYS.SAMPLER", "SYS.SLICES", "SYS.REC_SRC", "SYS.REC_ARM"}},
+            {"AUD",  {"SYS.BUF", "SYS.USB", "SYS.OUT", "SYS.PANIC"}}
         };
         shell.registerView(std::make_unique<GridView>(std::move(sys_spec)));
     }

@@ -202,6 +202,48 @@ ParamRegistry::ParamRegistry() {
     }
     {
         Param p;
+        p.id = "TRK.WAVE_SAMPLE";
+        p.dyn_label = [](const UiContext& c) {
+            const auto tp = c.audio.getTrackParams(trk(c, -1));
+            if (tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler) {
+                return std::string("SAMPLE");
+            }
+            return std::string("WAVE");
+        };
+        p.label = "WAVE";
+        p.value = [](const UiContext& c) -> std::string {
+            const auto tp = c.audio.getTrackParams(trk(c, -1));
+            if (tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler) {
+                const auto& buf = c.app.sampler.recordedSample();
+                if (buf.loaded) return buf.name;
+                char b[16];
+                std::snprintf(b, sizeof(b), "KIT #%d", static_cast<int>(tp.p[0] * 7.0f) + 1);
+                return std::string(b);
+            }
+            static const char* kWaveNames[5] = {"SAW", "SQUARE", "TRI", "SINE", "NOISE"};
+            int wave_idx = std::clamp(static_cast<int>(tp.p[5] * 4.99f), 0, 4);
+            return std::string(kWaveNames[wave_idx]);
+        };
+        p.norm = [](const UiContext& c) {
+            const auto tp = c.audio.getTrackParams(trk(c, -1));
+            return (tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler) ? tp.p[0] : tp.p[5];
+        };
+        p.step = [](UiContext& c, int dir, bool) {
+            const int t = trk(c, -1);
+            auto tp = c.audio.getTrackParams(t);
+            if (tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler) {
+                tp.p[0] = std::clamp(tp.p[0] + dir * (1.0f / 7.0f), 0.0f, 1.0f);
+            } else {
+                int cur = std::clamp(static_cast<int>(tp.p[5] * 4.99f), 0, 4);
+                int next = (cur + dir + 5) % 5;
+                tp.p[5] = static_cast<float>(next) / 4.0f;
+            }
+            c.audio.setTrackParams(t, tp);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
         p.id = "TRK.SEL";
         p.label = "TRACK";
         p.value = [](const UiContext& c) {
@@ -442,6 +484,42 @@ ParamRegistry::ParamRegistry() {
             int cnt = c.app.sampler.sliceCount();
             cnt = dir > 0 ? (cnt < 16 ? 16 : 32) : (cnt > 16 ? 16 : 8);
             c.app.sampler.sliceGrid(cnt);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SYS.REC_SRC";
+        p.label = "INPUT";
+        p.value = [](const UiContext& c) {
+            return c.in.headphones_plugged ? "LINE-IN" : "INT MIC";
+        };
+        p.step = [](UiContext& c, int, bool) {
+            c.app.last_action = "INPUT TOGGLED";
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SYS.REC_ARM";
+        p.label = "REC ARM";
+        p.value = [](const UiContext& c) {
+            auto st = c.app.sampler.recordingState();
+            switch (st) {
+                case RecState::kArmed: return "ARMED";
+                case RecState::kRecording: return "RECORD";
+                case RecState::kFinished: return "DONE";
+                default: return "STANDBY";
+            }
+        };
+        p.step = [](UiContext& c, int, bool) {
+            if (c.app.sampler.recordingState() == RecState::kIdle) {
+                c.app.sampler.armRecording();
+                c.app.last_action = "SAMPLER ARMED";
+            } else {
+                c.app.sampler.stopRecording();
+                c.app.last_action = "SAMPLER STOPPED";
+            }
         };
         add(std::move(p));
     }
