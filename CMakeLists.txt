@@ -10,6 +10,7 @@ add_executable(xu10_groovebox
     src/arpeggiator.cpp
     src/audio_engine.cpp
     src/pattern_manager.cpp
+    src/sampler_engine.cpp
     src/device_profile.cpp
     src/hw_monitor.cpp
     src/input_manager.cpp
@@ -62,6 +63,7 @@ else()
         src/arpeggiator.cpp
         src/audio_engine.cpp
         src/pattern_manager.cpp
+        src/sampler_engine.cpp
         src/device_profile.cpp
         src/hw_monitor.cpp
         src/input_manager.cpp
