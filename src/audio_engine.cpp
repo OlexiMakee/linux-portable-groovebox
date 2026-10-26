@@ -381,7 +381,12 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
     v.velocity = std::clamp(velocity, 0.05f, 1.0f);
     v.plock_cutoff = plock_cutoff;
     v.pitch_env = 1.0f;
-    v.glide_coef = std::exp(-1.0f / (0.065f * sr)); // 65ms constant-time RC glide (TB-303 authentic)
+    // Constant-time RC glide (TB-303 класика = 65 мс, налаштовується параметром TRK.GLIDE)
+    v.glide_coef = std::exp(-1.0f / (std::clamp(tracks_[t].glide, 0.005f, 0.5f) * sr));
+    // Транспозиція треку (TRK.TRANSP); нота 0 у барабанах означає «дефолтна нота голосу»
+    if (midi_note > 0) {
+        midi_note = std::clamp(midi_note + tracks_[t].transpose, 1, 127);
+    }
 
     // Тривалість 1 кроку секвенсора (~125мс на 120 BPM)
     float step_sec = 0.125f;

@@ -202,6 +202,8 @@ struct TrackParameters {
     float delay_send = 0.2f;
     float reverb_send = 0.15f;
     bool muted = false;
+    int transpose = 0;      // -24 .. +24 півтонів (транспозиція треку)
+    float glide = 0.065f;   // 5..500 мс час легато-слайду (TB-303 класика = 65 мс)
     StickDest stick_left_x = StickDest::kCutoff;
     StickDest stick_left_y = StickDest::kResonance;
     StickDest stick_right_x = StickDest::kLfo1Rate;

@@ -1,0 +1,159 @@
+#include "ui/ui_shell.hpp"
+
+#include <cstdio>
+
+namespace groovebox {
+
+void setupAppLayout(UiShell& shell) {
+    // =========================================================================
+    // 1. СЕКВЕНСОР (SEQ)
+    // =========================================================================
+    shell.registerView(std::make_unique<SeqView>());
+
+    // =========================================================================
+    // 2. СИНТЕЗАТОР (SYNTH)
+    // =========================================================================
+    {
+        GridSpec synth_spec;
+        synth_spec.id = ViewId::kSynth;
+        synth_spec.style = GridStyle::kTable;
+        synth_spec.accent = palette::kAccentCyan;
+        synth_spec.tab_title = [](const UiContext&) { return "SYNTH"; };
+        synth_spec.header = [](const UiContext& c) {
+            char b[64];
+            const auto tp = c.audio.getTrackParams(c.app.selected_track);
+            std::snprintf(b, sizeof(b), "SYNTH TRK T%d [%s]", c.app.selected_track + 1, getEngineTypeName(tp.engine));
+            return std::string(b);
+        };
+        synth_spec.rows = {
+            // Row 0: Інструмент, транспозиція та слайд (жодного дублювання ADD/DEL!)
+            {"INST", {"TRK.ENGINE", "TRK.SEL", "TRK.TRANSP", "TRK.GLIDE"}},
+            // Row 1: Фільтр та тембр (динамічні назви P1..P4)
+            {"FLT",  {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4"}},
+            // Row 2: Осцилятори
+            {"OSC",  {"TRK.P5", "TRK.P6", "LFO1.WAVE", "LFO1.RATE"}},
+            // Row 3: ADSR огинаюча
+            {"ENV",  {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
+            // Row 4: Модуляція LFO 1/2
+            {"MOD",  {"LFO1.RATE", "LFO1.DEPTH", "LFO2.RATE", "LFO2.DEPTH"}},
+            // Row 5: Посили та рівні
+            {"SEND", {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+        };
+        shell.registerView(std::make_unique<GridView>(std::move(synth_spec)));
+    }
+
+    // =========================================================================
+    // 3. ЕФЕКТИ (FX)
+    // =========================================================================
+    {
+        GridSpec fx_spec;
+        fx_spec.id = ViewId::kFx;
+        fx_spec.style = GridStyle::kTable;
+        fx_spec.accent = palette::kAccentOrange;
+        fx_spec.tab_title = [](const UiContext&) { return "FX"; };
+        fx_spec.header = [](const UiContext&) { return "MASTER SEND EFFECTS & OUTPUT"; };
+        fx_spec.rows = {
+            {"DLY", {"DLY.TIME", "DLY.FBK", "DLY.RET"}},
+            {"REV", {"REV.DECAY", "REV.RET"}},
+            {"MST", {"MST.VOL", "MST.PEAK", "MST.BPM"}}
+        };
+        shell.registerView(std::make_unique<GridView>(std::move(fx_spec)));
+    }
+
+    // =========================================================================
+    // 4. МІКШЕР (MIX)
+    // =========================================================================
+    {
+        GridSpec mix_spec;
+        mix_spec.id = ViewId::kMix;
+        mix_spec.style = GridStyle::kTable;
+        mix_spec.accent = palette::kAccentOrange;
+        mix_spec.tab_title = [](const UiContext&) { return "MIX"; };
+        mix_spec.header = [](const UiContext&) { return "MIXER CHANNELS & MASTER"; };
+        mix_spec.on_focus = [](UiContext& c, int r) {
+            if (r >= 0 && r < 4) c.app.selected_track = r;
+        };
+        mix_spec.rows = {
+            {"T1",  {"T1.LVL", "T1.PAN", "T1.DLY", "T1.REV", "T1.MUTE"}},
+            {"T2",  {"T2.LVL", "T2.PAN", "T2.DLY", "T2.REV", "T2.MUTE"}},
+            {"T3",  {"T3.LVL", "T3.PAN", "T3.DLY", "T3.REV", "T3.MUTE"}},
+            {"T4",  {"T4.LVL", "T4.PAN", "T4.DLY", "T4.REV", "T4.MUTE"}},
+            {"MST", {"MST.VOL", "DLY.FBK", "REV.RET", "MST.BPM"}}
+        };
+        shell.registerView(std::make_unique<GridView>(std::move(mix_spec)));
+    }
+
+    // =========================================================================
+    // 5. ОСЦИЛОГРАФ (SCOPE)
+    // =========================================================================
+    shell.registerView(std::make_unique<ScopeView>());
+
+    // =========================================================================
+    // 6. СИСТЕМНІ НАЛАШТУВАННЯ (SYS)
+    // =========================================================================
+    {
+        GridSpec sys_spec;
+        sys_spec.id = ViewId::kSys;
+        sys_spec.style = GridStyle::kList;
+        sys_spec.accent = palette::kAccentOrange;
+        sys_spec.tab_title = [](const UiContext&) { return "SYS"; };
+        sys_spec.header = [](const UiContext&) { return "GLOBAL SYSTEM SETTINGS"; };
+        sys_spec.rows = {
+            {"", {"SYS.BUF"}},
+            {"", {"SYS.USB"}},
+            {"", {"SYS.SR"}},
+            {"", {"SYS.OUT"}},
+            {"", {"SYS.CPU"}},
+            {"", {"SYS.RAM"}},
+            {"", {"SYS.PANIC"}}
+        };
+        shell.registerView(std::make_unique<GridView>(std::move(sys_spec)));
+    }
+
+    // =========================================================================
+    // 7. STEP INSPECTOR POPUP (INSPECT)
+    // =========================================================================
+    {
+        GridSpec ins_spec;
+        ins_spec.id = ViewId::kInspect;
+        ins_spec.style = GridStyle::kPopup;
+        ins_spec.accent = palette::kParamTrig;
+        ins_spec.header = [](const UiContext& c) {
+            char b[64];
+            const int t = c.audio.getRowTrack(c.app.cursor_row);
+            const int v = c.audio.getRowVoice(c.app.cursor_row);
+            std::snprintf(b, sizeof(b), "STEP INSPECTOR [T%d:V%d ST%03d]", t + 1, v + 1, c.app.cursor_step + 1);
+            return std::string(b);
+        };
+        ins_spec.rows = {
+            {"", {"STEP.TYPE"}},
+            {"", {"STEP.NOTE"}},
+            {"", {"STEP.VEL"}},
+            {"", {"STEP.GATE"}},
+            {"", {"STEP.SLIDE"}},
+            {"", {"STEP.ATK"}},
+            {"", {"STEP.DEC"}},
+            {"", {"STEP.SUS"}},
+            {"", {"STEP.REL"}},
+            {"", {"STEP.CUT"}},
+            {"", {"STEP.PROB"}},
+            {"", {"STEP.COND"}}
+        };
+        shell.registerView(std::make_unique<GridView>(std::move(ins_spec)));
+    }
+
+    // =========================================================================
+    // 8. ВКЛАДКИ ВЕРХНЬОГО РЯДУ
+    // Порядок зліва направо: L1, L2, R2, R1, G
+    // Вкладка R2 (MIX) розташована ЛІВІШЕ за R1 (SCOPE)!
+    // =========================================================================
+    shell.setTabSlots({
+        TabSlot{"[L1]", {ViewId::kSeq, ViewId::kSynth}, 76},
+        TabSlot{"[L2]", {ViewId::kFx}, 66},
+        TabSlot{"[R2]", {ViewId::kMix}, 66},
+        TabSlot{"[R1]", {ViewId::kScope}, 66},
+        TabSlot{"[G]",  {ViewId::kSys}, 46}
+    });
+}
+
+} // namespace groovebox

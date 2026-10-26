@@ -4,7 +4,7 @@
 #include "input_manager.hpp"
 #include "midi_engine.hpp"
 #include "synth_engines.hpp"
-#include "ui_renderer.hpp"
+#include "ui/ui_shell.hpp"
 
 #include <SDL.h>
 #include <cstdio>
@@ -33,7 +33,8 @@ int main() {
         return 1;
     }
 
-    UiRenderer ui(sw_renderer, w, h);
+    UiShell ui(sw_renderer, w, h);
+    setupAppLayout(ui);
 
     AudioEngine audio_engine;
     AppModel app;
@@ -66,49 +67,69 @@ int main() {
     };
 
     // 1. SEQ Tab
-    app.active_tab = WorkspaceTab::kSeq;
-    ui.render(app, hw, input, audio_engine, audio, midi, 0.75f);
+    app.active_view = ViewId::kSeq;
+    input = InputState{};
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_01_seq.bmp");
 
     // 2. SYNTH Tab (Cyan tab)
-    app.active_tab = WorkspaceTab::kSynth;
-    app.selected_param = 0;
-    ui.render(app, hw, input, audio_engine, audio, midi, 0.75f);
+    app.active_view = ViewId::kSynth;
+    input = InputState{};
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_02_synth.bmp");
 
     // 3. FX Tab
-    app.active_tab = WorkspaceTab::kFx;
-    ui.render(app, hw, input, audio_engine, audio, midi, 0.75f);
+    app.active_view = ViewId::kFx;
+    input = InputState{};
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_03_fx.bmp");
 
-    // 4. MOD Tab (Dual LFO & Mini-Scope)
-    app.active_tab = WorkspaceTab::kMod;
-    ui.render(app, hw, input, audio_engine, audio, midi, 0.75f);
-    capture("/tmp/xu10_tour/tour_04_mod.bmp");
+    // 4. MIX Tab
+    app.active_view = ViewId::kMix;
+    input = InputState{};
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
+    capture("/tmp/xu10_tour/tour_04_mix.bmp");
 
-    // 5. MIX Tab
-    app.active_tab = WorkspaceTab::kMixFx;
-    ui.render(app, hw, input, audio_engine, audio, midi, 0.75f);
-    capture("/tmp/xu10_tour/tour_05_mix.bmp");
+    // 5. SCOPE Tab
+    app.active_view = ViewId::kScope;
+    input = InputState{};
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
+    capture("/tmp/xu10_tour/tour_05_scope.bmp");
 
     // 6. SYS Tab
-    app.active_tab = WorkspaceTab::kSys;
-    app.sys_menu_cursor = 1; // Highlight USB Port Role
-    ui.render(app, hw, input, audio_engine, audio, midi, 0.75f);
+    app.active_view = ViewId::kSys;
+    input = InputState{};
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_06_sys.bmp");
 
-    // 7. Step Inspector
-    app.active_tab = WorkspaceTab::kSeq;
+    // 7. Step Inspector Modal
+    app.active_view = ViewId::kSeq;
     app.step_inspector_open = true;
     app.cursor_row = 0;
     app.cursor_step = 4;
-    ui.render(app, hw, input, audio_engine, audio, midi, 0.75f);
+    input = InputState{};
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_07_inspector.bmp");
+    app.step_inspector_open = false;
+
+    // 8. Quick Mute Layer in SEQ (holding L2)
+    app.active_view = ViewId::kSeq;
+    input = InputState{};
+    input.l2 = true;
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
+    capture("/tmp/xu10_tour/tour_08_quick_mute.bmp");
+
+    // 9. SELECT Layer in SEQ (holding SELECT - non-overlapping tab bar!)
+    app.active_view = ViewId::kSeq;
+    input = InputState{};
+    input.btn_select = true;
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
+    capture("/tmp/xu10_tour/tour_09_select_layer.bmp");
 
     SDL_DestroyRenderer(sw_renderer);
     SDL_FreeSurface(surf);
     SDL_Quit();
 
-    std::printf("All screenshots generated successfully!\n");
+    std::printf("All 9 screenshots generated successfully!\n");
     return 0;
 }

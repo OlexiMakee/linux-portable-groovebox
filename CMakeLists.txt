@@ -13,7 +13,14 @@ add_executable(xu10_groovebox
     src/input_manager.cpp
     src/midi_engine.cpp
     src/net_audio_streamer.cpp
-    src/ui_renderer.cpp
+    src/ui/canvas.cpp
+    src/ui/params.cpp
+    src/ui/widgets.cpp
+    src/ui/views.cpp
+    src/ui/actions.cpp
+    src/ui/keymap.cpp
+    src/ui/layout.cpp
+    src/ui/ui_shell.cpp
 )
 
 target_include_directories(xu10_groovebox PRIVATE src)
@@ -56,7 +63,14 @@ else()
         src/input_manager.cpp
         src/midi_engine.cpp
         src/net_audio_streamer.cpp
-        src/ui_renderer.cpp
+        src/ui/canvas.cpp
+        src/ui/params.cpp
+        src/ui/widgets.cpp
+        src/ui/views.cpp
+        src/ui/actions.cpp
+        src/ui/keymap.cpp
+        src/ui/layout.cpp
+        src/ui/ui_shell.cpp
     )
     target_include_directories(render_tour PRIVATE src)
     target_include_directories(render_tour SYSTEM PRIVATE
