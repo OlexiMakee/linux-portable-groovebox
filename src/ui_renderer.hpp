@@ -44,6 +44,7 @@ struct AppModel {
 class UiRenderer {
 public:
     UiRenderer();
+    UiRenderer(SDL_Renderer* custom_renderer, int w, int h);
     ~UiRenderer();
 
     bool init();

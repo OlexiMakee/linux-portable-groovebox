@@ -113,6 +113,9 @@ constexpr uint16_t kFont3x5[96] = {
 
 UiRenderer::UiRenderer() = default;
 
+UiRenderer::UiRenderer(SDL_Renderer* custom_renderer, int w, int h)
+    : renderer_(custom_renderer), logical_w_(w), logical_h_(h) {}
+
 UiRenderer::~UiRenderer() {
     shutdown();
 }
@@ -158,15 +161,15 @@ bool UiRenderer::init() {
 }
 
 void UiRenderer::shutdown() {
-    if (renderer_) {
-        SDL_DestroyRenderer(renderer_);
-        renderer_ = nullptr;
-    }
     if (window_) {
+        if (renderer_) {
+            SDL_DestroyRenderer(renderer_);
+            renderer_ = nullptr;
+        }
         SDL_DestroyWindow(window_);
         window_ = nullptr;
+        SDL_Quit();
     }
-    SDL_Quit();
 }
 
 void UiRenderer::applyLogicalResolution(bool high_res) {
