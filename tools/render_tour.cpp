@@ -126,10 +126,26 @@ int main() {
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_09_select_layer.bmp");
 
+    // 10. Performance Mode (Live Playing, Pad A pressed)
+    app.active_view = ViewId::kPerf;
+    app.selected_track = 1; // VA Synth
+    input = InputState{};
+    input.btn_a = true;
+    input.lx = 0.25f;
+    input.ly = -0.40f;
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
+    capture("/tmp/xu10_tour/tour_10_perf.bmp");
+
+    // 11. Dual Arpeggiator & Procedural Generator
+    app.active_view = ViewId::kArp;
+    input = InputState{};
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
+    capture("/tmp/xu10_tour/tour_11_arp.bmp");
+
     SDL_DestroyRenderer(sw_renderer);
     SDL_FreeSurface(surf);
     SDL_Quit();
 
-    std::printf("All 9 screenshots generated successfully!\n");
+    std::printf("All 11 tour screenshots generated successfully!\n");
     return 0;
 }
