@@ -236,13 +236,15 @@ ActionRegistry::ActionRegistry() {
 
     // ---------------- Перемикання вкладок ----------------
     add(Action{"TAB.L1", "TAB.L1", [](UiContext& c) {
-        // Двофункціональна кнопка L1: SEQ <-> SYNTH
+        // Трифункціональна кнопка L1: SEQ -> SYNTH -> PERF -> SEQ
         if (c.app.active_view == ViewId::kSeq) {
             c.app.active_view = ViewId::kSynth;
             const int act = c.audio.getActiveRowCount();
             if (c.app.cursor_row < act) {
                 c.app.selected_track = c.audio.getRowTrack(c.app.cursor_row);
             }
+        } else if (c.app.active_view == ViewId::kSynth) {
+            c.app.active_view = ViewId::kPerf;
         } else {
             c.app.active_view = ViewId::kSeq;
         }
@@ -280,6 +282,45 @@ ActionRegistry::ActionRegistry() {
     }});
     add(Action{"INSPECT.CLOSE", "CLOSE", [](UiContext& c) {
         c.app.step_inspector_open = false;
+    }});
+
+    // ---------------- РЕЖИМ ПЕРФОРМАНСУ (PERF.*) ----------------
+    add(Action{"PERF.OCT_UP", "OCT+", [](UiContext& c) {
+        c.app.perf_octave = std::min(6, c.app.perf_octave + 1);
+    }});
+    add(Action{"PERF.OCT_DOWN", "OCT-", [](UiContext& c) {
+        c.app.perf_octave = std::max(1, c.app.perf_octave - 1);
+    }});
+
+    auto triggerPad = [](UiContext& c, int pad_idx) {
+        int t = c.app.selected_track;
+        auto tp = c.audio.getTrackParams(t);
+        if (tp.engine == EngineType::kDrumSyn) {
+            static constexpr uint8_t kDrumNotes[4] = {36, 38, 42, 46};
+            int v = std::clamp(pad_idx, 0, 3);
+            c.audio.triggerVoice(t * 4 + v, kDrumNotes[v], 0.92f);
+        } else {
+            // Квантування ноти за поточною тонікою та ладом арпеджиратора
+            int base_root = c.app.perf_octave * 12 + (c.app.arpeggiator.config().root_note % 12);
+            auto chord = getChordIntervals(ChordType::kSeventh, c.app.arpeggiator.config().scale);
+            int offset = (pad_idx < static_cast<int>(chord.size())) ? chord[pad_idx] : (pad_idx * 2);
+            int note = quantizeToScale(base_root + offset, base_root, c.app.arpeggiator.config().scale);
+            c.audio.triggerNote(t, note, 0.90f);
+        }
+    };
+    add(Action{"PERF.PAD_A", "PAD A", [=](UiContext& c) { triggerPad(c, 0); }});
+    add(Action{"PERF.PAD_B", "PAD B", [=](UiContext& c) { triggerPad(c, 1); }});
+    add(Action{"PERF.PAD_X", "PAD X", [=](UiContext& c) { triggerPad(c, 2); }});
+    add(Action{"PERF.PAD_Y", "PAD Y", [=](UiContext& c) { triggerPad(c, 3); }});
+
+    // ---------------- АРПЕДЖИРАТОР (ARP.*) ----------------
+    add(Action{"ARP.OPEN", "ARP", [](UiContext& c) {
+        c.app.previous_view = c.app.active_view;
+        c.app.active_view = ViewId::kArp;
+    }});
+    add(Action{"ARP.COMMIT", "COMMIT", [](UiContext& c) {
+        c.app.arpeggiator.commitToTrack(c.audio, c.app.cursor_row, 0, 16);
+        c.app.last_action = "ARP COMMITTED";
     }});
 }
 

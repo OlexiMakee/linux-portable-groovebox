@@ -50,7 +50,7 @@ Keymap::Keymap() {
     // SELECT шар у секвенсорі (Elektron Pattern / Track Operations)
     bind(ViewId::kSeq, Layer::kSelect, Button::kA,     Gesture::kPress, "STEP.PREVIEW");
     bind(ViewId::kSeq, Layer::kSelect, Button::kB,     Gesture::kPress, "SEQ.CLEAR_ROW");
-    bind(ViewId::kSeq, Layer::kSelect, Button::kX,     Gesture::kPress, "SEQ.CYCLE_LEN");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kX,     Gesture::kPress, "ARP.OPEN");
     bind(ViewId::kSeq, Layer::kSelect, Button::kY,     Gesture::kPress, "SEQ.CYCLE_PAGE");
     bind(ViewId::kSeq, Layer::kSelect, Button::kStart, Gesture::kPress, "SEQ.RANDOMIZE");
 
@@ -107,6 +107,29 @@ Keymap::Keymap() {
     bind(ViewId::kInspect, Layer::kBase, Button::kB, Gesture::kPress, "PARAM.DEC");
     bind(ViewId::kInspect, Layer::kBase, Button::kX, Gesture::kPress, "PARAM.DEC_FAST");
     bind(ViewId::kInspect, Layer::kBase, Button::kY, Gesture::kPress, "PARAM.INC_FAST");
+
+    // =========================================================================
+    // 9. ЖИВИЙ ПЕРФОРМАНС (ViewId::kPerf)
+    // =========================================================================
+    bind(ViewId::kPerf, Layer::kBase, Button::kDpadUp,    Gesture::kPress, "PERF.OCT_UP");
+    bind(ViewId::kPerf, Layer::kBase, Button::kDpadDown,  Gesture::kPress, "PERF.OCT_DOWN");
+    bind(ViewId::kPerf, Layer::kBase, Button::kDpadLeft,  Gesture::kPress, "TRACK.PREV");
+    bind(ViewId::kPerf, Layer::kBase, Button::kDpadRight, Gesture::kPress, "TRACK.NEXT");
+    bind(ViewId::kPerf, Layer::kBase, Button::kA,         Gesture::kPress, "PERF.PAD_A");
+    bind(ViewId::kPerf, Layer::kBase, Button::kB,         Gesture::kPress, "PERF.PAD_B");
+    bind(ViewId::kPerf, Layer::kBase, Button::kX,         Gesture::kPress, "PERF.PAD_X");
+    bind(ViewId::kPerf, Layer::kBase, Button::kY,         Gesture::kPress, "PERF.PAD_Y");
+    bind(ViewId::kPerf, Layer::kSelect, Button::kB,       Gesture::kPress, "VIEW.BACK");
+
+    // =========================================================================
+    // 10. АРПЕДЖИРАТОР ТА ПРОЦЕДУРНИЙ ГЕНЕРАТОР (ViewId::kArp)
+    // =========================================================================
+    bind(ViewId::kArp, Layer::kBase, Button::kA,         Gesture::kPress, "PARAM.INC");
+    bind(ViewId::kArp, Layer::kBase, Button::kB,         Gesture::kPress, "PARAM.DEC");
+    bind(ViewId::kArp, Layer::kBase, Button::kX,         Gesture::kPress, "PARAM.DEC_FAST");
+    bind(ViewId::kArp, Layer::kBase, Button::kY,         Gesture::kPress, "PARAM.INC_FAST");
+    bind(ViewId::kArp, Layer::kSelect, Button::kA,       Gesture::kPress, "ARP.COMMIT");
+    bind(ViewId::kArp, Layer::kSelect, Button::kB,       Gesture::kPress, "VIEW.BACK");
 }
 
 void Keymap::bind(KeyBinding b) {
