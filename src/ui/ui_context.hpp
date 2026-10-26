@@ -78,6 +78,11 @@ struct AppModel {
     bool stick_plock_tweaked = false;
     float plock_cutoff_live = -1.0f;
 
+    // Модальне вікно арпеджиатора та випадаюче меню вибору рушія
+    bool arp_modal_open = false;
+    bool engine_menu_open = false;
+    int engine_menu_sel = 0;
+
     // Короткий статус останньої дії (для HUD)
     std::string last_action = "READY";
 };

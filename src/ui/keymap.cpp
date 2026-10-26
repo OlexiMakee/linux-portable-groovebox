@@ -55,7 +55,7 @@ Keymap::Keymap() {
 
     // SELECT шар у секвенсорі (Elektron Pattern / Track Operations & Polymetry)
     bind(ViewId::kSeq, Layer::kSelect, Button::kA,         Gesture::kPress, "STEP.PREVIEW");
-    bind(ViewId::kSeq, Layer::kSelect, Button::kB,         Gesture::kPress, "SEQ.CLEAR_ROW");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kB,         Gesture::kPress, "SEQ.DEL_TRACK_SAFE");
     bind(ViewId::kSeq, Layer::kSelect, Button::kX,         Gesture::kPress, "SEQ.CYCLE_LEN");
     bind(ViewId::kSeq, Layer::kSelect, Button::kY,         Gesture::kPress, "SEQ.CYCLE_PAGE");
     bind(ViewId::kSeq, Layer::kSelect, Button::kDpadLeft,  Gesture::kPress, "SEQ.LEN_DEC");
@@ -71,10 +71,10 @@ Keymap::Keymap() {
     // =========================================================================
     // 3. СИНТЕЗАТОР (ViewId::kSynth)
     // =========================================================================
-    bind(ViewId::kSynth, Layer::kBase, Button::kA, Gesture::kPress, "PARAM.INC");
-    bind(ViewId::kSynth, Layer::kBase, Button::kB, Gesture::kPress, "PARAM.DEC");
-    bind(ViewId::kSynth, Layer::kBase, Button::kX, Gesture::kPress, "SEQ.ADD_TRACK");
-    bind(ViewId::kSynth, Layer::kBase, Button::kY, Gesture::kPress, "SEQ.DEL_TRACK");
+    bind(ViewId::kSynth, Layer::kBase, Button::kB, Gesture::kPress, "PARAM.INC");
+    bind(ViewId::kSynth, Layer::kBase, Button::kA, Gesture::kPress, "PARAM.DEC");
+    bind(ViewId::kSynth, Layer::kBase, Button::kX, Gesture::kPress, "PARAM.DEC_FAST");
+    bind(ViewId::kSynth, Layer::kBase, Button::kY, Gesture::kPress, "PARAM.INC_FAST");
 
     bind(ViewId::kSynth, Layer::kSelect, Button::kA, Gesture::kPress, "TRACK.PREVIEW_NOTE");
     bind(ViewId::kSynth, Layer::kSelect, Button::kX, Gesture::kPress, "TRACK.PREV");
@@ -86,17 +86,17 @@ Keymap::Keymap() {
     // =========================================================================
     // 4. ЕФЕКТИ (ViewId::kFx)
     // =========================================================================
-    bind(ViewId::kFx, Layer::kBase, Button::kA, Gesture::kPress, "PARAM.INC");
-    bind(ViewId::kFx, Layer::kBase, Button::kB, Gesture::kPress, "PARAM.DEC");
+    bind(ViewId::kFx, Layer::kBase, Button::kB, Gesture::kPress, "PARAM.INC");
+    bind(ViewId::kFx, Layer::kBase, Button::kA, Gesture::kPress, "PARAM.DEC");
     bind(ViewId::kFx, Layer::kBase, Button::kX, Gesture::kPress, "PARAM.DEC_FAST");
     bind(ViewId::kFx, Layer::kBase, Button::kY, Gesture::kPress, "PARAM.INC_FAST");
 
     // =========================================================================
     // 5. МІКШЕР (ViewId::kMix)
     // =========================================================================
-    bind(ViewId::kMix, Layer::kBase, Button::kA, Gesture::kPress, "MUTE.CUR");
-    bind(ViewId::kMix, Layer::kBase, Button::kB, Gesture::kPress, "PARAM.DEC");
-    bind(ViewId::kMix, Layer::kBase, Button::kX, Gesture::kPress, "PARAM.INC");
+    bind(ViewId::kMix, Layer::kBase, Button::kB, Gesture::kPress, "PARAM.INC");
+    bind(ViewId::kMix, Layer::kBase, Button::kA, Gesture::kPress, "PARAM.DEC");
+    bind(ViewId::kMix, Layer::kBase, Button::kX, Gesture::kPress, "MUTE.CUR");
     bind(ViewId::kMix, Layer::kBase, Button::kY, Gesture::kPress, "MUTE.CUR");
 
     // =========================================================================
@@ -108,14 +108,17 @@ Keymap::Keymap() {
     // =========================================================================
     // 7. СИСТЕМНІ НАЛАШТУВАННЯ (ViewId::kSys)
     // =========================================================================
-    bind(ViewId::kSys, Layer::kBase, Button::kA, Gesture::kPress, "PARAM.INC");
-    bind(ViewId::kSys, Layer::kBase, Button::kB, Gesture::kPress, "VIEW.BACK");
+    bind(ViewId::kSys, Layer::kBase, Button::kB, Gesture::kPress, "PARAM.INC");
+    bind(ViewId::kSys, Layer::kBase, Button::kA, Gesture::kPress, "PARAM.DEC");
+    bind(ViewId::kSys, Layer::kBase, Button::kX, Gesture::kPress, "PARAM.DEC_FAST");
+    bind(ViewId::kSys, Layer::kBase, Button::kY, Gesture::kPress, "PARAM.INC_FAST");
+    bind(ViewId::kSys, Layer::kSelect, Button::kB, Gesture::kPress, "VIEW.BACK");
 
     // =========================================================================
     // 8. STEP INSPECTOR (ViewId::kInspect)
     // =========================================================================
-    bind(ViewId::kInspect, Layer::kBase, Button::kA, Gesture::kPress, "PARAM.INC");
-    bind(ViewId::kInspect, Layer::kBase, Button::kB, Gesture::kPress, "PARAM.DEC");
+    bind(ViewId::kInspect, Layer::kBase, Button::kB, Gesture::kPress, "PARAM.INC");
+    bind(ViewId::kInspect, Layer::kBase, Button::kA, Gesture::kPress, "PARAM.DEC");
     bind(ViewId::kInspect, Layer::kBase, Button::kX, Gesture::kPress, "PARAM.DEC_FAST");
     bind(ViewId::kInspect, Layer::kBase, Button::kY, Gesture::kPress, "PARAM.INC_FAST");
 
@@ -135,15 +138,15 @@ Keymap::Keymap() {
     // =========================================================================
     // 10. АРПЕДЖИРАТОР ТА ПРОЦЕДУРНИЙ ГЕНЕРАТОР (ViewId::kArp)
     // =========================================================================
-    bind(ViewId::kArp, Layer::kBase, Button::kA,         Gesture::kPress, "PARAM.INC");
-    bind(ViewId::kArp, Layer::kBase, Button::kB,         Gesture::kPress, "PARAM.DEC");
+    bind(ViewId::kArp, Layer::kBase, Button::kB,         Gesture::kPress, "PARAM.INC");
+    bind(ViewId::kArp, Layer::kBase, Button::kA,         Gesture::kPress, "PARAM.DEC");
     bind(ViewId::kArp, Layer::kBase, Button::kX,         Gesture::kPress, "PARAM.DEC_FAST");
     bind(ViewId::kArp, Layer::kBase, Button::kY,         Gesture::kPress, "PARAM.INC_FAST");
-    bind(ViewId::kArp, Layer::kBase, Button::kL3,        Gesture::kTap,   "VIEW.BACK");
+    bind(ViewId::kArp, Layer::kBase, Button::kL3,        Gesture::kTap,   "ARP.TOGGLE");
     bind(ViewId::kArp, Layer::kBase, Button::kR3,        Gesture::kPress, "ARP.RANDOMIZE");
     bind(ViewId::kArp, Layer::kSelect, Button::kR3,      Gesture::kPress, "ARP.RANDOMIZE");
     bind(ViewId::kArp, Layer::kSelect, Button::kA,       Gesture::kPress, "ARP.COMMIT");
-    bind(ViewId::kArp, Layer::kSelect, Button::kB,       Gesture::kPress, "VIEW.BACK");
+    bind(ViewId::kArp, Layer::kSelect, Button::kB,       Gesture::kPress, "ARP.CLOSE");
 }
 
 void Keymap::bind(KeyBinding b) {
@@ -226,7 +229,12 @@ void InputRouter::dispatch(UiContext& ctx, ViewId view, Layer layer, Button btn,
 
 void InputRouter::processInput(UiContext& ctx) {
     const auto& in = ctx.in;
-    const ViewId view = ctx.app.step_inspector_open ? ViewId::kInspect : ctx.app.active_view;
+    ViewId view = ctx.app.active_view;
+    if (ctx.app.step_inspector_open) {
+        view = ViewId::kInspect;
+    } else if (ctx.app.arp_modal_open) {
+        view = ViewId::kArp;
+    }
     const Layer layer = activeLayer(ctx);
 
     // Масив поточного фізичного стану кнопок
@@ -281,6 +289,26 @@ void InputRouter::processInput(UiContext& ctx) {
         if (ev.is_down && !hold_fired_[idx] && !consumed_[idx] && (ctx.now_ms - press_time_ms_[idx] >= 200)) {
             hold_fired_[idx] = true;
             dispatch(ctx, view, layer, ev.id, Gesture::kHold);
+        }
+
+        // Автоповтор та довге утримання для параметрів A / B (крім SEQ)
+        if (ev.is_down && (ev.id == Button::kA || ev.id == Button::kB) && view != ViewId::kSeq) {
+            uint32_t elapsed = ctx.now_ms - press_time_ms_[idx];
+            if (elapsed >= 250) {
+                // Якщо утримуємо A або B на виборі ENGINE у SYNTH — відкриваємо селектор рушіїв
+                bool on_engine = (view == ViewId::kSynth && ctx.app.grid_row[static_cast<int>(ViewId::kSynth)] == 0 && ctx.app.grid_col[static_cast<int>(ViewId::kSynth)] == 0);
+                if (on_engine) {
+                    if (!hold_fired_[idx]) {
+                        hold_fired_[idx] = true;
+                        ActionRegistry::instance().run("ENGINE.MENU_OPEN", ctx);
+                    }
+                } else {
+                    if (ctx.now_ms - repeat_last_ms_[idx] >= 60) {
+                        repeat_last_ms_[idx] = ctx.now_ms;
+                        dispatch(ctx, view, layer, ev.id, Gesture::kPress);
+                    }
+                }
+            }
         }
 
         // Відпускання кнопки

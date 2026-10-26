@@ -111,6 +111,7 @@ private:
 
     Keymap keymap_;
     std::array<uint32_t, kButtonCount> press_time_ms_{};
+    std::array<uint32_t, kButtonCount> repeat_last_ms_{};
     std::array<bool, kButtonCount> is_down_{};
     std::array<bool, kButtonCount> hold_fired_{};
     std::array<bool, kButtonCount> consumed_{};
