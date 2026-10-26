@@ -44,6 +44,25 @@
 * Інтегровано 4-доріжковий DSP-синтезатор (T1: PolyBLEP Saw+Sub, T2: 2-Op FM, T3: Acid 303, T4: Chord Pad) із SVF-фільтром під керуванням аналогових стіків, 16-кроковим секвенсором та Lock-Free кільцевим буфером під осцилограф і VU-метр у реальному часі.
 
 
+## [2026-10-26] Milestone 9: Dedicated R1 Performance, Integrated MIX Scope, Chorus, Overdrive & Polymetry Restoration
+* **Повна реорганізація верхніх вкладок під 4 плечові бампери (70/70/70/70/40 px):**
+  * `[L1]` $\rightarrow$ `SEQ`: 16-рядковий матричний секвенсор із поліметрією.
+  * `[L2]` $\rightarrow$ `SYNTH`: Звуковий дизайн синтезатора (осцилятори, фільтр, ADSR, LFO) + Arp.
+  * `[R2]` $\rightarrow$ `MIX / FX`: Перше натискання відкриває `MIX`, друге — `FX` (Master Send FX).
+  * `[R1]` $\rightarrow$ `PERF`: Виділена пряма апаратна кнопка для живого режиму виступу (4 великі педи ABXY, швидкі октави D-Pad, живі макроси стіків).
+  * `[G]` $\rightarrow$ `SYS`: Системні налаштування, буфер, телеметрія та банк патернів.
+* **Інтеграція компактного Scope та VU-метрів у MIX:**
+  * У `src/ui/views.cpp` додано рендер компактного 26px осцилографа та стереофонічного VU-метра Master Out L/R безпосередньо під 5 рядками мікшера. Усунено потребу у великій надлишковій окремій вкладці SCOPE.
+* **Майстер-ефекти Stereo Chorus та Tanh Overdrive:**
+  * У `src/audio_engine.hpp/.cpp` додано DSP-алгоритм подвійного LFO-модульованого хоруса (5–25 мс) та нелінійного сатуратора $y = \tanh(k \cdot x)$ з 1-pole tilt-фільтром тембру.
+  * Зареєстровано 5 параметрів `FX.CHR_MIX`, `FX.CHR_RATE`, `FX.CHR_DEP`, `FX.DRIVE`, `FX.DRV_TONE` у `ParamRegistry` та сітці `FX`.
+* **Відновлення та розширення поліметрії в SEQ:**
+  * Додано дії `SEQ.LEN_INC` та `SEQ.LEN_DEC` для швидкої зміни довжини активної доріжки по `SELECT + D-Pad Right/Left`.
+  * Відновлено дію `SEQ.CYCLE_LEN` на кнопці `SELECT + X`.
+* **Деплой на XU10:**
+  * Згенеровано оновлені скріншоти `tour_01..04.png`, `tour_10_perf.png`.
+  * Бінарник успішно зібрано під `aarch64` і запущено на MagicX XU10 (PID 31064), навантаження CPU 6.5%.
+
 ## [2026-10-26] Milestone 8: Live Performance Mode, Dual Sequential Arpeggiator & Procedural Algorithmic Engine
 * **Апаратна корекція індикації ABXY та геометрії вкладок:**
   * У `src/ui/widgets.cpp` переприв'язано піктограми ABXY до реального маркування кнопок на корпусі XU10 (верхня: Y, ліва: X, права: B, нижня: A).
