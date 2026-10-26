@@ -152,6 +152,19 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
                                r == sel_r && k == sel_c, p->editable(), spec_.accent);
         }
     }
+
+    if (spec_.id == ViewId::kMix) {
+        // Компактний інтегрований осцилограф (26 px) та майстер VU-метри безпосередньо під мікшером
+        const int mix_scope_y = area.y + kHeaderH + rows * kTableRowH + 4;
+        cv.text(area.x + 4, mix_scope_y + 8, "SCOPE", palette::kTextDim);
+        widgets::scope(cv, Rect{area.x + 30, mix_scope_y - 1, area.w - 34, 26}, c.tel.scope_samples, palette::kAccentCyan);
+
+        const int vu_y = mix_scope_y + 28;
+        cv.text(area.x + 4, vu_y + 1, "OUT L", palette::kTextDim);
+        widgets::meter(cv, Rect{area.x + 28, vu_y, (area.w - 44) / 2, 7}, c.tel.vu_left);
+        cv.text(area.x + 32 + (area.w - 44) / 2, vu_y + 1, "R", palette::kTextDim);
+        widgets::meter(cv, Rect{area.x + 40 + (area.w - 44) / 2, vu_y, (area.w - 44) / 2 - 4, 7}, c.tel.vu_right);
+    }
 }
 
 void GridView::renderList(Canvas& cv, const UiContext& c, Rect area, bool popup) const {
