@@ -144,15 +144,15 @@ void setupAppLayout(UiShell& shell) {
 
     // =========================================================================
     // 8. ВКЛАДКИ ВЕРХНЬОГО РЯДУ
-    // Порядок зліва направо: L1, L2, R2, R1, G
+    // Порядок зліва направо: L1, L2, R2, R1, G (рівні вкладки по 70px + вузька SYS 40px = 320px)
     // Вкладка R2 (MIX) розташована ЛІВІШЕ за R1 (SCOPE)!
     // =========================================================================
     shell.setTabSlots({
-        TabSlot{"[L1]", {ViewId::kSeq, ViewId::kSynth}, 76},
-        TabSlot{"[L2]", {ViewId::kFx}, 66},
-        TabSlot{"[R2]", {ViewId::kMix}, 66},
-        TabSlot{"[R1]", {ViewId::kScope}, 66},
-        TabSlot{"[G]",  {ViewId::kSys}, 46}
+        TabSlot{"[L1]", {ViewId::kSeq, ViewId::kSynth}, 70},
+        TabSlot{"[L2]", {ViewId::kFx}, 70},
+        TabSlot{"[R2]", {ViewId::kMix}, 70},
+        TabSlot{"[R1]", {ViewId::kScope}, 70},
+        TabSlot{"[G]",  {ViewId::kSys}, 40}
     });
 }
 

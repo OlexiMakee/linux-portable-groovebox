@@ -77,10 +77,11 @@ void dpad(Canvas& cv, int cx, int cy, const InputState& in) {
 
 void abxy(Canvas& cv, int cx, int cy, const InputState& in) {
     const auto c = [](bool on) { return on ? palette::kLevelOk : palette::kGridDim; };
-    cv.fill(cx - 2, cy - 7, 4, 4, c(in.btn_x));
-    cv.fill(cx - 7, cy - 2, 4, 4, c(in.btn_y));
-    cv.fill(cx + 3, cy - 2, 4, 4, c(in.btn_a));
-    cv.fill(cx - 2, cy + 3, 4, 4, c(in.btn_b));
+    // Верхня - Y, ліва - X, права - B, нижня - A (відповідає фізичній розмітці корпусу XU10)
+    cv.fill(cx - 2, cy - 7, 4, 4, c(in.btn_y));
+    cv.fill(cx - 7, cy - 2, 4, 4, c(in.btn_x));
+    cv.fill(cx + 3, cy - 2, 4, 4, c(in.btn_b));
+    cv.fill(cx - 2, cy + 3, 4, 4, c(in.btn_a));
 }
 
 } // namespace groovebox::widgets
