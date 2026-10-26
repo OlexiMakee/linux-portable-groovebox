@@ -61,6 +61,8 @@ struct InputState {
     bool start_pressed = false;
     bool select_pressed = false;
     bool fn_pressed = false;
+    bool l3_pressed = false;
+    bool r3_pressed = false;
     bool vol_up_pressed = false;
     bool vol_down_pressed = false;
 

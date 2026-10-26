@@ -23,6 +23,12 @@ Keymap::Keymap() {
     bind(ALL, Layer::kBase, Button::kVolUp, Gesture::kPress, "VOL.INC");
     bind(ALL, Layer::kBase, Button::kVolDown, Gesture::kPress, "VOL.DEC");
 
+    // Аналогові стіки: L3 (клік лівого стіка) та R3 (клік правого стіка)
+    bind(ALL, Layer::kBase, Button::kL3, Gesture::kHold, "FILL.ON");
+    bind(ALL, Layer::kBase, Button::kL3, Gesture::kTap,  "ARP.TOGGLE");
+    bind(ALL, Layer::kBase, Button::kR3, Gesture::kPress, "PARAM.DEFAULT");
+    bind(ALL, Layer::kSelect, Button::kR3, Gesture::kPress, "PARAM.RANDOMIZE");
+
     // D-Pad навігація за замовчуванням
     bind(ALL, Layer::kBase, Button::kDpadUp,    Gesture::kPress, "NAV.UP");
     bind(ALL, Layer::kBase, Button::kDpadDown,  Gesture::kPress, "NAV.DOWN");
@@ -73,6 +79,9 @@ Keymap::Keymap() {
     bind(ViewId::kSynth, Layer::kSelect, Button::kA, Gesture::kPress, "TRACK.PREVIEW_NOTE");
     bind(ViewId::kSynth, Layer::kSelect, Button::kX, Gesture::kPress, "TRACK.PREV");
     bind(ViewId::kSynth, Layer::kSelect, Button::kY, Gesture::kPress, "TRACK.NEXT");
+    bind(ViewId::kSynth, Layer::kSelect, Button::kR3, Gesture::kPress, "SYNTH.RANDOMIZE");
+    bind(ViewId::kSynth, Layer::kBase, Button::kR3, Gesture::kPress, "PARAM.DEFAULT");
+    bind(ViewId::kSynth, Layer::kBase, Button::kL3, Gesture::kTap, "ARP.TOGGLE");
 
     // =========================================================================
     // 4. ЕФЕКТИ (ViewId::kFx)
@@ -130,6 +139,9 @@ Keymap::Keymap() {
     bind(ViewId::kArp, Layer::kBase, Button::kB,         Gesture::kPress, "PARAM.DEC");
     bind(ViewId::kArp, Layer::kBase, Button::kX,         Gesture::kPress, "PARAM.DEC_FAST");
     bind(ViewId::kArp, Layer::kBase, Button::kY,         Gesture::kPress, "PARAM.INC_FAST");
+    bind(ViewId::kArp, Layer::kBase, Button::kL3,        Gesture::kTap,   "VIEW.BACK");
+    bind(ViewId::kArp, Layer::kBase, Button::kR3,        Gesture::kPress, "ARP.RANDOMIZE");
+    bind(ViewId::kArp, Layer::kSelect, Button::kR3,      Gesture::kPress, "ARP.RANDOMIZE");
     bind(ViewId::kArp, Layer::kSelect, Button::kA,       Gesture::kPress, "ARP.COMMIT");
     bind(ViewId::kArp, Layer::kSelect, Button::kB,       Gesture::kPress, "VIEW.BACK");
 }
@@ -238,8 +250,8 @@ void InputRouter::processInput(UiContext& ctx) {
         {Button::kL2,        in.l2,         in.l2_pressed,    !in.l2 && is_down_[9]},
         {Button::kR1,        in.r1,         in.r1_pressed,    !in.r1 && is_down_[10]},
         {Button::kR2,        in.r2,         in.r2_pressed,    !in.r2 && is_down_[11]},
-        {Button::kL3,        in.l3,         false,            false},
-        {Button::kR3,        in.r3,         false,            false},
+        {Button::kL3,        in.l3,         in.l3_pressed,    !in.l3 && is_down_[12]},
+        {Button::kR3,        in.r3,         in.r3_pressed,    !in.r3 && is_down_[13]},
         {Button::kStart,     in.btn_start,  in.start_pressed, !in.btn_start && is_down_[14]},
         {Button::kSelect,    in.btn_select, in.select_pressed,!in.btn_select && is_down_[15]},
         {Button::kFn,        in.btn_fn,     in.fn_pressed,    !in.btn_fn && is_down_[16]},
@@ -275,6 +287,9 @@ void InputRouter::processInput(UiContext& ctx) {
         if (ev.released_edge) {
             if (!hold_fired_[idx] && !consumed_[idx]) {
                 dispatch(ctx, view, layer, ev.id, Gesture::kTap);
+            }
+            if (ev.id == Button::kL3 && hold_fired_[idx]) {
+                ActionRegistry::instance().run("FILL.OFF", ctx);
             }
             if (ev.id == Button::kA && ctx.app.step_inspector_open) {
                 // Закриваємо інспектор при відпусканні кнопки A

@@ -97,6 +97,8 @@ void InputManager::beginFrame() {
     state_.start_pressed = false;
     state_.select_pressed = false;
     state_.fn_pressed = false;
+    state_.l3_pressed = false;
+    state_.r3_pressed = false;
     state_.vol_up_pressed = false;
     state_.vol_down_pressed = false;
     state_.any_change = false;
@@ -176,6 +178,12 @@ void InputManager::processSdlEvent(const SDL_Event& ev, bool& quit_requested) {
             case SDLK_f:
                 setButton(state_.btn_fn, state_.fn_pressed, down, "FN (USB ROLE)");
                 break;
+            case SDLK_c:
+                setButton(state_.l3, state_.l3_pressed, down, "L3 (STICK L)");
+                break;
+            case SDLK_v:
+                setButton(state_.r3, state_.r3_pressed, down, "R3 (STICK R)");
+                break;
             case SDLK_EQUALS:
                 setButton(state_.vol_up, state_.vol_up_pressed, down, "VOL+");
                 break;
@@ -209,8 +217,8 @@ void InputManager::pollEvdev(bool& quit_requested) {
         else if (code == prof.key(Btn::Select))  setButton(state_.btn_select, state_.select_pressed, down, "SELECT");
         else if (code == prof.key(Btn::Start))   setButton(state_.btn_start, state_.start_pressed, down, "START");
         else if (code == prof.key(Btn::Fn))      setButton(state_.btn_fn, state_.fn_pressed, down, "FN (USB ROLE)");
-        else if (code == prof.key(Btn::L3))      setButton(state_.l3, dummy_edge, down, "L3");
-        else if (code == prof.key(Btn::R3))      setButton(state_.r3, dummy_edge, down, "R3");
+        else if (code == prof.key(Btn::L3))      setButton(state_.l3, state_.l3_pressed, down, "L3");
+        else if (code == prof.key(Btn::R3))      setButton(state_.r3, state_.r3_pressed, down, "R3");
         else if (code == prof.key(Btn::Up))      setButton(state_.dpad_up, state_.up_pressed, down, "D-UP");
         else if (code == prof.key(Btn::Down))    setButton(state_.dpad_down, state_.down_pressed, down, "D-DOWN");
         else if (code == prof.key(Btn::Left))    setButton(state_.dpad_left, state_.left_pressed, down, "D-LEFT");
