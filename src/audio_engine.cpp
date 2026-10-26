@@ -419,10 +419,93 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
     }
 }
 
+int AudioEngine::allocateVoice(int track, int midi_note) {
+    if (track < 0 || track >= 4) return 0;
+    const int base = track * kVoicesPerTrack;
+
+    // Якщо це драм-машина (BD=36, SD=38, CH=42, OH=46)
+    if (tracks_[track].engine == EngineType::kDrumSyn) {
+        if (midi_note == 36) return base + 0;
+        if (midi_note == 38) return base + 1;
+        if (midi_note == 42) return base + 2;
+        if (midi_note == 46) return base + 3;
+    }
+
+    // 1. Якщо та ж нота вже звучить у голосі треку — перевикористовуємо її
+    for (int i = 0; i < kVoicesPerTrack; ++i) {
+        int r = base + i;
+        if (voices_[r].active && voices_[r].note_num == midi_note) {
+            return r;
+        }
+    }
+
+    // 2. Шукаємо вільний (idle) голос для справжньої поліфонії
+    for (int i = 0; i < kVoicesPerTrack; ++i) {
+        int r = base + i;
+        if (!voices_[r].active || voices_[r].amp_adsr.stage == AdsrStage::kIdle) {
+            return r;
+        }
+    }
+
+    // 3. Шукаємо голос у стадії kRelease з найменшим значенням амплітуди
+    int best_rel = -1;
+    float min_val = 999.0f;
+    for (int i = 0; i < kVoicesPerTrack; ++i) {
+        int r = base + i;
+        if (voices_[r].amp_adsr.stage == AdsrStage::kRelease && voices_[r].amp_adsr.value < min_val) {
+            min_val = voices_[r].amp_adsr.value;
+            best_rel = r;
+        }
+    }
+    if (best_rel >= 0) return best_rel;
+
+    // 4. Voice Stealing: крадемо найстаріший голос (LRU)
+    int oldest_r = base;
+    uint32_t min_time = 0xFFFFFFFFu;
+    for (int i = 0; i < kVoicesPerTrack; ++i) {
+        int r = base + i;
+        if (voices_[r].trig_time < min_time) {
+            min_time = voices_[r].trig_time;
+            oldest_r = r;
+        }
+    }
+    return oldest_r;
+}
+
 void AudioEngine::triggerNote(int track, int midi_note, float velocity, float plock_cutoff, bool slide, float gate_len) {
     if (track < 0 || track >= 4) return;
-    int row = track * kVoicesPerTrack;
+    int row = 0;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        row = allocateVoice(track, midi_note);
+        voices_[row].note_num = static_cast<uint8_t>(midi_note);
+        voices_[row].trig_time = ++voice_alloc_counter_;
+    }
     triggerVoice(row, midi_note, velocity, plock_cutoff, slide, gate_len);
+}
+
+void AudioEngine::noteOff(int track, int midi_note) {
+    if (track < 0 || track >= 4) return;
+    const int base = track * kVoicesPerTrack;
+    const float sr = static_cast<float>(active_sample_rate_.load(std::memory_order_relaxed));
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    for (int i = 0; i < kVoicesPerTrack; ++i) {
+        int r = base + i;
+        if (voices_[r].active && voices_[r].note_num == midi_note) {
+            voices_[r].amp_adsr.release(tracks_[track].release, sr);
+            voices_[r].filter_adsr.release(tracks_[track].release, sr);
+        }
+    }
+}
+
+void AudioEngine::noteOffAll() {
+    const float sr = static_cast<float>(active_sample_rate_.load(std::memory_order_relaxed));
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    for (int r = 0; r < kTotalRows; ++r) {
+        int t = row_track_[r];
+        voices_[r].amp_adsr.release(tracks_[t].release, sr);
+        voices_[r].filter_adsr.release(tracks_[t].release, sr);
+    }
 }
 
 void AudioEngine::triggerSequencerStep(uint32_t master_tick) {

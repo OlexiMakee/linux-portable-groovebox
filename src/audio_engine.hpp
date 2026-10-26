@@ -93,7 +93,11 @@ public:
 
     // Тригер ноти для конкретного голосу/рядка (row = 0..15)
     void triggerVoice(int row, int midi_note, float velocity = 0.9f, float plock_cutoff = -1.0f, bool slide = false, float gate_len = 0.60f);
+    // Поліфонічний тригер ноти для треку (динамічний розподіл на 4 голоси треку)
     void triggerNote(int track, int midi_note, float velocity = 0.9f, float plock_cutoff = -1.0f, bool slide = false, float gate_len = 0.60f);
+    // Поліфонічне відпускання ноти (Note-Off) для треку
+    void noteOff(int track, int midi_note);
+    void noteOffAll();
 
     // Тригер кроку секвенсора (master_tick 0..unlimited)
     void triggerSequencerStep(uint32_t master_tick);
@@ -142,9 +146,13 @@ private:
     std::atomic<bool> fill_mode_{false};
     uint32_t cycle_counter_ = 0;
     std::array<bool, kTotalRows> prev_step_fired_{};
+    uint32_t voice_alloc_counter_ = 0;
+    int allocateVoice(int track, int midi_note);
 
     struct VoiceState {
         bool active = false;
+        uint8_t note_num = 48;
+        uint32_t trig_time = 0;
         float freq = 110.0f;
         float current_pitch = 48.0f;
         float target_pitch = 48.0f;
