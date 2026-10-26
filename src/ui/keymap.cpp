@@ -47,12 +47,14 @@ Keymap::Keymap() {
     bind(ViewId::kSeq, Layer::kBase, Button::kX, Gesture::kPress, "SEQ.NOTE_DOWN");
     bind(ViewId::kSeq, Layer::kBase, Button::kY, Gesture::kPress, "SEQ.NOTE_UP");
 
-    // SELECT шар у секвенсорі (Elektron Pattern / Track Operations)
-    bind(ViewId::kSeq, Layer::kSelect, Button::kA,     Gesture::kPress, "STEP.PREVIEW");
-    bind(ViewId::kSeq, Layer::kSelect, Button::kB,     Gesture::kPress, "SEQ.CLEAR_ROW");
-    bind(ViewId::kSeq, Layer::kSelect, Button::kX,     Gesture::kPress, "ARP.OPEN");
-    bind(ViewId::kSeq, Layer::kSelect, Button::kY,     Gesture::kPress, "SEQ.CYCLE_PAGE");
-    bind(ViewId::kSeq, Layer::kSelect, Button::kStart, Gesture::kPress, "SEQ.RANDOMIZE");
+    // SELECT шар у секвенсорі (Elektron Pattern / Track Operations & Polymetry)
+    bind(ViewId::kSeq, Layer::kSelect, Button::kA,         Gesture::kPress, "STEP.PREVIEW");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kB,         Gesture::kPress, "SEQ.CLEAR_ROW");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kX,         Gesture::kPress, "SEQ.CYCLE_LEN");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kY,         Gesture::kPress, "SEQ.CYCLE_PAGE");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kDpadLeft,  Gesture::kPress, "SEQ.LEN_DEC");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kDpadRight, Gesture::kPress, "SEQ.LEN_INC");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kStart,     Gesture::kPress, "ARP.OPEN");
 
     // HOLD L2 шар у секвенсорі: Elektron Live Quick Mute Mode для треків 1-4!
     bind(ViewId::kSeq, Layer::kHoldL2, Button::kX, Gesture::kPress, "MUTE.T1");

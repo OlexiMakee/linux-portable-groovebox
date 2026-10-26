@@ -150,6 +150,24 @@ ActionRegistry::ActionRegistry() {
             c.app.seq_page = c.app.cursor_step / static_cast<int>(kStepsPerPage);
         }
     }});
+    add(Action{"SEQ.LEN_INC", "LEN+", [](UiContext& c) {
+        if (c.app.cursor_row < c.audio.getActiveRowCount()) {
+            uint32_t len = c.audio.getRowLength(c.app.cursor_row);
+            uint32_t next = std::min(128u, ((len / 16u) + 1u) * 16u);
+            c.audio.setRowLength(c.app.cursor_row, next);
+            if (c.app.cursor_step >= static_cast<int>(next)) c.app.cursor_step = static_cast<int>(next - 1);
+            c.app.seq_page = c.app.cursor_step / static_cast<int>(kStepsPerPage);
+        }
+    }});
+    add(Action{"SEQ.LEN_DEC", "LEN-", [](UiContext& c) {
+        if (c.app.cursor_row < c.audio.getActiveRowCount()) {
+            uint32_t len = c.audio.getRowLength(c.app.cursor_row);
+            uint32_t next = len > 16u ? ((len - 1u) / 16u) * 16u : 16u;
+            c.audio.setRowLength(c.app.cursor_row, next);
+            if (c.app.cursor_step >= static_cast<int>(next)) c.app.cursor_step = static_cast<int>(next - 1);
+            c.app.seq_page = c.app.cursor_step / static_cast<int>(kStepsPerPage);
+        }
+    }});
     add(Action{"SEQ.CYCLE_PAGE", "PAGE", [](UiContext& c) {
         if (c.app.cursor_row < c.audio.getActiveRowCount()) {
             const uint32_t len = c.audio.getRowLength(c.app.cursor_row);
@@ -236,27 +254,24 @@ ActionRegistry::ActionRegistry() {
 
     // ---------------- Перемикання вкладок ----------------
     add(Action{"TAB.L1", "TAB.L1", [](UiContext& c) {
-        // Трифункціональна кнопка L1: SEQ -> SYNTH -> PERF -> SEQ
-        if (c.app.active_view == ViewId::kSeq) {
-            c.app.active_view = ViewId::kSynth;
-            const int act = c.audio.getActiveRowCount();
-            if (c.app.cursor_row < act) {
-                c.app.selected_track = c.audio.getRowTrack(c.app.cursor_row);
-            }
-        } else if (c.app.active_view == ViewId::kSynth) {
-            c.app.active_view = ViewId::kPerf;
-        } else {
-            c.app.active_view = ViewId::kSeq;
-        }
+        c.app.active_view = ViewId::kSeq;
     }});
     add(Action{"TAB.L2", "TAB.L2", [](UiContext& c) {
-        c.app.active_view = ViewId::kFx;
+        c.app.active_view = ViewId::kSynth;
+        const int act = c.audio.getActiveRowCount();
+        if (c.app.cursor_row < act) {
+            c.app.selected_track = c.audio.getRowTrack(c.app.cursor_row);
+        }
     }});
     add(Action{"TAB.R2", "TAB.R2", [](UiContext& c) {
-        c.app.active_view = ViewId::kMix;
+        if (c.app.active_view == ViewId::kMix) {
+            c.app.active_view = ViewId::kFx;
+        } else {
+            c.app.active_view = ViewId::kMix;
+        }
     }});
     add(Action{"TAB.R1", "TAB.R1", [](UiContext& c) {
-        c.app.active_view = ViewId::kScope;
+        c.app.active_view = ViewId::kPerf;
     }});
     add(Action{"TAB.G", "TAB.G", [](UiContext& c) {
         if (c.app.active_view != ViewId::kSys) {

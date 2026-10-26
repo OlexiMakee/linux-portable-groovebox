@@ -53,9 +53,10 @@ void setupAppLayout(UiShell& shell) {
         fx_spec.tab_title = [](const UiContext&) { return "FX"; };
         fx_spec.header = [](const UiContext&) { return "MASTER SEND EFFECTS & OUTPUT"; };
         fx_spec.rows = {
-            {"DLY", {"DLY.TIME", "DLY.FBK", "DLY.RET"}},
-            {"REV", {"REV.DECAY", "REV.RET"}},
-            {"MST", {"MST.VOL", "MST.PEAK", "MST.BPM"}}
+            {"DLY", {"DLY.TIME", "DLY.FBK", "DLY.RET", "MST.BPM"}},
+            {"REV", {"REV.DECAY", "REV.RET", "TRK.DLY", "TRK.REV"}},
+            {"CHR", {"FX.CHR_MIX", "FX.CHR_RATE", "FX.CHR_DEP", "TRK.PAN"}},
+            {"DRV", {"FX.DRIVE", "FX.DRV_TONE", "MST.VOL", "MST.PEAK"}}
         };
         shell.registerView(std::make_unique<GridView>(std::move(fx_spec)));
     }
@@ -168,15 +169,15 @@ void setupAppLayout(UiShell& shell) {
 
     // =========================================================================
     // 10. ВКЛАДКИ ВЕРХНЬОГО РЯДУ
-    // Порядок зліва направо: L1, L2, R2, R1, G (рівні вкладки по 70px + вузька SYS 40px = 320px)
-    // Вкладка R2 (MIX) розташована ЛІВІШЕ за R1 (SCOPE)!
-    // Вкладка L1 циклічно перемикає SEQ -> SYNTH -> PERF!
+    // Порядок зліва направо: L1 (SEQ), L2 (SYNTH), R2 (MIX <-> FX), R1 (PERF), G (SYS)
+    // 4 однакові вкладки під пальці по 70px + вузька SYS 40px = 320px
+    // Вкладка R1 закріплена виключно за живим Performance Mode!
     // =========================================================================
     shell.setTabSlots({
-        TabSlot{"[L1]", {ViewId::kSeq, ViewId::kSynth, ViewId::kPerf}, 70},
-        TabSlot{"[L2]", {ViewId::kFx}, 70},
-        TabSlot{"[R2]", {ViewId::kMix}, 70},
-        TabSlot{"[R1]", {ViewId::kScope}, 70},
+        TabSlot{"[L1]", {ViewId::kSeq}, 70},
+        TabSlot{"[L2]", {ViewId::kSynth}, 70},
+        TabSlot{"[R2]", {ViewId::kMix, ViewId::kFx}, 70},
+        TabSlot{"[R1]", {ViewId::kPerf}, 70},
         TabSlot{"[G]",  {ViewId::kSys}, 40}
     });
 }
