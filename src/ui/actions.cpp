@@ -328,14 +328,108 @@ ActionRegistry::ActionRegistry() {
     add(Action{"PERF.PAD_X", "PAD X", [=](UiContext& c) { triggerPad(c, 2); }});
     add(Action{"PERF.PAD_Y", "PAD Y", [=](UiContext& c) { triggerPad(c, 3); }});
 
-    // ---------------- АРПЕДЖИРАТОР (ARP.*) ----------------
+    // ---------------- АРПЕДЖИРАТОР ТА РАНДОМАЙЗЕР (ARP.* / RND.* / FILL.*) ----------------
+    add(Action{"FILL.ON", "FILL", [](UiContext& c) {
+        c.audio.setFillMode(true);
+        c.app.last_action = "ELEKTRON FILL ON";
+    }});
+    add(Action{"FILL.OFF", "NORM", [](UiContext& c) {
+        c.audio.setFillMode(false);
+        c.app.last_action = "FILL OFF";
+    }});
+
     add(Action{"ARP.OPEN", "ARP", [](UiContext& c) {
         c.app.previous_view = c.app.active_view;
         c.app.active_view = ViewId::kArp;
+        c.app.last_action = "ARP OPENED";
     }});
-    add(Action{"ARP.COMMIT", "COMMIT", [](UiContext& c) {
-        c.app.arpeggiator.commitToTrack(c.audio, c.app.cursor_row, 0, 16);
-        c.app.last_action = "ARP COMMITTED";
+    add(Action{"ARP.CLOSE", "BACK", [](UiContext& c) {
+        c.app.active_view = (c.app.previous_view != ViewId::kArp) ? c.app.previous_view : ViewId::kSynth;
+        c.app.last_action = "ARP CLOSED";
+    }});
+    add(Action{"ARP.TOGGLE", "ARP", [](UiContext& c) {
+        if (c.app.active_view == ViewId::kArp) {
+            c.app.active_view = (c.app.previous_view != ViewId::kArp) ? c.app.previous_view : ViewId::kSynth;
+            c.app.last_action = "ARP CLOSED";
+        } else {
+            c.app.previous_view = c.app.active_view;
+            c.app.active_view = ViewId::kArp;
+            c.app.last_action = "ARP OPENED";
+        }
+    }});
+    add(Action{"ARP.COMMIT", "APPLY", [](UiContext& c) {
+        const int row = c.app.cursor_row;
+        const int start = c.app.cursor_step;
+        const int row_len = static_cast<int>(c.audio.getRowLength(row));
+        int count = row_len - start;
+        if (count <= 0) count = 16;
+        c.app.arpeggiator.commitToTrack(c.audio, row, start, count);
+        char buf[32];
+        std::snprintf(buf, sizeof(buf), "ARP APPLIED @%02d..%02d", start + 1, std::min(row_len, start + count));
+        c.app.last_action = buf;
+    }});
+
+    // Музично-зважений рандомайзер синтезатора (Smart Musical Synth Randomizer)
+    add(Action{"SYNTH.RANDOMIZE", "RND SNT", [](UiContext& c) {
+        const int t = c.app.selected_track;
+        auto tp = c.audio.getTrackParams(t);
+        static uint32_t s_seed = 1234567;
+        auto rndF = [&](float min_v, float max_v) {
+            s_seed = s_seed * 1664525u + 1013904223u;
+            float r = static_cast<float>((s_seed >> 8) & 0xFFFF) / 65535.0f;
+            return min_v + r * (max_v - min_v);
+        };
+        tp.attack = rndF(0.002f, 0.08f);
+        tp.decay = rndF(0.06f, 0.60f);
+        tp.sustain = rndF(0.10f, 0.85f);
+        tp.release = rndF(0.05f, 0.90f);
+        tp.p[0] = rndF(0.20f, 0.90f); // Cutoff
+        tp.p[1] = rndF(0.15f, 0.70f); // Resonance
+        tp.p[2] = rndF(0.10f, 0.80f); // Env Mod / Wave
+        tp.p[3] = rndF(0.00f, 0.60f); // Drive / Detune
+        tp.p[4] = rndF(0.00f, 0.50f); // Sub / Noise
+        tp.p[5] = rndF(0.20f, 0.80f); // Tone / FM Ratio
+        tp.delay_send = rndF(0.00f, 0.35f);
+        tp.reverb_send = rndF(0.05f, 0.40f);
+        c.audio.setTrackParams(t, tp);
+        c.app.last_action = "T" + std::to_string(t + 1) + " SYNTH MUTATED";
+    }});
+
+    // Музично-зважений рандомайзер арпеджиатора (Smart Musical Arp Randomizer)
+    add(Action{"ARP.RANDOMIZE", "RND ARP", [](UiContext& c) {
+        auto& cfg = c.app.arpeggiator.config();
+        static uint32_t a_seed = 7654321;
+        auto rndI = [&](int min_v, int max_v) {
+            a_seed = a_seed * 1664525u + 1013904223u;
+            int span = max_v - min_v + 1;
+            return min_v + static_cast<int>(((a_seed >> 8) & 0x7FFF) % span);
+        };
+        cfg.scale = static_cast<ScaleType>(rndI(1, 9));
+        cfg.arp1_div = static_cast<Arp1Division>(rndI(0, 3));
+        cfg.chord_type = static_cast<ChordType>(rndI(0, 4));
+        cfg.progression_id = rndI(0, 3);
+        cfg.octaves = rndI(1, 3);
+        cfg.arp2_div = static_cast<Arp2Division>(rndI(2, 5));
+        cfg.pattern = static_cast<ArpPattern>(rndI(0, 8));
+        cfg.arp2_gate = static_cast<float>(rndI(30, 90)) / 100.0f;
+        cfg.euclid_hits = rndI(3, 11);
+        cfg.mutation_pct = rndI(10, 50);
+        c.app.last_action = "ARP RANDOMIZED";
+    }});
+
+    add(Action{"PARAM.DEFAULT", "INIT", [](UiContext& c) {
+        c.app.last_action = "PARAM INIT";
+    }});
+    add(Action{"PARAM.RANDOMIZE", "RANDOM", [](UiContext& c) {
+        if (c.app.active_view == ViewId::kArp) {
+            ActionRegistry::instance().run("ARP.RANDOMIZE", c);
+        } else if (c.app.active_view == ViewId::kSynth) {
+            ActionRegistry::instance().run("SYNTH.RANDOMIZE", c);
+        } else if (c.app.active_view == ViewId::kSeq) {
+            ActionRegistry::instance().run("SEQ.RANDOMIZE", c);
+        } else {
+            c.app.last_action = "RANDOMIZE N/A";
+        }
     }});
 }
 

@@ -1,4 +1,5 @@
 #include "ui/params.hpp"
+#include "ui/actions.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -187,6 +188,16 @@ ParamRegistry::ParamRegistry() {
         p.label = "ENGINE";
         p.value = [](const UiContext& c) { return std::string(getEngineTypeName(c.audio.getTrackParams(trk(c, -1)).engine)); };
         p.step = [](UiContext& c, int dir, bool) { c.audio.cycleTrackEngine(trk(c, -1), dir); };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "TRK.RND";
+        p.label = "RANDOM";
+        p.value = [](const UiContext&) { return "DICE [A]"; };
+        p.step = [](UiContext& c, int, bool) {
+            ActionRegistry::instance().run("SYNTH.RANDOMIZE", c);
+        };
         add(std::move(p));
     }
     {
@@ -655,12 +666,25 @@ ParamRegistry::ParamRegistry() {
     }
     {
         Param p;
-        p.id = "ARP.COMMIT";
-        p.label = "COMMIT";
-        p.value = [](const UiContext&) { return "PRESS [A]"; };
+        p.id = "ARP.RND";
+        p.label = "RANDOM";
+        p.value = [](const UiContext&) { return "DICE [A]"; };
         p.step = [](UiContext& c, int, bool) {
-            c.app.arpeggiator.commitToTrack(c.audio, c.app.cursor_row, 0, 16);
-            c.app.last_action = "ARP COMMITTED";
+            ActionRegistry::instance().run("ARP.RANDOMIZE", c);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "ARP.COMMIT";
+        p.label = "APPLY";
+        p.value = [](const UiContext& c) {
+            char b[16];
+            std::snprintf(b, sizeof(b), "@ST%02d [A]", c.app.cursor_step + 1);
+            return std::string(b);
+        };
+        p.step = [](UiContext& c, int, bool) {
+            ActionRegistry::instance().run("ARP.COMMIT", c);
         };
         add(std::move(p));
     }

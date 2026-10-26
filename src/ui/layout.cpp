@@ -26,8 +26,8 @@ void setupAppLayout(UiShell& shell) {
             return std::string(b);
         };
         synth_spec.rows = {
-            // Row 0: Інструмент, транспозиція та слайд (жодного дублювання ADD/DEL!)
-            {"INST", {"TRK.ENGINE", "TRK.SEL", "TRK.TRANSP", "TRK.GLIDE"}},
+            // Row 0: Інструмент, рандомайзер, транспозиція та слайд
+            {"INST", {"TRK.ENGINE", "TRK.RND", "TRK.TRANSP", "TRK.GLIDE"}},
             // Row 1: Фільтр та тембр (динамічні назви P1..P4)
             {"FLT",  {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4"}},
             // Row 2: Осцилятори
@@ -168,7 +168,7 @@ void setupAppLayout(UiShell& shell) {
             {"SCALE", {"ARP.SCALE", "ARP.ROOT", "TRK.TRANSP", "TRK.GLIDE"}},
             {"ARP1",  {"ARP.DIV1", "ARP.CHORD", "ARP.PROG", "ARP.OCT"}},
             {"ARP2",  {"ARP.DIV2", "ARP.PAT", "ARP.GATE", "STEP.SLIDE"}},
-            {"ALGO",  {"ARP.EUCLID", "ARP.MUTATE", "STEP.PROB", "ARP.COMMIT"}}
+            {"ALGO",  {"ARP.EUCLID", "ARP.MUTATE", "ARP.RND", "ARP.COMMIT"}}
         };
         shell.registerView(std::make_unique<GridView>(std::move(arp_spec)));
     }
