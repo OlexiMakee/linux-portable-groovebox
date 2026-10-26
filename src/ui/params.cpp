@@ -258,6 +258,11 @@ ParamRegistry::ParamRegistry() {
     add(globalFloat("DLY.RET", "DLY RET", [](SynthParams& s) -> std::atomic<float>& { return s.delay_mix; }, 0.0f, 1.0f, 0.02f, fmtPct));
     add(globalFloat("REV.DECAY", "REV DEC", [](SynthParams& s) -> std::atomic<float>& { return s.reverb_decay; }, 0.0f, 0.95f, 0.02f, fmtPct));
     add(globalFloat("REV.RET", "REV RET", [](SynthParams& s) -> std::atomic<float>& { return s.reverb_mix; }, 0.0f, 1.0f, 0.02f, fmtPct));
+    add(globalFloat("FX.CHR_MIX", "CHR MIX", [](SynthParams& s) -> std::atomic<float>& { return s.chorus_mix; }, 0.0f, 1.0f, 0.05f, fmtPct));
+    add(globalFloat("FX.CHR_RATE", "CHR RATE", [](SynthParams& s) -> std::atomic<float>& { return s.chorus_rate; }, 0.1f, 5.0f, 0.1f, fmtHz));
+    add(globalFloat("FX.CHR_DEP", "CHR DEP", [](SynthParams& s) -> std::atomic<float>& { return s.chorus_depth; }, 0.0f, 1.0f, 0.05f, fmtPct));
+    add(globalFloat("FX.DRIVE", "OVERDRIVE", [](SynthParams& s) -> std::atomic<float>& { return s.drive_amount; }, 0.0f, 1.0f, 0.05f, fmtPct));
+    add(globalFloat("FX.DRV_TONE", "DRV TONE", [](SynthParams& s) -> std::atomic<float>& { return s.drive_tone; }, 0.0f, 1.0f, 0.05f, fmtPct));
     {
         Param p;
         p.id = "MST.VOL";

@@ -77,7 +77,9 @@ AudioEngine::AudioEngine()
     : delay_buf_l_(16384, 0.0f),
       delay_buf_r_(16384, 0.0f),
       reverb_buf_l_(16384, 0.0f),
-      reverb_buf_r_(16384, 0.0f) {
+      reverb_buf_r_(16384, 0.0f),
+      chorus_buf_l_(2048, 0.0f),
+      chorus_buf_r_(2048, 0.0f) {
     for (auto& s : scope_ring_) s.store(0.0f, std::memory_order_relaxed);
     for (auto& t : track_vu_) t.store(0.0f, std::memory_order_relaxed);
     initDefaultPattern();
@@ -671,6 +673,11 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
     const float dly_mix   = params_.delay_mix.load(std::memory_order_relaxed);
     const float rev_dec   = params_.reverb_decay.load(std::memory_order_relaxed);
     const float rev_mix   = params_.reverb_mix.load(std::memory_order_relaxed);
+    const float chr_rate  = params_.chorus_rate.load(std::memory_order_relaxed);
+    const float chr_depth = params_.chorus_depth.load(std::memory_order_relaxed);
+    const float chr_mix   = params_.chorus_mix.load(std::memory_order_relaxed);
+    const float drv_amt   = params_.drive_amount.load(std::memory_order_relaxed);
+    const float drv_tone  = params_.drive_tone.load(std::memory_order_relaxed);
 
     std::array<TrackParameters, 4> local_tracks;
     {
@@ -907,6 +914,38 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             send_r += out_s * d_send * pan_r;
             rev_l  += out_s * r_send * pan_l;
             rev_r  += out_s * r_send * pan_r;
+        }
+
+        // Стерео Хорус (LFO-модульована затримка 7-18мс)
+        if (chr_mix > 0.01f) {
+            chorus_buf_l_[chorus_idx_] = mix_l;
+            chorus_buf_r_[chorus_idx_] = mix_r;
+            float lfo_l = (std::sin(chorus_phase_) + 1.0f) * 0.5f;
+            float lfo_r = (std::cos(chorus_phase_) + 1.0f) * 0.5f;
+            chorus_phase_ += chr_rate * 6.2831853f * inv_sr;
+            if (chorus_phase_ >= 6.2831853f) chorus_phase_ -= 6.2831853f;
+
+            float delay_samples_l = 160.0f + lfo_l * chr_depth * 220.0f;
+            float delay_samples_r = 160.0f + lfo_r * chr_depth * 220.0f;
+            uint32_t c_idx_l = (chorus_idx_ + chorus_buf_l_.size() - static_cast<uint32_t>(delay_samples_l)) % chorus_buf_l_.size();
+            uint32_t c_idx_r = (chorus_idx_ + chorus_buf_r_.size() - static_cast<uint32_t>(delay_samples_r)) % chorus_buf_r_.size();
+
+            mix_l = mix_l * (1.0f - chr_mix * 0.5f) + chorus_buf_l_[c_idx_l] * chr_mix * 0.70f;
+            mix_r = mix_r * (1.0f - chr_mix * 0.5f) + chorus_buf_r_[c_idx_r] * chr_mix * 0.70f;
+            chorus_idx_ = (chorus_idx_ + 1) % chorus_buf_l_.size();
+        }
+
+        // Tanh Overdrive / Сатуратор із фільтром тембру
+        if (drv_amt > 0.01f) {
+            float drive_gain = 1.0f + drv_amt * 7.0f;
+            float sat_l = std::tanh(mix_l * drive_gain);
+            float sat_r = std::tanh(mix_r * drive_gain);
+            float alpha = std::clamp(drv_tone * 0.85f + 0.10f, 0.05f, 0.95f);
+            drive_lp_l_ += alpha * (sat_l - drive_lp_l_);
+            drive_lp_r_ += alpha * (sat_r - drive_lp_r_);
+            float norm_gain = 1.0f / std::sqrt(drive_gain);
+            mix_l = (drive_lp_l_ * norm_gain) * drv_amt + mix_l * (1.0f - drv_amt);
+            mix_r = (drive_lp_r_ * norm_gain) * drv_amt + mix_r * (1.0f - drv_amt);
         }
 
         // Майстер стерео пінг-понг ділей

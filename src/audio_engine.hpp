@@ -28,6 +28,11 @@ struct SynthParams {
     std::atomic<float> delay_mix{0.25f};      // Рівень повернення стерео-ділею
     std::atomic<float> reverb_decay{0.50f};   // Рівень реверберації
     std::atomic<float> reverb_mix{0.20f};     // Повернення реверберації
+    std::atomic<float> chorus_rate{0.80f};    // Частота хоруса (0.1..5.0 Гц)
+    std::atomic<float> chorus_depth{0.45f};   // Глибина хоруса (0.0..1.0)
+    std::atomic<float> chorus_mix{0.00f};     // Мікс хоруса (0.0..1.0)
+    std::atomic<float> drive_amount{0.00f};   // Насичення овердрайву (0.0..1.0)
+    std::atomic<float> drive_tone{0.65f};     // Тембр овердрайву (0.0..1.0)
 };
 
 // Стан аудіорушія для відображення в UI, осцилографі та VU-метрі
@@ -172,6 +177,14 @@ private:
     std::vector<float> reverb_buf_l_;
     std::vector<float> reverb_buf_r_;
     uint32_t reverb_idx_ = 0;
+
+    // Стерео хорус та сатуратор
+    std::vector<float> chorus_buf_l_;
+    std::vector<float> chorus_buf_r_;
+    uint32_t chorus_idx_ = 0;
+    float chorus_phase_ = 0.0f;
+    float drive_lp_l_ = 0.0f;
+    float drive_lp_r_ = 0.0f;
 
     NetAudioStreamer net_streamer_;
 
