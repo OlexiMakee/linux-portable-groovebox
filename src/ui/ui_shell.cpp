@@ -192,14 +192,16 @@ void UiShell::renderHud(Canvas& cv, const UiContext& ctx) {
     cv.line(56, hud_y + 2, 56, logical_h_ - 2, palette::kGridDim);
     cv.line(202, hud_y + 2, 202, logical_h_ - 2, palette::kGridDim);
 
-    // Рядок 1: Транспорт, BPM, Аудіо, Шар
-    const char* play_str = ctx.app.transport_playing ? "PLAY" : "STOP";
-    ColorRGB play_col = ctx.app.transport_playing ? palette::kLevelOk : palette::kAccentOrange;
-    cv.text(60, hud_y + 3, play_str, play_col);
+    // 1. Транспорт (піктограми Play/Stop), BPM, Аудіо, Шар
+    if (ctx.app.transport_playing) {
+        widgets::iconPlay(cv, 60, hud_y + 3, palette::kLevelOk);
+    } else {
+        widgets::iconStop(cv, 60, hud_y + 3, palette::kAccentOrange);
+    }
 
     char bpm_buf[16];
     std::snprintf(bpm_buf, sizeof(bpm_buf), "%3.0f BPM", ctx.app.bpm);
-    cv.text(94, hud_y + 3, bpm_buf, palette::kTextMain);
+    cv.text(70, hud_y + 3, bpm_buf, palette::kTextMain);
 
     const char* hp_str = ctx.in.headphones_plugged ? "[HP]" : "[SPK]";
     cv.text(148, hud_y + 3, hp_str, ctx.in.headphones_plugged ? palette::kAccentCyan : palette::kTextDim);
@@ -212,22 +214,27 @@ void UiShell::renderHud(Canvas& cv, const UiContext& ctx) {
     }
 
     // Рядок 2: Фокус активного вікна/параметра
-    IView* cur_v = ctx.app.step_inspector_open ? findView(ViewId::kInspect) : findView(ctx.app.active_view);
+    IView* cur_v = ctx.app.step_inspector_open ? findView(ViewId::kInspect) : (ctx.app.arp_modal_open ? findView(ViewId::kArp) : findView(ctx.app.active_view));
     std::string f_id = cur_v ? cur_v->focusId(ctx) : "GROOVEBOX";
     cv.textClip(60, hud_y + 13, f_id, 34, palette::kAccentOrange);
 
     // Рядок 3: Підказки стіків L3/R3 та останній статус
-    const ViewId active_v_id = ctx.app.step_inspector_open ? ViewId::kInspect : ctx.app.active_view;
-    const bool is_arp = (active_v_id == ViewId::kArp);
-    const char* l3_label = is_arp ? "L3:BCK" : "L3:ARP";
-    const char* r3_label = (cur_layer == Layer::kSelect || is_arp || active_v_id == ViewId::kSynth) ? "R3:RND" : "R3:INIT";
+    const ViewId active_v_id = ctx.app.step_inspector_open ? ViewId::kInspect : (ctx.app.arp_modal_open ? ViewId::kArp : ctx.app.active_view);
+    const bool is_arp = (active_v_id == ViewId::kArp || ctx.app.arp_modal_open);
+    const char* l3_label = is_arp ? "L3:CLOSE" : "L3:ARP";
+    const char* r3_label = is_arp ? "R3:RND" : (active_v_id == ViewId::kSynth ? "R3:INIT" : (active_v_id == ViewId::kSeq ? "" : "R3:INIT"));
     ColorRGB l3_col = ctx.in.l3 ? palette::kParamTrig : (ctx.audio.getFillMode() ? palette::kLevelWarnClip : palette::kAccentCyan);
     ColorRGB r3_col = ctx.in.r3 ? palette::kParamTrig : palette::kAccentOrange;
 
     cv.text(60, hud_y + 22, l3_label, l3_col);
-    cv.text(90, hud_y + 22, r3_label, r3_col);
-    cv.line(120, hud_y + 22, 120, hud_y + 28, palette::kGridDim);
-    cv.textClip(124, hud_y + 22, ctx.app.last_action, 19, palette::kTextDim);
+    if (r3_label[0] != '\0') {
+        cv.text(98, hud_y + 22, r3_label, r3_col);
+        cv.line(128, hud_y + 22, 128, hud_y + 28, palette::kGridDim);
+        cv.textClip(132, hud_y + 22, ctx.app.last_action, 17, palette::kTextDim);
+    } else {
+        cv.line(98, hud_y + 22, 98, hud_y + 28, palette::kGridDim);
+        cv.textClip(102, hud_y + 22, ctx.app.last_action, 24, palette::kTextDim);
+    }
 
     // 4. R-Stick Box з динамічною мішенню
     cv.text(206, hud_y + 2, r_dest, palette::kAccentOrange);
@@ -279,11 +286,37 @@ void UiShell::render(
         cur_v->render(cv, ctx, ws);
     }
 
-    // Якщо відкрито модальний інспектор — малюємо його поверх робочої області!
+    // Якщо відкрито модальний інспектор або арпеджиатор — малюємо його поверх робочої області!
     if (app.step_inspector_open) {
         IView* ins_v = findView(ViewId::kInspect);
         if (ins_v) {
             ins_v->render(cv, ctx, ws);
+        }
+    } else if (app.arp_modal_open) {
+        IView* arp_v = findView(ViewId::kArp);
+        if (arp_v) {
+            arp_v->render(cv, ctx, ws);
+        }
+    }
+
+    // Випадаюче модальне меню вибору рушія синтезу
+    if (app.engine_menu_open) {
+        const int mw = 180;
+        const int mh = static_cast<int>(EngineType::kCount) * 11 + 18;
+        const int mx = (logical_w_ - mw) / 2;
+        const int my = (logical_h_ - mh) / 2;
+        cv.fill(mx, my, mw, mh, palette::kPanelBg);
+        cv.rect(mx, my, mw, mh, palette::kAccentCyan);
+        cv.fill(mx + 1, my + 1, mw - 2, 10, palette::kHeaderSel);
+        cv.text(mx + 4, my + 3, "SELECT SYNTH ENGINE", palette::kAccentCyan);
+        for (int e = 0; e < static_cast<int>(EngineType::kCount); ++e) {
+            const int ey = my + 14 + e * 11;
+            const bool sel = (e == app.engine_menu_sel);
+            if (sel) {
+                cv.fill(mx + 3, ey, mw - 6, 10, palette::kHeaderSel);
+                cv.rect(mx + 3, ey, mw - 6, 10, palette::kAccentCyan);
+            }
+            cv.text(mx + 8, ey + 2, getEngineTypeName(static_cast<EngineType>(e)), sel ? palette::kAccentCyan : palette::kTextMain);
         }
     }
 

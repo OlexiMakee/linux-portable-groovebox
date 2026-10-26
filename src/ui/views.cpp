@@ -116,26 +116,45 @@ void GridView::render(Canvas& cv, const UiContext& c, Rect area) const {
 
 void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
     const int vi = static_cast<int>(id());
-    if (spec_.header) cv.text(area.x + 4, area.y + 3, spec_.header(c), spec_.accent);
 
-    const int rows = static_cast<int>(resolved_.size());
-    const int vis = visibleRows(spec_, area);
-    const int scroll = std::clamp(c.app.grid_scroll[vi], 0, std::max(0, rows - vis));
-    if (rows > vis) {
-        char b[16];
-        std::snprintf(b, sizeof(b), "%d-%d/%d", scroll + 1, std::min(rows, scroll + vis), rows);
-        cv.text(area.x + area.w - Canvas::textWidth(b) - 4, area.y + 3, b, palette::kTextDim);
+    Rect box = area;
+    int table_y0 = area.y + kHeaderH;
+    int cells_x = area.x + kTitleW;
+    int cells_w = area.w - kTitleW - 3;
+
+    // Якщо це арпеджиатор — рендеримо його як центроване модальне вікно з рамкою
+    if (spec_.id == ViewId::kArp) {
+        box.w = 260;
+        box.h = 132;
+        box.x = area.x + (area.w - box.w) / 2;
+        box.y = area.y + (area.h - box.h) / 2 - 2;
+
+        cv.fill(box.x, box.y, box.w, box.h, palette::kPanelBg);
+        cv.rect(box.x, box.y, box.w, box.h, spec_.accent);
+        cv.fill(box.x + 1, box.y + 1, box.w - 2, 10, palette::kHeaderSel);
+        if (spec_.header) cv.text(box.x + 4, box.y + 3, spec_.header(c), spec_.accent);
+        cv.text(box.x + box.w - 38, box.y + 3, "[L3:X]", palette::kTextDim);
+
+        table_y0 = box.y + 14;
+        cells_x = box.x + kTitleW;
+        cells_w = box.w - kTitleW - 4;
+    } else if (spec_.header) {
+        cv.text(area.x + 4, area.y + 3, spec_.header(c), spec_.accent);
     }
+
+    const int total_rows = static_cast<int>(resolved_.size());
+    // У вкладці MIX показуємо тільки стільки смуг, скільки реально існує + рядок Master
+    const int act_tracks = (spec_.id == ViewId::kMix) ? std::min(total_rows - 1, c.audio.getActiveRowCount()) : total_rows;
+    const int rows_to_draw = (spec_.id == ViewId::kMix) ? act_tracks + 1 : total_rows;
 
     const int sel_r = rowOf(c);
     const int sel_c = colOf(c);
-    const int cells_x = area.x + kTitleW;
-    const int cells_w = area.w - kTitleW - 3;
 
-    for (int i = 0; i < vis && scroll + i < rows; ++i) {
-        const int r = scroll + i;
-        const int y = area.y + kHeaderH + i * kTableRowH;
-        cv.text(area.x + 4, y + 8, spec_.rows[r].title, r == sel_r ? spec_.accent : palette::kTextDim);
+    for (int i = 0; i < rows_to_draw; ++i) {
+        // Для MIX останній рядок — завжди MST (індекс total_rows - 1)
+        const int r = (spec_.id == ViewId::kMix && i == act_tracks) ? (total_rows - 1) : i;
+        const int y = table_y0 + i * kTableRowH;
+        cv.text(box.x + 4, y + 8, spec_.rows[r].title, r == sel_r ? spec_.accent : palette::kTextDim);
 
         const auto& cells = resolved_[r];
         const int n = std::max(1, static_cast<int>(cells.size()));
@@ -154,16 +173,31 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
     }
 
     if (spec_.id == ViewId::kMix) {
-        // Компактний інтегрований осцилограф (26 px) та майстер VU-метри безпосередньо під мікшером
-        const int mix_scope_y = area.y + kHeaderH + rows * kTableRowH + 4;
-        cv.text(area.x + 4, mix_scope_y + 8, "SCOPE", palette::kTextDim);
-        widgets::scope(cv, Rect{area.x + 30, mix_scope_y - 1, area.w - 34, 26}, c.tel.scope_samples, palette::kAccentCyan);
+        // Нижня панель індикації: вертикальні міні-VU для кожного треку зліва направо + квадратний Scope (24x24) + Master L/R VU
+        const int lower_y = table_y0 + rows_to_draw * kTableRowH + 4;
+        const int lower_h = (area.y + area.h) - lower_y - 2;
 
-        const int vu_y = mix_scope_y + 28;
-        cv.text(area.x + 4, vu_y + 1, "OUT L", palette::kTextDim);
-        widgets::meter(cv, Rect{area.x + 28, vu_y, (area.w - 44) / 2, 7}, c.tel.vu_left);
-        cv.text(area.x + 32 + (area.w - 44) / 2, vu_y + 1, "R", palette::kTextDim);
-        widgets::meter(cv, Rect{area.x + 40 + (area.w - 44) / 2, vu_y, (area.w - 44) / 2 - 4, 7}, c.tel.vu_right);
+        if (lower_h >= 16) {
+            // 1. Вертикальні міні-VU для кожної доріжки зліва направо
+            for (int t = 0; t < act_tracks; ++t) {
+                const int mx = area.x + 8 + t * 15;
+                char tb[8];
+                std::snprintf(tb, sizeof(tb), "T%d", t + 1);
+                cv.text(mx, lower_y + lower_h - 6, tb, palette::kTextDim);
+                widgets::verticalMeter(cv, Rect{mx, lower_y, 9, lower_h - 8}, c.tel.track_levels[t]);
+            }
+
+            // 2. Справа: Master L та R вертикальні міні-VU
+            const int mst_x = area.x + area.w - 22;
+            widgets::verticalMeter(cv, Rect{mst_x, lower_y, 8, lower_h - 8}, c.tel.vu_left);
+            widgets::verticalMeter(cv, Rect{mst_x + 10, lower_y, 8, lower_h - 8}, c.tel.vu_right);
+            cv.text(mst_x + 3, lower_y + lower_h - 6, "M", palette::kAccentOrange);
+
+            // 3. Ліворуч від Master шкали: маленький квадратний осцилограф (без напису SCOPE!)
+            const int sc_dim = std::min(32, lower_h - 8);
+            const int sc_x = mst_x - sc_dim - 10;
+            widgets::scope(cv, Rect{sc_x, lower_y, sc_dim, sc_dim}, c.tel.scope_samples, palette::kAccentCyan);
+        }
     }
 }
 
