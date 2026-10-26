@@ -208,6 +208,20 @@ void AudioEngine::clearRow(int row) {
     }
 }
 
+void AudioEngine::deleteRow(int row) {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (active_rows_count_ <= 1 || row < 0 || row >= active_rows_count_) return;
+    for (int r = row; r < active_rows_count_ - 1; ++r) {
+        pattern_[r] = pattern_[r + 1];
+        row_lengths_[r].store(row_lengths_[r + 1].load(std::memory_order_relaxed), std::memory_order_relaxed);
+        row_track_[r] = row_track_[r + 1];
+        row_voice_[r] = row_voice_[r + 1];
+    }
+    pattern_[active_rows_count_ - 1].fill(SequencerStep{});
+    row_lengths_[active_rows_count_ - 1].store(16, std::memory_order_relaxed);
+    active_rows_count_--;
+}
+
 void AudioEngine::previewStep(int row, int step_idx) {
     int r = std::clamp(row, 0, kTotalRows - 1);
     uint32_t s = std::clamp(static_cast<uint32_t>(step_idx), 0u, kMaxSteps - 1);

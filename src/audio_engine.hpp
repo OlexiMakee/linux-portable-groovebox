@@ -78,6 +78,7 @@ public:
     void toggleStep(int row, int step_idx);
     void clearStep(int row, int step_idx);
     void clearRow(int row);
+    void deleteRow(int row);
     void randomizeRow(int row);
     void previewStep(int row, int step_idx);
     void toggleParamTrig(int row, int step_idx); // Жовтий Elektron Trig (Parameter Lock без Note-On)

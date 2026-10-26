@@ -13,12 +13,14 @@ enum class EngineType : uint8_t {
     kFm2Op        = 1, // 2-Operator FM (Ratio, Index, Feedback)
     kAcid303      = 2, // Acid 303 Bassline (Waveform, Cutoff, Reso, EnvMod, Accent)
     kChordPad     = 3, // 4-Voice Chord Synth (Chord Type, Detune, Cutoff, Attack/Decay)
-    kDrumSyn      = 4, // Analog Drum Synth (Kick/Tom/Zap/Noise Perc)
-    kMidiOut      = 5, // External MIDI Gear Sequencer Track
-    kSampleDrums  = 6, // Sample-based Classic Drum Machine Kit
-    kSliceSampler = 7, // Loop Slicer Sampler with P-Lock Slices
-    kCount        = 8
+    kDrumSyn       = 4, // Analog Drum Synth (Kick/Tom/Zap/Noise Perc)
+    kMidiOut       = 5, // External MIDI Gear Sequencer Track
+    kSampleOneShot = 6, // Sample-based One-Shot Player
+    kSliceSampler  = 7, // Loop Slicer Sampler with P-Lock Slices
+    kCount         = 8
 };
+
+inline constexpr EngineType kSampleDrums = EngineType::kSampleOneShot;
 
 inline constexpr const char* getEngineTypeName(EngineType type) {
     switch (type) {
@@ -28,7 +30,7 @@ inline constexpr const char* getEngineTypeName(EngineType type) {
         case EngineType::kChordPad:     return "CHORD PAD";
         case EngineType::kDrumSyn:      return "ANALOG DRUM";
         case EngineType::kMidiOut:      return "MIDI OUT";
-        case EngineType::kSampleDrums:  return "SAMPLE DRUMS";
+        case EngineType::kSampleOneShot:return "SMPL ONESHOT";
         case EngineType::kSliceSampler: return "SLICER";
         default:                        return "UNKNOWN";
     }
