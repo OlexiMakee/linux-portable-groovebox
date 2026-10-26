@@ -7,6 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(xu10_groovebox
     src/main.cpp
+    src/arpeggiator.cpp
     src/audio_engine.cpp
     src/device_profile.cpp
     src/hw_monitor.cpp
@@ -57,6 +58,7 @@ else()
 
     add_executable(render_tour
         tools/render_tour.cpp
+        src/arpeggiator.cpp
         src/audio_engine.cpp
         src/device_profile.cpp
         src/hw_monitor.cpp
