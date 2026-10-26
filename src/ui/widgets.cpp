@@ -57,6 +57,64 @@ void meter(Canvas& cv, Rect r, float level, float clip_at) {
     cv.fill(r.x + 1, r.y + 1, fill, r.h - 2, lv > clip_at ? palette::kLevelWarnClip : palette::kLevelOk);
 }
 
+void verticalMeter(Canvas& cv, Rect r, float level, float clip_at) {
+    cv.rect(r.x, r.y, r.w, r.h, palette::kGridDim);
+    const float lv = std::clamp(level, 0.0f, 1.0f);
+    const int fill_h = static_cast<int>(lv * (r.h - 2));
+    if (fill_h > 0) {
+        ColorRGB col = (lv > clip_at) ? palette::kLevelWarnClip : palette::kLevelOk;
+        cv.fill(r.x + 1, r.y + r.h - 1 - fill_h, r.w - 2, fill_h, col);
+    }
+}
+
+void iconPlay(Canvas& cv, int x, int y, ColorRGB color) {
+    cv.line(x, y, x, y + 4, color);
+    cv.line(x + 1, y + 1, x + 1, y + 3, color);
+    cv.fill(x + 2, y + 2, 1, 1, color);
+}
+
+void iconStop(Canvas& cv, int x, int y, ColorRGB color) {
+    cv.fill(x, y, 4, 4, color);
+}
+
+void iconWave(Canvas& cv, int x, int y, int wave_type, ColorRGB color) {
+    switch (std::abs(wave_type) % 5) {
+        case 0: // Saw
+            cv.line(x, y + 4, x + 3, y, color);
+            cv.line(x + 3, y, x + 3, y + 4, color);
+            cv.line(x + 3, y + 4, x + 6, y, color);
+            break;
+        case 1: // Square
+            cv.line(x, y + 4, x, y, color);
+            cv.line(x, y, x + 3, y, color);
+            cv.line(x + 3, y, x + 3, y + 4, color);
+            cv.line(x + 3, y + 4, x + 6, y + 4, color);
+            cv.line(x + 6, y + 4, x + 6, y, color);
+            break;
+        case 2: // Triangle
+            cv.line(x, y + 4, x + 2, y, color);
+            cv.line(x + 2, y, x + 4, y + 4, color);
+            cv.line(x + 4, y + 4, x + 6, y, color);
+            break;
+        case 3: // Sine
+            cv.fill(x, y + 2, 1, 1, color);
+            cv.fill(x + 1, y + 1, 1, 1, color);
+            cv.fill(x + 2, y, 1, 1, color);
+            cv.fill(x + 3, y + 1, 1, 1, color);
+            cv.fill(x + 4, y + 3, 1, 1, color);
+            cv.fill(x + 5, y + 4, 1, 1, color);
+            cv.fill(x + 6, y + 3, 1, 1, color);
+            break;
+        case 4: // Noise
+            cv.fill(x, y, 1, 1, color);
+            cv.fill(x + 2, y + 3, 1, 1, color);
+            cv.fill(x + 4, y + 1, 1, 1, color);
+            cv.fill(x + 5, y + 4, 1, 1, color);
+            cv.fill(x + 6, y + 2, 1, 1, color);
+            break;
+    }
+}
+
 void stickBox(Canvas& cv, int x, int y, float fx, float fy, bool clicked, ColorRGB color) {
     cv.rect(x, y, 16, 16, palette::kGridDim);
     cv.line(x + 1, y + 8, x + 14, y + 8, palette::kBgDark);

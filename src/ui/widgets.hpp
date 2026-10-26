@@ -25,6 +25,14 @@ void scope(Canvas& cv, Rect r, const std::array<float, 256>& samples, ColorRGB c
 // Горизонтальний індикатор рівня 0..1 (червоний вище clip_at)
 void meter(Canvas& cv, Rect r, float level, float clip_at = 0.85f);
 
+// Вертикальний міні-індикатор рівня 0..1 (знизу догори)
+void verticalMeter(Canvas& cv, Rect r, float level, float clip_at = 0.85f);
+
+// Мінімалістичні піксельні піктограми (Elektron-style pixel art)
+void iconPlay(Canvas& cv, int x, int y, ColorRGB color);
+void iconStop(Canvas& cv, int x, int y, ColorRGB color);
+void iconWave(Canvas& cv, int x, int y, int wave_type, ColorRGB color);
+
 // 2D-індикатор аналогового стіка (16x16)
 void stickBox(Canvas& cv, int x, int y, float fx, float fy, bool clicked, ColorRGB color);
 
