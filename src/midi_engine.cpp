@@ -22,10 +22,14 @@ void MidiEngine::start(
     NoteCallback on_note,
     TransportCallback on_transport,
     ClockStepCallback on_step16,
-    CcCallback on_cc
+    CcCallback on_cc,
+    NoteOffCallback on_note_off,
+    ProgramChangeCallback on_prog
 ) {
     if (running_.exchange(true)) return;
     on_note_ = std::move(on_note);
+    on_note_off_ = std::move(on_note_off);
+    on_prog_ = std::move(on_prog);
     on_transport_ = std::move(on_transport);
     on_step16_ = std::move(on_step16);
     on_cc_ = std::move(on_cc);
@@ -185,8 +189,13 @@ void MidiEngine::workerLoop() {
                 uint8_t msg_type = p.status_byte & 0xF0;
                 uint8_t channel = p.status_byte & 0x0F; // 0..15
 
-                if (msg_type == 0xC0 || msg_type == 0xD0) {
-                    p.data_idx = 0; // 1-byte messages
+                if (msg_type == 0xC0) {
+                    if (on_prog_) {
+                        on_prog_(channel, p.data_buf[0]);
+                    }
+                    p.data_idx = 0;
+                } else if (msg_type == 0xD0) {
+                    p.data_idx = 0; // 1-byte message (Channel Pressure)
                 } else if (p.data_idx >= 2) {
                     p.data_idx = 0;
                     if (msg_type == 0x90 && p.data_buf[1] > 0) {
@@ -194,6 +203,11 @@ void MidiEngine::workerLoop() {
                         if (channel < 4 && on_note_) {
                             rx_notes_.fetch_add(1, std::memory_order_relaxed);
                             on_note_(channel, p.data_buf[0], static_cast<float>(p.data_buf[1]) / 127.0f);
+                        }
+                    } else if (msg_type == 0x80 || (msg_type == 0x90 && p.data_buf[1] == 0)) {
+                        // Note Off на каналах 1..4 -> відпускання ноти
+                        if (channel < 4 && on_note_off_) {
+                            on_note_off_(channel, p.data_buf[0]);
                         }
                     } else if (msg_type == 0xB0 && on_cc_) {
                         // Control Change (CC) на каналах 1..4

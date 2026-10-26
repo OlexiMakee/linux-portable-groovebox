@@ -21,6 +21,8 @@ struct MidiTelemetry {
 class MidiEngine {
 public:
     using NoteCallback = std::function<void(int channel, int note, float velocity)>;
+    using NoteOffCallback = std::function<void(int channel, int note)>;
+    using ProgramChangeCallback = std::function<void(int channel, int program)>;
     using TransportCallback = std::function<void(bool playing, bool reset_to_start)>;
     using ClockStepCallback = std::function<void()>; // Викликається кожні 6 тіків 0xF8 (1/16 нота)
     using CcCallback = std::function<void(int channel, uint8_t cc, float norm_val)>;
@@ -32,7 +34,9 @@ public:
         NoteCallback on_note,
         TransportCallback on_transport,
         ClockStepCallback on_step16,
-        CcCallback on_cc = nullptr
+        CcCallback on_cc = nullptr,
+        NoteOffCallback on_note_off = nullptr,
+        ProgramChangeCallback on_prog = nullptr
     );
     void stop();
 
@@ -42,6 +46,8 @@ private:
     void workerLoop();
 
     NoteCallback on_note_;
+    NoteOffCallback on_note_off_;
+    ProgramChangeCallback on_prog_;
     TransportCallback on_transport_;
     ClockStepCallback on_step16_;
     CcCallback on_cc_;

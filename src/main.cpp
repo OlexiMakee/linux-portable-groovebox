@@ -118,6 +118,14 @@ int main(int argc, char* argv[]) {
                 audio_engine.setTrackParams(channel, tp);
                 ui_dirty = true;
             }
+        },
+        [&](int track, int note) {
+            audio_engine.noteOff(track, note);
+            ui_dirty = true;
+        },
+        [&](int, int) {
+            // MIDI Program Change 0..127 (квантоване перемикання патернів Elektron A01..H16)
+            ui_dirty = true;
         }
     );
 
