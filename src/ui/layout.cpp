@@ -143,12 +143,37 @@ void setupAppLayout(UiShell& shell) {
     }
 
     // =========================================================================
-    // 8. ВКЛАДКИ ВЕРХНЬОГО РЯДУ
+    // 8. ЖИВИЙ ПЕРФОРМАНС (PERF)
+    // =========================================================================
+    shell.registerView(std::make_unique<PerfView>());
+
+    // =========================================================================
+    // 9. ДВОКАСКАДНИЙ АРПЕДЖИРАТОР ТА ГЕНЕРАТОР (ARP)
+    // =========================================================================
+    {
+        GridSpec arp_spec;
+        arp_spec.id = ViewId::kArp;
+        arp_spec.style = GridStyle::kTable;
+        arp_spec.accent = palette::kAccentOrange;
+        arp_spec.tab_title = [](const UiContext&) { return "ARP"; };
+        arp_spec.header = [](const UiContext&) { return "DUAL ARPEGGIATOR & PROCEDURAL ENGINE"; };
+        arp_spec.rows = {
+            {"SCALE", {"ARP.SCALE", "ARP.ROOT", "TRK.TRANSP", "TRK.GLIDE"}},
+            {"ARP1",  {"ARP.DIV1", "ARP.CHORD", "ARP.PROG", "ARP.OCT"}},
+            {"ARP2",  {"ARP.DIV2", "ARP.PAT", "ARP.GATE", "STEP.SLIDE"}},
+            {"ALGO",  {"ARP.EUCLID", "ARP.MUTATE", "STEP.PROB", "ARP.COMMIT"}}
+        };
+        shell.registerView(std::make_unique<GridView>(std::move(arp_spec)));
+    }
+
+    // =========================================================================
+    // 10. ВКЛАДКИ ВЕРХНЬОГО РЯДУ
     // Порядок зліва направо: L1, L2, R2, R1, G (рівні вкладки по 70px + вузька SYS 40px = 320px)
     // Вкладка R2 (MIX) розташована ЛІВІШЕ за R1 (SCOPE)!
+    // Вкладка L1 циклічно перемикає SEQ -> SYNTH -> PERF!
     // =========================================================================
     shell.setTabSlots({
-        TabSlot{"[L1]", {ViewId::kSeq, ViewId::kSynth}, 70},
+        TabSlot{"[L1]", {ViewId::kSeq, ViewId::kSynth, ViewId::kPerf}, 70},
         TabSlot{"[L2]", {ViewId::kFx}, 70},
         TabSlot{"[R2]", {ViewId::kMix}, 70},
         TabSlot{"[R1]", {ViewId::kScope}, 70},

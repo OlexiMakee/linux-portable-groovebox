@@ -369,4 +369,113 @@ void ScopeView::render(Canvas& cv, const UiContext& c, Rect area) const {
     widgets::meter(cv, Rect{area.x + 46 + (area.w - 50) / 2, yv, (area.w - 50) / 2 - 4, 9}, c.tel.vu_right);
 }
 
+// =====================================================================================
+// PerfView: живий перформанс та гра на педах
+// =====================================================================================
+void PerfView::navigate(UiContext& c, int dx, int dy, bool) {
+    if (dx != 0) {
+        const int n = std::max(1, (c.audio.getActiveRowCount() + kVoicesPerTrack - 1) / kVoicesPerTrack);
+        c.app.selected_track = (c.app.selected_track + dx + n) % n;
+    }
+    if (dy != 0) {
+        c.app.perf_octave = std::clamp(c.app.perf_octave - dy, 1, 6);
+    }
+}
+
+std::string PerfView::focusId(const UiContext& c) const {
+    char b[32];
+    std::snprintf(b, sizeof(b), "PERF.T%d.C%d", c.app.selected_track + 1, c.app.perf_octave);
+    return std::string(b);
+}
+
+void PerfView::render(Canvas& cv, const UiContext& c, Rect area) const {
+    const int t = c.app.selected_track;
+    const auto tp = c.audio.getTrackParams(t);
+    const bool is_drum = (tp.engine == EngineType::kDrumSyn);
+    const auto scale = c.app.arpeggiator.config().scale;
+    const int root_semi = c.app.arpeggiator.config().root_note % 12;
+
+    // 1. Заголовок
+    char hdr[80];
+    std::snprintf(hdr, sizeof(hdr), "PERF LIVE PLAY [T%d %s] OCT:%d SCALE:%s",
+                  t + 1, getEngineTypeName(tp.engine), c.app.perf_octave, getScaleName(scale));
+    cv.text(area.x + 4, area.y + 3, hdr, palette::kParamTrig);
+
+    // 2. Чотири великі педи (Diamond Layout)
+    struct PadInfo {
+        const char* btn;
+        std::string label;
+        bool pressed;
+        int x, y, w, h;
+    };
+
+    std::string n0, n1, n2, n3;
+    if (is_drum) {
+        n0 = "BD KICK";
+        n1 = "SD SNARE";
+        n2 = "CH CL.HAT";
+        n3 = "OH OP.HAT";
+    } else {
+        auto chord = getChordIntervals(ChordType::kSeventh, scale);
+        int base_root = c.app.perf_octave * 12 + root_semi;
+        auto getNoteStr = [&](int offset, const char* deg) {
+            int n = quantizeToScale(base_root + offset, base_root, scale);
+            char b[24];
+            constexpr const char* kNotes[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+            std::snprintf(b, sizeof(b), "%s%d (%s)", kNotes[n % 12], n / 12 - 1, deg);
+            return std::string(b);
+        };
+        n0 = getNoteStr(chord.size() > 0 ? chord[0] : 0, "ROOT");
+        n1 = getNoteStr(chord.size() > 1 ? chord[1] : 4, "3RD");
+        n2 = getNoteStr(chord.size() > 2 ? chord[2] : 7, "5TH");
+        n3 = getNoteStr(chord.size() > 3 ? chord[3] : 11, "7TH");
+    }
+
+    const int cx = area.x + 105;
+    const int cy = area.y + 70;
+    const int pw = 68;
+    const int ph = 30;
+
+    PadInfo pads[4] = {
+        {"[A]", n0, c.in.btn_a, cx - pw / 2, cy + 22, pw, ph},         // Bottom
+        {"[B]", n1, c.in.btn_b, cx + 38,      cy - ph / 2, pw, ph},     // Right
+        {"[X]", n2, c.in.btn_x, cx - pw - 38, cy - ph / 2, pw, ph},     // Left
+        {"[Y]", n3, c.in.btn_y, cx - pw / 2, cy - ph - 22, pw, ph}      // Top
+    };
+
+    for (int i = 0; i < 4; ++i) {
+        const auto& p = pads[i];
+        ColorRGB border = p.pressed ? palette::kParamTrig : palette::kHeaderSel;
+        ColorRGB bg = p.pressed ? palette::kParamTrig : palette::kBgDark;
+        ColorRGB fg = p.pressed ? palette::kBgDark : palette::kTextMain;
+        ColorRGB bfg = p.pressed ? palette::kBgDark : palette::kAccentOrange;
+
+        if (p.pressed) {
+            cv.fill(p.x, p.y, p.w, p.h, bg);
+        } else {
+            cv.fill(p.x, p.y, p.w, p.h, bg);
+            cv.rect(p.x, p.y, p.w, p.h, border);
+        }
+        cv.text(p.x + 4, p.y + 4, p.btn, bfg);
+        cv.text(p.x + 4, p.y + p.h - 9, p.label, fg);
+    }
+
+    // 3. Права колонка: Живі аналогові макро-контролери (Стіки)
+    const int rx = area.x + 220;
+    const int ry = area.y + 16;
+    cv.text(rx, ry, "LIVE MACROS", palette::kAccentCyan);
+
+    // Лівий стік
+    cv.text(rx, ry + 10, "L: PITCH/CUT", palette::kTextDim);
+    widgets::stickBox(cv, rx + 20, ry + 22, c.in.lx, c.in.ly, c.in.l3, palette::kAccentCyan);
+
+    // Правий стік
+    cv.text(rx, ry + 64, "R: RES/FX", palette::kTextDim);
+    widgets::stickBox(cv, rx + 20, ry + 76, c.in.rx, c.in.ry, c.in.r3, palette::kAccentOrange);
+
+    // 4. Нижня смужка підказок для швидкого керування
+    const int by = area.y + area.h - 10;
+    cv.text(area.x + 4, by, "DPAD: < > TRK  ^ v OCT  | HOLD L2: QUICK MUTE", palette::kGridDim);
+}
+
 } // namespace groovebox

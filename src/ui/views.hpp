@@ -101,4 +101,14 @@ public:
     void navigate(UiContext&, int, int, bool) override {}
 };
 
+// ---------------- PerfView: живий перформанс та гра на педах ----------------
+class PerfView : public IView {
+public:
+    PerfView() : IView(ViewId::kPerf) {}
+    ColorRGB accent() const override { return palette::kParamTrig; }
+    void render(Canvas& cv, const UiContext& c, Rect area) const override;
+    void navigate(UiContext& c, int dx, int dy, bool coarse) override;
+    std::string focusId(const UiContext& c) const override;
+};
+
 } // namespace groovebox
