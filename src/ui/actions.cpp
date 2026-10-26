@@ -100,12 +100,32 @@ ActionRegistry::ActionRegistry() {
         const int act = c.audio.getActiveRowCount();
         if (c.app.cursor_row >= act) {
             if (act < kTotalRows) {
-                c.audio.setActiveRowCount(act + kVoicesPerTrack);
+                c.audio.setActiveRowCount(act + 1);
                 c.app.cursor_row = act;
                 c.app.selected_track = act / kVoicesPerTrack;
+                c.app.last_action = "TRACK ADDED";
             }
         } else {
             c.audio.toggleStep(c.app.cursor_row, c.app.cursor_step);
+        }
+    }});
+    add(Action{"SEQ.ADD_TRACK_SINGLE", "ADD TRK", [](UiContext& c) {
+        const int act = c.audio.getActiveRowCount();
+        if (act < kTotalRows) {
+            c.audio.setActiveRowCount(act + 1);
+            c.app.cursor_row = act;
+            c.app.selected_track = act / kVoicesPerTrack;
+            c.app.last_action = "TRACK ADDED";
+        }
+    }});
+    add(Action{"SEQ.DEL_TRACK_SAFE", "DEL TRK", [](UiContext& c) {
+        const int act = c.audio.getActiveRowCount();
+        if (act > 1 && c.app.cursor_row < act) {
+            c.audio.deleteRow(c.app.cursor_row);
+            if (c.app.cursor_row >= c.audio.getActiveRowCount()) {
+                c.app.cursor_row = c.audio.getActiveRowCount() - 1;
+            }
+            c.app.last_action = "TRACK DELETED";
         }
     }});
     add(Action{"SEQ.CLEAR_STEP", "DEL", [](UiContext& c) {
@@ -339,23 +359,32 @@ ActionRegistry::ActionRegistry() {
     }});
 
     add(Action{"ARP.OPEN", "ARP", [](UiContext& c) {
-        c.app.previous_view = c.app.active_view;
-        c.app.active_view = ViewId::kArp;
+        c.app.arp_modal_open = true;
         c.app.last_action = "ARP OPENED";
     }});
-    add(Action{"ARP.CLOSE", "BACK", [](UiContext& c) {
-        c.app.active_view = (c.app.previous_view != ViewId::kArp) ? c.app.previous_view : ViewId::kSynth;
+    add(Action{"ARP.CLOSE", "CLOSE", [](UiContext& c) {
+        c.app.arp_modal_open = false;
         c.app.last_action = "ARP CLOSED";
     }});
     add(Action{"ARP.TOGGLE", "ARP", [](UiContext& c) {
-        if (c.app.active_view == ViewId::kArp) {
-            c.app.active_view = (c.app.previous_view != ViewId::kArp) ? c.app.previous_view : ViewId::kSynth;
-            c.app.last_action = "ARP CLOSED";
-        } else {
-            c.app.previous_view = c.app.active_view;
-            c.app.active_view = ViewId::kArp;
-            c.app.last_action = "ARP OPENED";
-        }
+        c.app.arp_modal_open = !c.app.arp_modal_open;
+        c.app.last_action = c.app.arp_modal_open ? "ARP OPENED" : "ARP CLOSED";
+    }});
+    add(Action{"ENGINE.MENU_OPEN", "ENGINES", [](UiContext& c) {
+        c.app.engine_menu_open = true;
+        c.app.engine_menu_sel = static_cast<int>(c.audio.getTrackParams(c.app.selected_track).engine);
+        c.app.last_action = "ENGINE SELECTOR";
+    }});
+    add(Action{"ENGINE.MENU_CLOSE", "CLOSE", [](UiContext& c) {
+        c.app.engine_menu_open = false;
+        c.app.last_action = "ENGINE CLOSED";
+    }});
+    add(Action{"ENGINE.MENU_CONFIRM", "APPLY", [](UiContext& c) {
+        auto tp = c.audio.getTrackParams(c.app.selected_track);
+        tp.engine = static_cast<EngineType>(std::clamp(c.app.engine_menu_sel, 0, static_cast<int>(EngineType::kCount) - 1));
+        c.audio.setTrackParams(c.app.selected_track, tp);
+        c.app.engine_menu_open = false;
+        c.app.last_action = std::string("ENGINE: ") + getEngineTypeName(tp.engine);
     }});
     add(Action{"ARP.COMMIT", "APPLY", [](UiContext& c) {
         const int row = c.app.cursor_row;
