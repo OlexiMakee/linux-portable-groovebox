@@ -44,6 +44,28 @@
 * Інтегровано 4-доріжковий DSP-синтезатор (T1: PolyBLEP Saw+Sub, T2: 2-Op FM, T3: Acid 303, T4: Chord Pad) із SVF-фільтром під керуванням аналогових стіків, 16-кроковим секвенсором та Lock-Free кільцевим буфером під осцилограф і VU-метр у реальному часі.
 
 
+## [2026-10-26] Milestone 8: Live Performance Mode, Dual Sequential Arpeggiator & Procedural Algorithmic Engine
+* **Апаратна корекція індикації ABXY та геометрії вкладок:**
+  * У `src/ui/widgets.cpp` переприв'язано піктограми ABXY до реального маркування кнопок на корпусі XU10 (верхня: Y, ліва: X, права: B, нижня: A).
+  * У `src/ui/layout.cpp` реалізовано симетричні ширини вкладок верхнього рядка: `[L1]` 70px, `[L2]` 70px, `[R2]` 70px, `[R1]` 70px, `[G]` 40px (разом рівно 320px).
+* **Модуль каскадного арпеджиатора (`src/arpeggiator.hpp/.cpp`):**
+  * Створено `Arpeggiator` та таблицю квантування для 11 музичних ладів (Major, Minor, Harmonic Minor, Dorian, Phrygian, Lydian, Mixolydian, Pentatonic Minor/Major, Blues, Chromatic).
+  * **Arp 1 (Гармонійний макро-генератор):** Дільники 1/1, 1/2, 1/4, 1/8, типи акордів (Root, Octaves, Power 5th, Triad, 7th, Sus4, Add9) та гармонічні прогресії ступенів (I-IV-V-I, i-VI-III-VII тощо).
+  * **Arp 2 (Мелодійний мікро-генератор):** Дільники 1/4, 1/8, 1/16, 1/32, 1/16T, патерни обходу нот (Up, Down, Up-Down, Ping-Pong, Converge, Diverge, Random, Brownian Walk, Euclidean).
+  * **Процедурний алгоритм (Euclidean + Turing Machine):** 16-бітний LFSR-регістр мутації (0% = жорсткий луп, 100% = безперервна мутація) та генератор евклідових ритмів Бйорклунда ($K$ ударів на $N$ кроків).
+  * **Commit to Sequencer:** Метод `commitToTrack()` запікає згенеровані ноти, гейти та слайди прямо у кроки вибраного рядка секвенсора.
+* **Режим живого виступу `PerfView` (`ViewId::kPerf`):**
+  * Вкладка `[L1]` тепер циклічно перемикає три інструментальні режими: `SEQ` $\rightarrow$ `SYNTH` $\rightarrow$ `PERF` $\rightarrow$ `SEQ`.
+  * Реалізовано 4 великі чутливі педи у форматі діаманта (A/B/X/Y) з миттєвою підсвіткою та назвами нот у поточному ладі (або BD/SD/CH/OH для драмів).
+  * Інтегровано живі візуалізатори осей аналогових стіків: лівий стік (Pitch Bend / Cutoff) та правий стік (Resonance / FX Send).
+  * D-Pad Up/Down перемикає октави гри (C1..C6), D-Pad Left/Right перемикає активний трек.
+* **Вікно налаштування генератора `ArpView` (`ViewId::kArp`):**
+  * Зареєстровано 12 параметрів `ARP.*` у `ParamRegistry` та дія `ARP.COMMIT`.
+  * Доступ із секвенсора через комбінацію `SELECT + X`.
+* **Збірка, тести та деплой на консоль:**
+  * Згенеровано 11 тестових знімків `tour_01..11.png` (зокрема [tour_10_perf.png](file:///Users/oleksii/.gemini/antigravity/brain/a2583e1d-b2ce-4f26-885f-f7402638aa14/tour_10_perf.png) та [tour_11_arp.png](file:///Users/oleksii/.gemini/antigravity/brain/a2583e1d-b2ce-4f26-885f-f7402638aa14/tour_11_arp.png)).
+  * Успішна крос-компіляція та деплой на MagicX XU10 (`10.1.1.2`): процес `xu10_groovebox` запущено (PID 18682), навантаження CPU лише 6.5%, RAM 47.4 МБ.
+
 ## [2026-10-26] Milestone 7: Full SOLID Modular UI Architecture Overhaul, Dynamic Keymap & Layout Decoupling
 * **Ліквідація монолітного `UiRenderer` та повне усунення `if-else` каскадів:**
   * Створено `src/ui/canvas.hpp/.cpp`: SRP-клас виключно для малювання пікселів, ліній, прямокутників та шрифту 3x5 без знання про структуру меню чи бізнес-логіку.
