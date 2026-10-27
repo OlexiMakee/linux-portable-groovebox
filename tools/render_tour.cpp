@@ -74,16 +74,17 @@ int main() {
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_01_seq.bmp");
 
-    // 1b. SEQ Tab (REC Mode: Drum Lanes)
+    // 1b. SEQ Tab (REC Mode: Chromatic Sampler Piano Roll)
     app.rec_mode = true;
     app.selected_track = 0;
     auto tp0 = audio_engine.getTrackParams(0);
-    tp0.engine = EngineType::kDrumRack;
+    tp0.engine = EngineType::kSampleOneShot;
     audio_engine.setTrackParams(0, tp0);
-    app.rec_cursor_lane = 1; // SD
+    app.rec_cursor_lane = 11; // C
+    app.rec_octave = 2;
     app.cursor_step = 4;
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
-    capture("/tmp/xu10_tour/tour_01_rec_drums.bmp");
+    capture("/tmp/xu10_tour/tour_01_rec_sampler.bmp");
 
     // 1c. SEQ Tab (REC Mode: Melodic Synth Piano Roll)
     app.selected_track = 1; // 303

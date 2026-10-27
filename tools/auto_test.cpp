@@ -310,14 +310,34 @@ static void testInputRouterAndStepEditor() {
     ActionRegistry::instance().run("SEQ.TRIG", ctx);
     TEST_ASSERT(audio.getStep(1, 2).enabled == true && audio.getStep(1, 2).note == 36, "REC Piano Roll sets C2 note 36 on step");
 
-    app.selected_track = 0; // Track 1 (Drum Rack)
-    auto tp_d = audio.getTrackParams(0);
-    tp_d.engine = EngineType::kDrumRack;
-    audio.setTrackParams(0, tp_d);
-    app.rec_cursor_lane = 0; // BD (note 36)
+    app.selected_track = 0; // Track 1 (Pure Sampler)
+    auto tp_s = audio.getTrackParams(0);
+    tp_s.engine = EngineType::kSampleOneShot;
+    audio.setTrackParams(0, tp_s);
+    app.rec_cursor_lane = 11; // Root C (interval 0)
+    app.rec_octave = 4; // C (MIDI note 48)
     app.cursor_step = 0;
     ActionRegistry::instance().run("SEQ.TRIG", ctx);
-    TEST_ASSERT(audio.getStep(0, 0).enabled == true && audio.getStep(0, 0).note == 36, "REC Drum Lanes sets BD note 36 on step");
+    TEST_ASSERT(audio.getStep(0, 0).enabled == true && audio.getStep(0, 0).note == 48, "REC Piano Roll sets C note 48 on Sampler track");
+
+    // Тестування чанкового парсера WAV та відтворення семплу доріжки
+    bool load_ok = audio.sampler().loadWavFile("res/samples/drums/01_tr808/bd.wav", audio.sampler().trackSample(0));
+    TEST_ASSERT(load_ok && audio.sampler().trackSample(0).loaded, "Chunk-based WAV parser loads 01_tr808/bd.wav successfully");
+
+    // Перевірка синтезу аудіо: переконуємося, що семплер виводить ненульовий звук
+    audio.triggerVoice(0, 48, 0.90f);
+    std::vector<int16_t> audio_buf(128 * 2, 0);
+    audio.renderBlock(audio_buf.data(), 128, 32000);
+    bool has_sound = false;
+    for (int16_t smp : audio_buf) {
+        if (std::abs(smp) > 10) { has_sound = true; break; }
+    }
+    TEST_ASSERT(has_sound, "Sampler renders audible waveform from loaded track sample buffer");
+
+    // Тестування безвідмовного виходу з меню семплів на кнопку B
+    app.sample_browser_open = true;
+    ActionRegistry::instance().run("SAMPLE_BROWSER.CLOSE", ctx);
+    TEST_ASSERT(app.sample_browser_open == false, "Button B unconditionally closes sample browser modal");
 
     // 9. Тестування автоматичного нарізання лупера та призначення на слоти
     app.sampler.sliceToDrumSlots(0.0f, 1.0f);
