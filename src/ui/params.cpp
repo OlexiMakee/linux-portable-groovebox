@@ -271,11 +271,10 @@ ParamRegistry::ParamRegistry() {
                 return c.audio.dx7().getPatch(p_idx).name;
             }
             if (tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler) {
-                const auto& buf = c.app.sampler.recordedSample();
-                if (buf.loaded) return buf.name;
-                char b[16];
-                std::snprintf(b, sizeof(b), "SAMPLE #%d", static_cast<int>(tp.p[0] * 7.0f) + 1);
-                return std::string(b);
+                int t = trk(c, -1);
+                const auto& buf = c.audio.sampler().trackSample(t);
+                if (buf.loaded && !buf.name.empty() && buf.name != "EMPTY") return buf.name;
+                return c.audio.getTrackName(t);
             }
             static const char* kWaveNames[5] = {"SAW", "SQUARE", "TRI", "SINE", "NOISE"};
             int wave_idx = std::clamp(static_cast<int>(tp.p[5] * 4.99f), 0, 4);
@@ -312,7 +311,9 @@ ParamRegistry::ParamRegistry() {
                     tp.p[0] = static_cast<float>(next) / static_cast<float>(total - 1);
                 }
             } else if (tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler) {
-                tp.p[0] = std::clamp(tp.p[0] + dir * (1.0f / 7.0f), 0.0f, 1.0f);
+                c.app.sample_browser_target_track = t;
+                ActionRegistry::instance().run("SAMPLE_BROWSER.OPEN", c);
+                return;
             } else {
                 int cur = std::clamp(static_cast<int>(tp.p[5] * 4.99f), 0, 4);
                 int next = (cur + dir + 5) % 5;

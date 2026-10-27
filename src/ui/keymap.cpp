@@ -83,6 +83,8 @@ Keymap::Keymap() {
     bind(ViewId::kSynth, Layer::kBase, Button::kX, Gesture::kPress, "PARAM.DEC_FAST");
     bind(ViewId::kSynth, Layer::kBase, Button::kY, Gesture::kPress, "PARAM.INC_FAST");
 
+    bind(ViewId::kSynth, Layer::kSelect, Button::kDpadLeft, Gesture::kPress, "TRACK.PREV");
+    bind(ViewId::kSynth, Layer::kSelect, Button::kDpadRight, Gesture::kPress, "TRACK.NEXT");
     bind(ViewId::kSynth, Layer::kSelect, Button::kA, Gesture::kPress, "TRACK.PREVIEW_NOTE");
     bind(ViewId::kSynth, Layer::kSelect, Button::kX, Gesture::kPress, "TRACK.PREV");
     bind(ViewId::kSynth, Layer::kSelect, Button::kY, Gesture::kPress, "TRACK.NEXT");
@@ -246,6 +248,23 @@ void InputRouter::dispatch(UiContext& ctx, ViewId view, Layer layer, Button btn,
 
 void InputRouter::processInput(UiContext& ctx) {
     const auto& in = ctx.in;
+
+    // Перехоплення модальних вікон (Семпл-браузер та Селектор рушіїв)
+    if (ctx.app.sample_browser_open) {
+        if (in.up_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.UP", ctx);
+        else if (in.down_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.DOWN", ctx);
+        else if (in.a_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.CONFIRM", ctx);
+        else if (in.b_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.CLOSE", ctx);
+        return;
+    }
+    if (ctx.app.engine_menu_open) {
+        if (in.up_pressed) ActionRegistry::instance().run("NAV.UP", ctx);
+        else if (in.down_pressed) ActionRegistry::instance().run("NAV.DOWN", ctx);
+        else if (in.a_pressed) ActionRegistry::instance().run("ENGINE.MENU_CONFIRM", ctx);
+        else if (in.b_pressed) ActionRegistry::instance().run("ENGINE.MENU_CLOSE", ctx);
+        return;
+    }
+
     ViewId view = ctx.app.active_view;
     if (ctx.app.step_inspector_open) {
         view = ViewId::kInspect;

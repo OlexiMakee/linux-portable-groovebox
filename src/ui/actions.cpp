@@ -5,6 +5,9 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
+
+namespace fs = std::filesystem;
 
 namespace groovebox {
 
@@ -45,6 +48,10 @@ std::vector<std::string> ActionRegistry::ids() const {
 ActionRegistry::ActionRegistry() {
     // ---------------- Навігація ----------------
     add(Action{"NAV.UP", "UP", [](UiContext& c) {
+        if (c.app.sample_browser_open) {
+            ActionRegistry::instance().run("SAMPLE_BROWSER.UP", c);
+            return;
+        }
         if (c.app.engine_menu_open) {
             c.app.engine_menu_sel = (c.app.engine_menu_sel - 1 + static_cast<int>(EngineType::kCount)) % static_cast<int>(EngineType::kCount);
             return;
@@ -52,6 +59,10 @@ ActionRegistry::ActionRegistry() {
         if (c.shell) c.shell->currentView(c).navigate(c, 0, -1, false);
     }});
     add(Action{"NAV.DOWN", "DOWN", [](UiContext& c) {
+        if (c.app.sample_browser_open) {
+            ActionRegistry::instance().run("SAMPLE_BROWSER.DOWN", c);
+            return;
+        }
         if (c.app.engine_menu_open) {
             c.app.engine_menu_sel = (c.app.engine_menu_sel + 1) % static_cast<int>(EngineType::kCount);
             return;
@@ -59,9 +70,11 @@ ActionRegistry::ActionRegistry() {
         if (c.shell) c.shell->currentView(c).navigate(c, 0, 1, false);
     }});
     add(Action{"NAV.LEFT", "LEFT", [](UiContext& c) {
+        if (c.app.sample_browser_open || c.app.engine_menu_open) return;
         if (c.shell) c.shell->currentView(c).navigate(c, -1, 0, false);
     }});
     add(Action{"NAV.RIGHT", "RIGHT", [](UiContext& c) {
+        if (c.app.sample_browser_open || c.app.engine_menu_open) return;
         if (c.shell) c.shell->currentView(c).navigate(c, 1, 0, false);
     }});
     add(Action{"NAV.PAGE_UP", "PG.UP", [](UiContext& c) {
@@ -79,6 +92,10 @@ ActionRegistry::ActionRegistry() {
 
     // ---------------- Редагування параметра у фокусі ----------------
     add(Action{"PARAM.INC", "VAL+", [](UiContext& c) {
+        if (c.app.sample_browser_open) {
+            ActionRegistry::instance().run("SAMPLE_BROWSER.CONFIRM", c);
+            return;
+        }
         if (c.app.engine_menu_open) {
             ActionRegistry::instance().run("ENGINE.MENU_CONFIRM", c);
             return;
@@ -89,6 +106,10 @@ ActionRegistry::ActionRegistry() {
         }
     }});
     add(Action{"PARAM.DEC", "VAL-", [](UiContext& c) {
+        if (c.app.sample_browser_open) {
+            ActionRegistry::instance().run("SAMPLE_BROWSER.CLOSE", c);
+            return;
+        }
         if (c.app.engine_menu_open) {
             ActionRegistry::instance().run("ENGINE.MENU_CLOSE", c);
             return;
@@ -173,10 +194,10 @@ ActionRegistry::ActionRegistry() {
         const int act = c.audio.getActiveRowCount();
         if (c.app.cursor_row >= act) {
             if (act < kTotalRows) {
-                c.audio.setActiveRowCount(act + 1);
-                c.app.cursor_row = act;
-                c.app.selected_track = act / kVoicesPerTrack;
-                c.app.last_action = "TRACK ADDED";
+                c.app.engine_menu_open = true;
+                c.app.engine_menu_is_add = true;
+                c.app.engine_menu_sel = 0;
+                c.app.last_action = "SELECT ENGINE";
             }
         } else {
             c.audio.toggleStep(c.app.cursor_row, c.app.cursor_step);
@@ -189,10 +210,10 @@ ActionRegistry::ActionRegistry() {
     add(Action{"SEQ.ADD_TRACK_SINGLE", "ADD TRK", [](UiContext& c) {
         const int act = c.audio.getActiveRowCount();
         if (act < kTotalRows) {
-            c.audio.setActiveRowCount(act + 1);
-            c.app.cursor_row = act;
-            c.app.selected_track = act / kVoicesPerTrack;
-            c.app.last_action = "TRACK ADDED";
+            c.app.engine_menu_open = true;
+            c.app.engine_menu_is_add = true;
+            c.app.engine_menu_sel = 0;
+            c.app.last_action = "SELECT ENGINE";
         }
     }});
     add(Action{"SEQ.DEL_TRACK_SAFE", "DEL TRK", [](UiContext& c) {
@@ -326,12 +347,14 @@ ActionRegistry::ActionRegistry() {
         c.audio.triggerNote(c.app.selected_track, 48, 0.90f);
     }});
     add(Action{"TRACK.PREV", "TRK-", [](UiContext& c) {
-        const int n = std::max(1, (c.audio.getActiveRowCount() + kVoicesPerTrack - 1) / kVoicesPerTrack);
+        const int n = std::max(1, c.audio.getActiveRowCount());
         c.app.selected_track = (c.app.selected_track + n - 1) % n;
+        c.app.last_action = "TRK " + std::to_string(c.app.selected_track + 1) + ": " + c.audio.getTrackName(c.app.selected_track);
     }});
     add(Action{"TRACK.NEXT", "TRK+", [](UiContext& c) {
-        const int n = std::max(1, (c.audio.getActiveRowCount() + kVoicesPerTrack - 1) / kVoicesPerTrack);
+        const int n = std::max(1, c.audio.getActiveRowCount());
         c.app.selected_track = (c.app.selected_track + 1) % n;
+        c.app.last_action = "TRK " + std::to_string(c.app.selected_track + 1) + ": " + c.audio.getTrackName(c.app.selected_track);
     }});
     add(Action{"BPM.INC", "BPM+", [](UiContext& c) {
         c.app.bpm = std::min(200.0f, c.app.bpm + 1.0f);
@@ -504,11 +527,164 @@ ActionRegistry::ActionRegistry() {
         c.app.last_action = "ENGINE CLOSED";
     }});
     add(Action{"ENGINE.MENU_CONFIRM", "APPLY", [](UiContext& c) {
+        auto eng = static_cast<EngineType>(std::clamp(c.app.engine_menu_sel, 0, static_cast<int>(EngineType::kCount) - 1));
+        if (c.app.engine_menu_is_add) {
+            c.app.engine_menu_is_add = false;
+            c.app.engine_menu_open = false;
+            int new_idx = c.audio.addTrack(eng);
+            if (new_idx >= 0) {
+                c.app.cursor_row = new_idx;
+                c.app.selected_track = new_idx;
+                c.app.last_action = "ADDED: " + c.audio.getTrackName(new_idx);
+                if (eng == EngineType::kSampleOneShot || eng == EngineType::kSliceSampler) {
+                    ActionRegistry::instance().run("SAMPLE_BROWSER.OPEN", c);
+                }
+            }
+            return;
+        }
         auto tp = c.audio.getTrackParams(c.app.selected_track);
-        tp.engine = static_cast<EngineType>(std::clamp(c.app.engine_menu_sel, 0, static_cast<int>(EngineType::kCount) - 1));
+        tp.engine = eng;
         c.audio.setTrackParams(c.app.selected_track, tp);
         c.app.engine_menu_open = false;
         c.app.last_action = std::string("ENGINE: ") + getEngineTypeName(tp.engine);
+        if (eng == EngineType::kSampleOneShot || eng == EngineType::kSliceSampler) {
+            ActionRegistry::instance().run("SAMPLE_BROWSER.OPEN", c);
+        }
+    }});
+
+    // ---------------- Семпл-браузер (пул семплів та доступ до ФС) ----------------
+    auto getSamplesRootPath = []() -> std::string {
+        static const char* kCandidates[] = {
+            "/storage/roms/groovebox/samples",
+            "/storage/dev/groovebox/res/samples",
+            "res/samples",
+            "../res/samples"
+        };
+        for (const char* p : kCandidates) {
+            std::error_code ec;
+            if (fs::exists(p, ec) && fs::is_directory(p, ec)) {
+                return std::string(p);
+            }
+        }
+        return "res/samples";
+    };
+
+    auto refreshSampleBrowser = [getSamplesRootPath](UiContext& c) {
+        c.app.sample_browser_items.clear();
+        std::string root = getSamplesRootPath();
+        if (c.app.sample_browser_dir.empty()) {
+            c.app.sample_browser_dir = root;
+        }
+        std::error_code ec;
+        if (fs::equivalent(c.app.sample_browser_dir, root, ec) == false &&
+            c.app.sample_browser_dir != root) {
+            c.app.sample_browser_items.push_back("[..] PARENT DIR");
+        }
+        std::vector<std::string> dirs;
+        std::vector<std::string> wavs;
+        for (const auto& entry : fs::directory_iterator(c.app.sample_browser_dir, ec)) {
+            if (entry.is_directory(ec)) {
+                dirs.push_back("[DIR] " + entry.path().filename().string());
+            } else if (entry.is_regular_file(ec)) {
+                std::string ext = entry.path().extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                if (ext == ".wav") {
+                    wavs.push_back(entry.path().filename().string());
+                }
+            }
+        }
+        std::sort(dirs.begin(), dirs.end());
+        std::sort(wavs.begin(), wavs.end());
+        for (auto& d : dirs) c.app.sample_browser_items.push_back(std::move(d));
+        for (auto& w : wavs) c.app.sample_browser_items.push_back(std::move(w));
+
+        if (c.app.sample_browser_items.empty()) {
+            c.app.sample_browser_items.push_back("(EMPTY DIRECTORY)");
+        }
+        c.app.sample_browser_sel = std::clamp(c.app.sample_browser_sel, 0, static_cast<int>(c.app.sample_browser_items.size()) - 1);
+    };
+
+    auto auditionCurrentBrowserItem = [](UiContext& c) {
+        if (c.app.sample_browser_items.empty()) return;
+        int sel = std::clamp(c.app.sample_browser_sel, 0, static_cast<int>(c.app.sample_browser_items.size()) - 1);
+        const std::string& item = c.app.sample_browser_items[sel];
+        if (item.rfind("[DIR] ", 0) == 0 || item.rfind("[..]", 0) == 0 || item[0] == '(') {
+            return;
+        }
+        std::string full_path = c.app.sample_browser_dir + "/" + item;
+        int t = c.app.sample_browser_target_track;
+        if (c.audio.sampler().loadWavFile(full_path, c.audio.sampler().trackSample(t))) {
+            c.audio.triggerNote(t, 48, 0.90f);
+        }
+    };
+
+    add(Action{"SAMPLE_BROWSER.OPEN", "SAMPLES", [=](UiContext& c) {
+        c.app.sample_browser_open = true;
+        c.app.sample_browser_target_track = c.app.selected_track;
+        c.app.sample_browser_dir = getSamplesRootPath();
+        c.app.sample_browser_sel = 0;
+        refreshSampleBrowser(c);
+        c.app.last_action = "SAMPLE BROWSER";
+    }});
+    add(Action{"SAMPLE_BROWSER.UP", "UP", [=](UiContext& c) {
+        const int n = static_cast<int>(c.app.sample_browser_items.size());
+        if (n > 0) {
+            c.app.sample_browser_sel = (c.app.sample_browser_sel - 1 + n) % n;
+            auditionCurrentBrowserItem(c);
+        }
+    }});
+    add(Action{"SAMPLE_BROWSER.DOWN", "DOWN", [=](UiContext& c) {
+        const int n = static_cast<int>(c.app.sample_browser_items.size());
+        if (n > 0) {
+            c.app.sample_browser_sel = (c.app.sample_browser_sel + 1) % n;
+            auditionCurrentBrowserItem(c);
+        }
+    }});
+    add(Action{"SAMPLE_BROWSER.CONFIRM", "ENTER", [=](UiContext& c) {
+        if (c.app.sample_browser_items.empty()) return;
+        int sel = std::clamp(c.app.sample_browser_sel, 0, static_cast<int>(c.app.sample_browser_items.size()) - 1);
+        const std::string& item = c.app.sample_browser_items[sel];
+        if (item.rfind("[..]", 0) == 0) {
+            fs::path p(c.app.sample_browser_dir);
+            c.app.sample_browser_dir = p.parent_path().string();
+            c.app.sample_browser_sel = 0;
+            refreshSampleBrowser(c);
+            return;
+        }
+        if (item.rfind("[DIR] ", 0) == 0) {
+            std::string sub = item.substr(6);
+            c.app.sample_browser_dir = c.app.sample_browser_dir + "/" + sub;
+            c.app.sample_browser_sel = 0;
+            refreshSampleBrowser(c);
+            return;
+        }
+        if (item[0] == '(') return;
+        std::string full_path = c.app.sample_browser_dir + "/" + item;
+        int t = c.app.sample_browser_target_track;
+        if (c.audio.sampler().loadWavFile(full_path, c.audio.sampler().trackSample(t))) {
+            std::string stem = fs::path(full_path).stem().string();
+            std::transform(stem.begin(), stem.end(), stem.begin(), ::toupper);
+            c.audio.setTrackName(t, stem);
+            auto tp = c.audio.getTrackParams(t);
+            tp.engine = EngineType::kSampleOneShot;
+            c.audio.setTrackParams(t, tp);
+            c.audio.triggerNote(t, 48, 0.90f);
+            c.app.sample_browser_open = false;
+            c.app.last_action = "LOADED: " + stem;
+        }
+    }});
+    add(Action{"SAMPLE_BROWSER.CLOSE", "CLOSE", [=](UiContext& c) {
+        std::string root = getSamplesRootPath();
+        std::error_code ec;
+        if (!c.app.sample_browser_dir.empty() && !fs::equivalent(c.app.sample_browser_dir, root, ec) && c.app.sample_browser_dir != root) {
+            fs::path p(c.app.sample_browser_dir);
+            c.app.sample_browser_dir = p.parent_path().string();
+            c.app.sample_browser_sel = 0;
+            refreshSampleBrowser(c);
+        } else {
+            c.app.sample_browser_open = false;
+            c.app.last_action = "BROWSER CLOSED";
+        }
     }});
     add(Action{"ARP.COMMIT", "APPLY", [](UiContext& c) {
         const int row = c.app.cursor_row;
