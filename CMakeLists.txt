@@ -88,6 +88,36 @@ else()
     )
     target_link_directories(render_tour PRIVATE "/opt/homebrew/lib")
     target_link_libraries(render_tour PRIVATE SDL2)
+
+    add_executable(auto_test
+        tools/auto_test.cpp
+        src/arpeggiator.cpp
+        src/audio_engine.cpp
+        src/dx7_engine.cpp
+        src/pattern_manager.cpp
+        src/sampler_engine.cpp
+        src/device_profile.cpp
+        src/hw_monitor.cpp
+        src/input_manager.cpp
+        src/midi_engine.cpp
+        src/net_audio_streamer.cpp
+        src/ui/canvas.cpp
+        src/ui/params.cpp
+        src/ui/widgets.cpp
+        src/ui/views.cpp
+        src/ui/actions.cpp
+        src/ui/keymap.cpp
+        src/ui/layout.cpp
+        src/ui/ui_shell.cpp
+    )
+    target_include_directories(auto_test PRIVATE src)
+    target_include_directories(auto_test SYSTEM PRIVATE
+        ${SDL2_INCLUDE_DIRS}
+        "/opt/homebrew/include"
+        "/opt/homebrew/include/SDL2"
+    )
+    target_link_directories(auto_test PRIVATE "/opt/homebrew/lib")
+    target_link_libraries(auto_test PRIVATE SDL2)
 endif()
 
 target_compile_options(xu10_groovebox PRIVATE

@@ -137,9 +137,11 @@ public:
 
     AudioEngineTelemetry getTelemetry() const;
 
+    // Публічний метод рендерингу аудіоблоку (для тестів, експорту та офлайн-обробки)
+    void renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_t sample_rate);
+
 private:
     void initDefaultPattern();
-    void renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_t sample_rate);
     void applyRk817HardwareMux(bool headphones_plugged);
     void applyRk817HardwareVolume(float vol_norm);
 
