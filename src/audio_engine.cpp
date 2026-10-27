@@ -362,16 +362,9 @@ void AudioEngine::setRowLength(int row, uint32_t len) {
 }
 
 uint32_t AudioEngine::cycleRowLength(int row) {
-    static constexpr uint32_t kLens[] = {16, 24, 32, 48, 64, 72, 80, 96, 112, 128};
     int r = std::clamp(row, 0, kTotalRows - 1);
     uint32_t cur = row_lengths_[r].load(std::memory_order_relaxed);
-    uint32_t next = 16;
-    for (size_t i = 0; i < sizeof(kLens) / sizeof(kLens[0]); ++i) {
-        if (kLens[i] == cur) {
-            next = (i + 1 < sizeof(kLens) / sizeof(kLens[0])) ? kLens[i + 1] : kLens[0];
-            break;
-        }
-    }
+    uint32_t next = (cur >= 128u) ? 4u : std::min(128u, ((cur / 4u) + 1u) * 4u);
     row_lengths_[r].store(next, std::memory_order_relaxed);
     return next;
 }
@@ -882,7 +875,6 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
         for (int r = 0; r < active_rows_count_; ++r) {
             auto& v = voices_[r];
             int t = std::clamp(static_cast<int>(row_track_[r]), 0, 3);
-            int v_idx = row_voice_[r];
             const auto& tp = local_tracks[t];
             if (tp.muted || !v.active) continue;
 

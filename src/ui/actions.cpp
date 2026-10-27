@@ -189,7 +189,7 @@ ActionRegistry::ActionRegistry() {
     add(Action{"SEQ.LEN_INC", "LEN+", [](UiContext& c) {
         if (c.app.cursor_row < c.audio.getActiveRowCount()) {
             uint32_t len = c.audio.getRowLength(c.app.cursor_row);
-            uint32_t next = std::min(128u, ((len / 16u) + 1u) * 16u);
+            uint32_t next = std::min(128u, ((len / 4u) + 1u) * 4u);
             c.audio.setRowLength(c.app.cursor_row, next);
             if (c.app.cursor_step >= static_cast<int>(next)) c.app.cursor_step = static_cast<int>(next - 1);
             c.app.seq_page = c.app.cursor_step / static_cast<int>(kStepsPerPage);
@@ -198,7 +198,7 @@ ActionRegistry::ActionRegistry() {
     add(Action{"SEQ.LEN_DEC", "LEN-", [](UiContext& c) {
         if (c.app.cursor_row < c.audio.getActiveRowCount()) {
             uint32_t len = c.audio.getRowLength(c.app.cursor_row);
-            uint32_t next = len > 16u ? ((len - 1u) / 16u) * 16u : 16u;
+            uint32_t next = len > 4u ? ((len - 1u) / 4u) * 4u : 4u;
             c.audio.setRowLength(c.app.cursor_row, next);
             if (c.app.cursor_step >= static_cast<int>(next)) c.app.cursor_step = static_cast<int>(next - 1);
             c.app.seq_page = c.app.cursor_step / static_cast<int>(kStepsPerPage);
@@ -299,17 +299,19 @@ ActionRegistry::ActionRegistry() {
             c.app.selected_track = c.audio.getRowTrack(c.app.cursor_row);
         }
     }});
-    add(Action{"TAB.R2", "TAB.R2", [](UiContext& c) {
+    add(Action{"TAB.R2", "MIX/FX", [](UiContext& c) {
         if (c.app.active_view == ViewId::kMix) {
             c.app.active_view = ViewId::kFx;
+            c.app.last_action = "VIEW: FX";
         } else {
             c.app.active_view = ViewId::kMix;
+            c.app.last_action = "VIEW: MIX";
         }
     }});
-    add(Action{"TAB.R1", "TAB.R1", [](UiContext& c) {
+    add(Action{"TAB.R1", "PERF", [](UiContext& c) {
         c.app.active_view = ViewId::kPerf;
     }});
-    add(Action{"TAB.G", "TAB.G", [](UiContext& c) {
+    add(Action{"TAB.G", "SYS", [](UiContext& c) {
         if (c.app.active_view != ViewId::kSys) {
             c.app.previous_view = c.app.active_view;
             c.app.active_view = ViewId::kSys;
@@ -317,10 +319,45 @@ ActionRegistry::ActionRegistry() {
             c.app.active_view = c.app.previous_view;
         }
     }});
+
+    // Швидкі комбінації SELECT + Shoulder (альтернативні екрани)
+    add(Action{"TAB.SEL_L1", "INSPECT", [](UiContext& c) {
+        c.app.step_inspector_open = !c.app.step_inspector_open;
+        c.app.last_action = c.app.step_inspector_open ? "INSPECT OPEN" : "INSPECT CLOSED";
+    }});
+    add(Action{"TAB.SEL_L2", "ARP", [](UiContext& c) {
+        c.app.arp_modal_open = !c.app.arp_modal_open;
+        c.app.last_action = c.app.arp_modal_open ? "ARP OPENED" : "ARP CLOSED";
+    }});
+    add(Action{"TAB.SEL_R2", "SCOPE", [](UiContext& c) {
+        if (c.app.active_view == ViewId::kScope) {
+            c.app.active_view = c.app.previous_view;
+            c.app.last_action = "SCOPE CLOSED";
+        } else {
+            c.app.previous_view = c.app.active_view;
+            c.app.active_view = ViewId::kScope;
+            c.app.last_action = "VIEW: SCOPE";
+        }
+    }});
+    add(Action{"TAB.SEL_R1", "PERF", [](UiContext& c) {
+        if (c.app.active_view == ViewId::kPerf) {
+            c.app.active_view = c.app.previous_view;
+            c.app.last_action = "PERF CLOSED";
+        } else {
+            c.app.previous_view = c.app.active_view;
+            c.app.active_view = ViewId::kPerf;
+            c.app.last_action = "VIEW: PERF PADS";
+        }
+    }});
+
     add(Action{"VIEW.BACK", "BACK", [](UiContext& c) {
-        if (c.app.step_inspector_open) {
+        if (c.app.arp_modal_open) {
+            c.app.arp_modal_open = false;
+        } else if (c.app.engine_menu_open) {
+            c.app.engine_menu_open = false;
+        } else if (c.app.step_inspector_open) {
             c.app.step_inspector_open = false;
-        } else if (c.app.active_view == ViewId::kSys) {
+        } else if (c.app.active_view == ViewId::kSys || c.app.active_view == ViewId::kScope || c.app.active_view == ViewId::kPerf) {
             c.app.active_view = c.app.previous_view;
         }
     }});
