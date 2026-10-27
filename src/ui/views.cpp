@@ -32,44 +32,51 @@ Rect workspaceRect() { return Rect{0, UiShell::kTabBarH, 320, UiShell::kWorkspac
 // =====================================================================================
 // GridView
 // =====================================================================================
-GridView::GridView(GridSpec spec) : IView(spec.id), spec_(std::move(spec)) {
+GridView::GridView(GridSpec spec) : IView(spec.id), spec_(std::move(spec)) {}
+
+std::vector<std::pair<std::string, std::vector<const Param*>>> GridView::resolveRows(const UiContext& c) const {
     const auto& reg = ParamRegistry::instance();
-    resolved_.reserve(spec_.rows.size());
-    for (const auto& row : spec_.rows) {
+    std::vector<GridRow> rlist = spec_.dynamic_rows ? spec_.dynamic_rows(c) : spec_.rows;
+    std::vector<std::pair<std::string, std::vector<const Param*>>> out;
+    out.reserve(rlist.size());
+    for (const auto& row : rlist) {
         std::vector<const Param*> r;
+        r.reserve(row.cells.size());
         for (const auto& id : row.cells) {
-            const Param* p = id.empty() ? nullptr : reg.find(id);
-            if (!id.empty() && !p) std::fprintf(stderr, "[UI] unknown param id '%s' in view %s\n", id.c_str(), viewName(spec_.id));
-            r.push_back(p);
+            r.push_back(id.empty() ? nullptr : reg.find(id));
         }
-        resolved_.push_back(std::move(r));
+        out.emplace_back(row.title, std::move(r));
     }
+    return out;
 }
 
 std::string GridView::tabTitle(const UiContext& c) const {
     return spec_.tab_title ? spec_.tab_title(c) : std::string(viewName(id()));
 }
 
-const Param* GridView::cellParam(int row, int col) const {
-    if (row < 0 || row >= static_cast<int>(resolved_.size())) return nullptr;
-    const auto& r = resolved_[row];
+const Param* GridView::cellParam(const UiContext& c, int row, int col) const {
+    auto rows = resolveRows(c);
+    if (row < 0 || row >= static_cast<int>(rows.size())) return nullptr;
+    const auto& r = rows[row].second;
     if (col < 0 || col >= static_cast<int>(r.size())) return nullptr;
     return r[col];
 }
 
 int GridView::rowOf(const UiContext& c) const {
-    const int n = static_cast<int>(resolved_.size());
+    auto rows = resolveRows(c);
+    const int n = static_cast<int>(rows.size());
     return n ? std::clamp(c.app.grid_row[static_cast<int>(id())], 0, n - 1) : 0;
 }
 
 int GridView::colOf(const UiContext& c) const {
+    auto rows = resolveRows(c);
     const int r = rowOf(c);
-    const int n = resolved_.empty() ? 0 : static_cast<int>(resolved_[r].size());
+    const int n = rows.empty() ? 0 : static_cast<int>(rows[r].second.size());
     return n ? std::clamp(c.app.grid_col[static_cast<int>(id())], 0, n - 1) : 0;
 }
 
 const Param* GridView::focusedParam(const UiContext& c) const {
-    return cellParam(rowOf(c), colOf(c));
+    return cellParam(c, rowOf(c), colOf(c));
 }
 
 std::string GridView::focusId(const UiContext& c) const {
@@ -78,19 +85,20 @@ std::string GridView::focusId(const UiContext& c) const {
 }
 
 void GridView::navigate(UiContext& c, int dx, int dy, bool coarse) {
-    const int rows = static_cast<int>(resolved_.size());
-    if (rows == 0) return;
+    auto rows = resolveRows(c);
+    const int num_rows = static_cast<int>(rows.size());
+    if (num_rows == 0) return;
     const int vi = static_cast<int>(id());
     int row = rowOf(c);
     int col = colOf(c);
 
     if (dy != 0) {
         const int jump = coarse ? 3 : 1;
-        row = (row + dy * jump % rows + rows) % rows;
-        col = std::min(col, static_cast<int>(resolved_[row].size()) - 1);
+        row = (row + dy * jump % num_rows + num_rows) % num_rows;
+        col = std::min(col, static_cast<int>(rows[row].second.size()) - 1);
     }
     if (dx != 0) {
-        const int cols = static_cast<int>(resolved_[row].size());
+        const int cols = static_cast<int>(rows[row].second.size());
         if (cols > 0) col = (col + dx + cols) % cols;
     }
     c.app.grid_row[vi] = row;
@@ -101,7 +109,7 @@ void GridView::navigate(UiContext& c, int dx, int dy, bool coarse) {
     int& scroll = c.app.grid_scroll[vi];
     if (row < scroll) scroll = row;
     if (row >= scroll + vis) scroll = row - vis + 1;
-    scroll = std::clamp(scroll, 0, std::max(0, rows - vis));
+    scroll = std::clamp(scroll, 0, std::max(0, num_rows - vis));
 
     if (dy != 0 && spec_.on_focus) spec_.on_focus(c, row);
 }
@@ -115,8 +123,6 @@ void GridView::render(Canvas& cv, const UiContext& c, Rect area) const {
 }
 
 void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
-    const int vi = static_cast<int>(id());
-
     Rect box = area;
     int table_y0 = area.y + kHeaderH;
     int cells_x = area.x + kTitleW;
@@ -142,8 +148,9 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
         cv.text(area.x + 4, area.y + 3, spec_.header(c), spec_.accent);
     }
 
-    const int total_rows = static_cast<int>(resolved_.size());
-    // У вкладці MIX показуємо тільки стільки смуг, скільки реально існує + рядок Master
+    auto rows = resolveRows(c);
+    const int total_rows = static_cast<int>(rows.size());
+    // У вкладці MIX показуємо тільки стільки смуг, скільки реально існує + рядок Master/Bus
     const int act_tracks = (spec_.id == ViewId::kMix) ? std::min(total_rows - 1, c.audio.getActiveRowCount()) : total_rows;
     const int rows_to_draw = (spec_.id == ViewId::kMix) ? act_tracks + 1 : total_rows;
 
@@ -154,9 +161,9 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
         // Для MIX останній рядок — завжди MST (індекс total_rows - 1)
         const int r = (spec_.id == ViewId::kMix && i == act_tracks) ? (total_rows - 1) : i;
         const int y = table_y0 + i * kTableRowH;
-        cv.text(box.x + 4, y + 8, spec_.rows[r].title, r == sel_r ? spec_.accent : palette::kTextDim);
+        cv.text(box.x + 4, y + 8, rows[r].first, r == sel_r ? spec_.accent : palette::kTextDim);
 
-        const auto& cells = resolved_[r];
+        const auto& cells = rows[r].second;
         const int n = std::max(1, static_cast<int>(cells.size()));
         const int cw = cells_w / n;
         for (int k = 0; k < static_cast<int>(cells.size()); ++k) {
@@ -203,7 +210,8 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
 
 void GridView::renderList(Canvas& cv, const UiContext& c, Rect area, bool popup) const {
     const int vi = static_cast<int>(id());
-    const int rows = static_cast<int>(resolved_.size());
+    auto rows = resolveRows(c);
+    const int num_rows = static_cast<int>(rows.size());
     const int sel_r = rowOf(c);
 
     Rect box = area;
@@ -214,7 +222,7 @@ void GridView::renderList(Canvas& cv, const UiContext& c, Rect area, bool popup)
         row_h = kPopupRowH;
         value_x = 64;
         box.w = 180;
-        box.h = std::min(area.h - 8, rows * row_h + 18);
+        box.h = std::min(area.h - 8, num_rows * row_h + 18);
         box.x = area.x + (area.w - box.w) / 2;
         box.y = area.y + 6;
         cv.fill(box.x, box.y, box.w, box.h, palette::kPanelBg);
@@ -227,10 +235,10 @@ void GridView::renderList(Canvas& cv, const UiContext& c, Rect area, bool popup)
     }
 
     const int vis = visibleRows(spec_, area);
-    const int scroll = std::clamp(c.app.grid_scroll[vi], 0, std::max(0, rows - vis));
-    for (int i = 0; i < vis && scroll + i < rows; ++i) {
+    const int scroll = std::clamp(c.app.grid_scroll[vi], 0, std::max(0, num_rows - vis));
+    for (int i = 0; i < vis && scroll + i < num_rows; ++i) {
         const int r = scroll + i;
-        const Param* p = resolved_[r].empty() ? nullptr : resolved_[r][0];
+        const Param* p = rows[r].second.empty() ? nullptr : rows[r].second[0];
         if (!p) continue;
         const Rect rr{box.x + 3, y0 + i * row_h, box.w - 6, row_h - 1};
         widgets::listRow(cv, rr, p->labelFor(c), p->value(c), r == sel_r, p->editable(), value_x, spec_.accent);
@@ -353,18 +361,38 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
             const uint32_t idx = page_off + s;
             const int x = grid_x + static_cast<int>(s) * step_w;
             if (idx < len) {
+                // Шахматка відтінків сірого: чергування 4-крокових долей (бітів) та рядків
+                const bool beat_alt = (((s / 4) + r) % 2 == 1);
+                const ColorRGB bg_col = beat_alt ? ColorRGB{26, 26, 32} : ColorRGB{16, 16, 20};
+                cv.fill(x, y + 1, step_w - 1, th, bg_col);
+
                 const auto sd = c.audio.getStep(r, static_cast<int>(idx));
                 if (sd.enabled) {
                     const ColorRGB col = sd.is_param_trig ? palette::kParamTrig
                                        : (trk.muted ? palette::kGridDim
                                        : (t % 2 == 0 ? palette::kLevelOk : palette::kAccentCyan));
-                    cv.fill(x, y + 1, step_w - 2, th, col);
-                } else if (s % 4 == 0) {
-                    cv.fill(x + 2, y + row_h / 2 - 1, 2, 2, s % 16 == 0 ? palette::kTextDim : palette::kGridDim);
+                    cv.fill(x + 1, y + 2, step_w - 3, th - 2, col);
+                } else {
+                    if (s % 4 == 0) {
+                        // Контрастний маркер початку долі (чверті)
+                        cv.fill(x + 2, y + row_h / 2 - 1, 2, 2, (s % 16 == 0) ? palette::kTextDim : palette::kGridDim);
+                    } else {
+                        // Делікатна крапка порожнього кроку
+                        cv.fill(x + 3, y + row_h / 2, 1, 1, ColorRGB{42, 42, 50});
+                    }
                 }
                 if (idx == play) cv.line(x + 3, y, x + 3, y + row_h - 2, palette::kCursorWhite);
             } else if (idx == len) {
+                // Чітка контрастна лінія межі довжини треку
                 cv.line(x, y, x, y + row_h - 2, palette::kAccentOrange);
+            } else {
+                // За межами активної довжини: приглушена фонова сітка
+                const bool beat_alt = (((s / 4) + r) % 2 == 1);
+                const ColorRGB dim_bg = beat_alt ? ColorRGB{12, 12, 16} : ColorRGB{8, 8, 10};
+                cv.fill(x, y + 1, step_w - 1, th, dim_bg);
+                if (s % 4 == 0) {
+                    cv.fill(x + 3, y + row_h / 2, 1, 1, ColorRGB{22, 22, 28});
+                }
             }
             if (is_cur && idx == static_cast<uint32_t>(c.app.cursor_step)) {
                 cv.rect(x - 1, y, step_w, row_h, palette::kCursorWhite);

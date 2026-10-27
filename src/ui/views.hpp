@@ -58,6 +58,7 @@ struct GridSpec {
     std::function<std::string(const UiContext&)> tab_title; // опційна назва вкладки
     std::function<void(UiContext&, int row)> on_focus;      // опційно: реакція на зміну рядка (MIX -> трек)
     std::vector<GridRow> rows;
+    std::function<std::vector<GridRow>(const UiContext&)> dynamic_rows; // опційно: динамічні рядки за типом рушія
 };
 
 class GridView : public IView {
@@ -72,7 +73,8 @@ public:
     std::string focusId(const UiContext& c) const override;
 
 private:
-    const Param* cellParam(int row, int col) const;
+    std::vector<std::pair<std::string, std::vector<const Param*>>> resolveRows(const UiContext& c) const;
+    const Param* cellParam(const UiContext& c, int row, int col) const;
     int rowOf(const UiContext& c) const;
     int colOf(const UiContext& c) const;
     void renderTable(Canvas& cv, const UiContext& c, Rect area) const;

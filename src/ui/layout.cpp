@@ -25,20 +25,80 @@ void setupAppLayout(UiShell& shell) {
             std::snprintf(b, sizeof(b), "SYNTH TRK T%d [%s]", c.app.selected_track + 1, getEngineTypeName(tp.engine));
             return std::string(b);
         };
-        synth_spec.rows = {
-            // Row 0: Інструмент, вибір форми хвилі / семпла, рандомайзер
-            {"INST", {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.RND"}},
-            // Row 1: Фільтр та тембр (динамічні назви P1..P4)
-            {"FLT",  {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4"}},
-            // Row 2: Осцилятори
-            {"OSC",  {"TRK.P5", "TRK.P6"}},
-            // Row 3: ADSR огинаюча
-            {"ENV",  {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-            // Row 4: Модуляція LFO 1 та LFO 2 з призначенням DEST
-            {"LFO1", {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST"}},
-            {"LFO2", {"LFO2.WAVE", "LFO2.RATE", "LFO2.DEPTH", "LFO2.DEST"}},
-            // Row 5: Посили та рівні
-            {"SEND", {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+        synth_spec.dynamic_rows = [](const UiContext& c) -> std::vector<GridRow> {
+            const auto tp = c.audio.getTrackParams(c.app.selected_track);
+            switch (tp.engine) {
+                case EngineType::kDrumRack:
+                    return {
+                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.RND"}},
+                        {"DRUM",  {"TRK.P1", "TRK.P2", "TRK.P4", "TRK.P5"}},
+                        {"COLOR", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.P6"}},
+                        {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
+                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                    };
+                case EngineType::kDx7:
+                    return {
+                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.RND"}},
+                        {"DX7",   {"TRK.P1", "TRK.P5", "TRK.P6", "TRK.P3"}},
+                        {"TIMBRE",{"TRK.P2", "TRK.P4", "FX.CHR_MIX", "FX.DRIVE"}},
+                        {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST"}},
+                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                    };
+                case EngineType::kAcid303:
+                    return {
+                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.RND"}},
+                        {"303",   {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4"}},
+                        {"ACID",  {"TRK.P5", "TRK.GLIDE", "FX.DRIVE", "FX.DRV_TONE"}},
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST"}},
+                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                    };
+                case EngineType::kFm2Op:
+                    return {
+                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.RND"}},
+                        {"2-OP",  {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P5"}},
+                        {"MOD",   {"TRK.P4", "TRK.P6", "FX.CHR_MIX", "FX.DRIVE"}},
+                        {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST"}},
+                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                    };
+                case EngineType::kChordPad:
+                    return {
+                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.RND"}},
+                        {"CHORD", {"TRK.P3", "TRK.P5", "TRK.P1", "TRK.P2"}},
+                        {"COLOR", {"FX.CHR_MIX", "FX.CHR_RATE", "FX.DRIVE", "TRK.P6"}},
+                        {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST"}},
+                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                    };
+                case EngineType::kSampleOneShot:
+                case EngineType::kSliceSampler:
+                    return {
+                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.RND"}},
+                        {"SMPL",  {"TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5"}},
+                        {"COLOR", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.P6"}},
+                        {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST"}},
+                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                    };
+                case EngineType::kMidiOut:
+                    return {
+                        {"INST",  {"TRK.ENGINE", "TRK.P1", "TRK.P6"}},
+                        {"CC_A",  {"TRK.P2", "TRK.P3"}},
+                        {"CC_B",  {"TRK.P4", "TRK.P5"}},
+                        {"SEND",  {"TRK.PAN", "TRK.LVL"}}
+                    };
+                case EngineType::kVaMono:
+                default:
+                    return {
+                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.RND"}},
+                        {"OSC",   {"TRK.P5", "TRK.P6", "TRK.P1", "TRK.P2"}},
+                        {"COLOR", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.P3"}},
+                        {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST"}},
+                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                    };
+            }
         };
         shell.registerView(std::make_unique<GridView>(std::move(synth_spec)));
     }
@@ -50,8 +110,8 @@ void setupAppLayout(UiShell& shell) {
         GridSpec fx_spec;
         fx_spec.id = ViewId::kFx;
         fx_spec.style = GridStyle::kTable;
-        fx_spec.accent = palette::kAccentOrange;
-        fx_spec.tab_title = [](const UiContext&) { return "FX"; };
+        fx_spec.accent = palette::kAccentPurple;
+        fx_spec.tab_title = [](const UiContext&) { return "FX/MIX"; };
         fx_spec.header = [](const UiContext&) { return "MASTER SEND EFFECTS & OUTPUT"; };
         fx_spec.rows = {
             {"DLY", {"DLY.TIME", "DLY.FBK", "DLY.RET", "MST.BPM"}},
@@ -70,7 +130,7 @@ void setupAppLayout(UiShell& shell) {
         mix_spec.id = ViewId::kMix;
         mix_spec.style = GridStyle::kTable;
         mix_spec.accent = palette::kAccentOrange;
-        mix_spec.tab_title = [](const UiContext&) { return "MIX"; };
+        mix_spec.tab_title = [](const UiContext&) { return "MIX/FX"; };
         mix_spec.header = [](const UiContext&) { return "MIXER CHANNELS & MASTER"; };
         mix_spec.on_focus = [](UiContext& c, int r) {
             if (r >= 0 && r < 4) c.app.selected_track = r;
@@ -80,6 +140,7 @@ void setupAppLayout(UiShell& shell) {
             {"T2",  {"T2.LVL", "T2.PAN", "T2.DLY", "T2.REV", "T2.MUTE"}},
             {"T3",  {"T3.LVL", "T3.PAN", "T3.DLY", "T3.REV", "T3.MUTE"}},
             {"T4",  {"T4.LVL", "T4.PAN", "T4.DLY", "T4.REV", "T4.MUTE"}},
+            {"BUS", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "FX.CHR_RATE"}},
             {"MST", {"MST.VOL", "DLY.FBK", "REV.RET", "MST.BPM"}}
         };
         shell.registerView(std::make_unique<GridView>(std::move(mix_spec)));
