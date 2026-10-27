@@ -628,17 +628,35 @@ ParamRegistry::ParamRegistry() {
             switch (st) {
                 case RecState::kArmed: return "ARMED";
                 case RecState::kRecording: return "RECORD";
-                case RecState::kFinished: return "DONE";
+                case RecState::kOverdub: return "OVERDUB";
+                case RecState::kFinished: return "LOOP";
                 default: return "OFF";
             }
         };
-        p.step = [](UiContext& c, int, bool) {
-            if (c.app.sampler.recordingState() == RecState::kIdle) {
-                c.app.sampler.armRecording();
-                c.app.last_action = "REC ARMED";
+        p.step = [](UiContext& c, int dir, bool) {
+            auto st = c.app.sampler.recordingState();
+            if (dir > 0) {
+                if (st == RecState::kIdle) {
+                    c.app.sampler.armRecording();
+                    c.app.last_action = "REC ARMED";
+                } else if (st == RecState::kArmed) {
+                    c.app.sampler.startRecording();
+                    c.app.last_action = "RECORDING";
+                } else if (st == RecState::kRecording) {
+                    c.app.sampler.startOverdub();
+                    c.app.last_action = "OVERDUBBING";
+                } else if (st == RecState::kOverdub) {
+                    c.app.sampler.stopRecording();
+                    c.app.last_action = "LOOP STOPPED";
+                } else {
+                    c.app.sampler.clearRecordedSample();
+                    c.app.last_action = "LOOP CLEARED";
+                }
             } else {
-                c.app.sampler.stopRecording();
-                c.app.last_action = "REC STOPPED";
+                if (st != RecState::kIdle) {
+                    c.app.sampler.stopRecording();
+                    c.app.last_action = "REC STOPPED";
+                }
             }
         };
         add(std::move(p));
@@ -701,6 +719,22 @@ ParamRegistry::ParamRegistry() {
         p.step = [](UiContext& c, int dir, bool coarse) {
             float d = coarse ? 0.10f : 0.01f;
             c.app.sample_trim_end = std::clamp(c.app.sample_trim_end + dir * d, c.app.sample_trim_start + 0.02f, 1.0f);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SMP.DUB_FBK";
+        p.label = "DUB FBK";
+        p.value = [](const UiContext& c) {
+            char b[16];
+            std::snprintf(b, sizeof(b), "%d%%", static_cast<int>(c.app.sampler.overdubFeedback() * 100.0f));
+            return std::string(b);
+        };
+        p.norm = [](const UiContext& c) { return c.app.sampler.overdubFeedback(); };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            float d = coarse ? 0.10f : 0.05f;
+            c.app.sampler.setOverdubFeedback(c.app.sampler.overdubFeedback() + dir * d);
         };
         add(std::move(p));
     }

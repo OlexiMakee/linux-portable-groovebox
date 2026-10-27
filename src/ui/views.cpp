@@ -621,7 +621,7 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
 // =====================================================================================
 static const char* kSampleParams[2][4] = {
     {"SMP.SRC", "SMP.ARM", "SMP.MODE", "SMP.THRS"},
-    {"SMP.TRIM_ST", "SMP.TRIM_END", "SMP.ZOOM", "SMP.ASSIGN"}
+    {"SMP.TRIM_ST", "SMP.TRIM_END", "SMP.DUB_FBK", "SMP.ASSIGN"}
 };
 
 void SampleView::navigate(UiContext& c, int dx, int dy, bool) {
@@ -650,9 +650,16 @@ void SampleView::render(Canvas& cv, const UiContext& c, Rect area) const {
     // 1. Заголовок
     char hdr[64];
     auto st = c.app.sampler.recordingState();
-    const char* st_name = (st == RecState::kRecording) ? "RECORDING..." : (st == RecState::kArmed ? "ARMED (WAITING)" : "STANDBY");
+    const char* st_name = (st == RecState::kRecording) ? "RECORDING..."
+                        : (st == RecState::kOverdub)   ? "OVERDUB (SOUND-ON-SOUND)..."
+                        : (st == RecState::kArmed)     ? "ARMED (WAITING)"
+                        : (st == RecState::kFinished)  ? "LOOP READY (8 SLICES)"
+                        : "STANDBY";
+    ColorRGB hdr_col = (st == RecState::kRecording) ? palette::kLevelWarnClip
+                     : (st == RecState::kOverdub)   ? palette::kParamTrig
+                     : palette::kAccentCyan;
     std::snprintf(hdr, sizeof(hdr), "SAMPLING WORKSTATION [%s]", st_name);
-    cv.text(area.x + 4, area.y + 3, hdr, (st == RecState::kRecording) ? palette::kLevelWarnClip : palette::kAccentCyan);
+    cv.text(area.x + 4, area.y + 3, hdr, hdr_col);
 
     // 2. Велике вікно візуалізації хвилеформи (Elektron Digitakt style)
     const int wf_x = area.x + 4;
@@ -667,6 +674,27 @@ void SampleView::render(Canvas& cv, const UiContext& c, Rect area) const {
     const int st_px = wf_x + static_cast<int>(c.app.sample_trim_start * (wf_w - 2));
     const int end_px = wf_x + static_cast<int>(c.app.sample_trim_end * (wf_w - 2));
     cv.fill(st_px, wf_y + 1, std::max(2, end_px - st_px), wf_h - 2, ColorRGB{16, 28, 36});
+
+    // 8 Слайсів: вертикальні пунктирні розділювачі та підсвітка активного слайсу
+    const int span_px = end_px - st_px;
+    const int active_slc = c.app.sampler.activePlaybackSlice();
+    if (span_px > 24) {
+        for (int i = 0; i < 8; ++i) {
+            int s_x = st_px + (i * span_px) / 8;
+            int s_next_x = st_px + ((i + 1) * span_px) / 8;
+            if (i > 0) {
+                for (int py = wf_y + 2; py < wf_y + wf_h - 10; py += 4) {
+                    cv.fill(s_x, py, 1, 2, ColorRGB{45, 55, 70});
+                }
+            }
+            if (i == active_slc) {
+                cv.fill(s_x + 1, wf_y + 1, std::max(2, s_next_x - s_x - 1), wf_h - 2, ColorRGB{20, 50, 70});
+            }
+            char slbl[8];
+            std::snprintf(slbl, sizeof(slbl), "S%d", i + 1);
+            cv.text(s_x + 2, wf_y + wf_h - 9, slbl, (i == active_slc) ? palette::kAccentOrange : ColorRGB{65, 80, 100});
+        }
+    }
 
     // Центральна нульова вісь
     const int mid_y = wf_y + wf_h / 2;
@@ -695,7 +723,7 @@ void SampleView::render(Canvas& cv, const UiContext& c, Rect area) const {
     cv.text(st_px + 2, wf_y + 3, "ST", palette::kAccentOrange);
 
     cv.line(end_px, wf_y + 1, end_px, wf_y + wf_h - 2, palette::kAccentCyan);
-    cv.text(std::max(wf_x + 2, end_px - 18), wf_y + wf_h - 9, "END", palette::kAccentCyan);
+    cv.text(std::max(wf_x + 2, end_px - 18), wf_y + 3, "END", palette::kAccentCyan);
 
     // 3. Таблиця параметрів під хвилеформою (2 рядки по 4 параметри)
     const int table_y = wf_y + wf_h + 4;
