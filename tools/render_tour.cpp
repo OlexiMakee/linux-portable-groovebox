@@ -112,12 +112,14 @@ int main() {
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_04_mix.bmp");
 
-    // 5. SAMPLE Tab (Sampling Workstation)
+    // 5. SAMPLE Tab (Sampling Workstation with 8 Slices & Active S3 Highlight)
     app.active_view = ViewId::kSample;
+    app.sampler.setActivePlaybackSlice(2); // S3 highlighted
     input = InputState{};
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_05_sample.bmp");
     capture("/tmp/xu10_tour/tour_05_scope.bmp");
+    app.sampler.setActivePlaybackSlice(-1);
 
     // 6. SYS Tab
     app.active_view = ViewId::kSys;

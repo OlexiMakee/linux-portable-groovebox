@@ -294,6 +294,22 @@ static void testInputRouterAndStepEditor() {
     app.sampler.sliceToDrumSlots(0.0f, 1.0f);
     TEST_ASSERT(app.sampler.drumSlot(0).loaded == true, "Looper sliceToDrumSlots populates slot 1");
     TEST_ASSERT(app.sampler.drumSlot(7).loaded == true, "Looper sliceToDrumSlots populates slot 8");
+
+    // 10. Тестування режиму накладання Live Looper Overdub та підсвітки слайсів
+    app.sampler.armSyncedRecording(1, 120.0f, 32000);
+    std::vector<float> test_audio(1024, 0.40f);
+    app.sampler.processAudioInput(test_audio.data(), test_audio.data(), 1024);
+    app.sampler.startOverdub();
+    app.sampler.setOverdubFeedback(0.75f);
+    TEST_ASSERT(app.sampler.recordingState() == RecState::kOverdub, "Sampler transitions to RecState::kOverdub");
+    TEST_ASSERT(std::fabs(app.sampler.overdubFeedback() - 0.75f) < 0.01f, "Overdub feedback correctly set to 75%");
+
+    app.sampler.setActivePlaybackSlice(2);
+    TEST_ASSERT(app.sampler.activePlaybackSlice() == 2, "Active playback slice tracks S3 for live visual highlight");
+
+    app.sampler.clearRecordedSample();
+    TEST_ASSERT(app.sampler.recordingState() == RecState::kIdle, "clearRecordedSample resets sampler state to kIdle");
+
     app.rec_mode = false;
 }
 
