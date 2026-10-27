@@ -58,6 +58,8 @@ struct AppModel {
     int cursor_step = 0;    // 0..127
     int seq_scroll_step = 0;// плавний горизонтальний скрол секвенсера по кроку
     bool rec_mode = false;  // Режим розгортання доріжки (Piano Roll / Drum Lanes)
+    int rec_cursor_lane = 0;// 0..7 (Drum Lanes) або 0..11 (Piano Roll Semitones)
+    int rec_octave = 3;     // Октава піанорола 1..6 (C1..C6)
 
     // Режим перформансу (жива гра на педах/інструментах)
     int perf_octave = 3;    // Октава живої гри C2..C6

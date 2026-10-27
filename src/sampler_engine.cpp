@@ -72,13 +72,14 @@ void SamplerEngine::processAudioInput(const float* in_l, const float* in_r, uint
 
         if (state == RecState::kRecording) {
             uint32_t idx = rec_write_idx_.load(std::memory_order_relaxed);
-            if (idx < rec_buffer_.data_l.size()) {
+            uint32_t target = target_frames_.load(std::memory_order_relaxed);
+            if (idx < rec_buffer_.data_l.size() && (target == 0 || idx < target)) {
                 rec_buffer_.data_l[idx] = sl;
                 rec_buffer_.data_r[idx] = sr;
                 rec_write_idx_.store(idx + 1, std::memory_order_relaxed);
             } else {
                 rec_state_.store(RecState::kFinished, std::memory_order_relaxed);
-                sliceGrid(active_slices_);
+                sliceGrid(8);
             }
         }
     }
@@ -216,6 +217,97 @@ bool SamplerEngine::loadDrumKit(const std::string& kit_dir) {
 const SampleBuffer& SamplerEngine::drumSlot(int slot) const {
     int s = std::clamp(slot, 0, kDrumSlots - 1);
     return drum_slots_[s];
+}
+
+void SamplerEngine::setDrumSlot(int slot, SampleBuffer buf) {
+    int s = std::clamp(slot, 0, kDrumSlots - 1);
+    drum_slots_[s] = std::move(buf);
+}
+
+void SamplerEngine::armSyncedRecording(uint32_t bars, float bpm, uint32_t sample_rate) {
+    float beat_sec = 60.0f / std::max(40.0f, bpm);
+    float total_sec = bars * 4.0f * beat_sec;
+    target_frames_.store(static_cast<uint32_t>(total_sec * sample_rate), std::memory_order_relaxed);
+    rec_mode_ = RecMode::kSyncBar;
+    armRecording();
+}
+
+void SamplerEngine::assignTrimmedToSlot(int slot, float trim_st, float trim_end) {
+    int s = std::clamp(slot, 0, kDrumSlots - 1);
+    uint32_t total = rec_write_idx_.load(std::memory_order_relaxed);
+    if (total == 0) total = static_cast<uint32_t>(rec_buffer_.data_l.size());
+    if (total == 0) return;
+
+    uint32_t st_f = static_cast<uint32_t>(std::clamp(trim_st, 0.0f, 0.99f) * total);
+    uint32_t end_f = static_cast<uint32_t>(std::clamp(trim_end, trim_st + 0.01f, 1.0f) * total);
+    if (end_f <= st_f) end_f = std::min(total, st_f + 64);
+
+    uint32_t len = end_f - st_f;
+    SampleBuffer buf;
+    buf.sample_rate = rec_buffer_.sample_rate;
+    buf.name = "SMPL " + std::to_string(s + 1);
+    buf.data_l.resize(len);
+    buf.data_r.resize(len);
+
+    float peak = 0.001f;
+    for (uint32_t i = 0; i < len; ++i) {
+        float l = rec_buffer_.data_l[st_f + i];
+        float r = rec_buffer_.data_r[st_f + i];
+        buf.data_l[i] = l;
+        buf.data_r[i] = r;
+        peak = std::max(peak, std::max(std::fabs(l), std::fabs(r)));
+    }
+    // Автонормалізація до 0.95
+    if (peak > 0.001f) {
+        float gain = 0.95f / peak;
+        for (uint32_t i = 0; i < len; ++i) {
+            buf.data_l[i] = std::clamp(buf.data_l[i] * gain, -1.0f, 1.0f);
+            buf.data_r[i] = std::clamp(buf.data_r[i] * gain, -1.0f, 1.0f);
+        }
+    }
+    buf.loaded = true;
+    drum_slots_[s] = std::move(buf);
+}
+
+void SamplerEngine::sliceToDrumSlots(float trim_st, float trim_end) {
+    uint32_t total = rec_write_idx_.load(std::memory_order_relaxed);
+    if (total == 0) total = static_cast<uint32_t>(rec_buffer_.data_l.size());
+    if (total == 0) return;
+
+    uint32_t st_f = static_cast<uint32_t>(std::clamp(trim_st, 0.0f, 0.99f) * total);
+    uint32_t end_f = static_cast<uint32_t>(std::clamp(trim_end, trim_st + 0.01f, 1.0f) * total);
+    if (end_f <= st_f) end_f = std::min(total, st_f + 512);
+
+    uint32_t span = end_f - st_f;
+    uint32_t slice_len = span / kDrumSlots;
+    if (slice_len < 16) return;
+
+    for (int i = 0; i < kDrumSlots; ++i) {
+        SampleBuffer buf;
+        buf.sample_rate = rec_buffer_.sample_rate;
+        buf.name = "SLC " + std::to_string(i + 1);
+        buf.data_l.resize(slice_len);
+        buf.data_r.resize(slice_len);
+        uint32_t offset = st_f + i * slice_len;
+
+        float peak = 0.001f;
+        for (uint32_t s = 0; s < slice_len; ++s) {
+            float l = rec_buffer_.data_l[offset + s];
+            float r = rec_buffer_.data_r[offset + s];
+            buf.data_l[s] = l;
+            buf.data_r[s] = r;
+            peak = std::max(peak, std::max(std::fabs(l), std::fabs(r)));
+        }
+        if (peak > 0.001f) {
+            float gain = 0.95f / peak;
+            for (uint32_t s = 0; s < slice_len; ++s) {
+                buf.data_l[s] = std::clamp(buf.data_l[s] * gain, -1.0f, 1.0f);
+                buf.data_r[s] = std::clamp(buf.data_r[s] * gain, -1.0f, 1.0f);
+            }
+        }
+        buf.loaded = true;
+        drum_slots_[i] = std::move(buf);
+    }
 }
 
 } // namespace groovebox

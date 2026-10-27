@@ -81,11 +81,18 @@ public:
 
     // Слот барабанів
     const SampleBuffer& drumSlot(int slot) const;
+    void setDrumSlot(int slot, SampleBuffer buf);
+
+    // --- 4. Live Looper & Slice Assignment ---
+    void assignTrimmedToSlot(int slot, float trim_st = 0.0f, float trim_end = 1.0f);
+    void sliceToDrumSlots(float trim_st = 0.0f, float trim_end = 1.0f);
+    void armSyncedRecording(uint32_t bars, float bpm, uint32_t sample_rate);
 
 private:
     RecMode rec_mode_ = RecMode::kManual;
     std::atomic<RecState> rec_state_{RecState::kIdle};
     std::atomic<uint32_t> rec_write_idx_{0};
+    std::atomic<uint32_t> target_frames_{0}; // для темпо-синхронізованого запису
     std::atomic<float> input_level_l_{0.0f};
     std::atomic<float> input_level_r_{0.0f};
 
