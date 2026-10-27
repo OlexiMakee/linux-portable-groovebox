@@ -186,7 +186,7 @@ void setupAppLayout(UiShell& shell) {
             char b[64];
             const int t = c.audio.getRowTrack(c.app.cursor_row);
             const int v = c.audio.getRowVoice(c.app.cursor_row);
-            std::snprintf(b, sizeof(b), "STEP INSPECTOR [T%d:V%d ST%03d]", t + 1, v + 1, c.app.cursor_step + 1);
+            std::snprintf(b, sizeof(b), "STEP EDITOR [T%d:V%d ST%03d]", t + 1, v + 1, c.app.cursor_step + 1);
             return std::string(b);
         };
         ins_spec.rows = {

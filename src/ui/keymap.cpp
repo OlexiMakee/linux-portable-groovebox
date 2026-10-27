@@ -58,12 +58,13 @@ Keymap::Keymap() {
     bind(ViewId::kSeq, Layer::kBase, Button::kB, Gesture::kPress, "SEQ.CLEAR_STEP");
     bind(ViewId::kSeq, Layer::kBase, Button::kX, Gesture::kPress, "SEQ.NOTE_DOWN");
     bind(ViewId::kSeq, Layer::kBase, Button::kY, Gesture::kPress, "SEQ.NOTE_UP");
+    bind(ViewId::kSeq, Layer::kBase, Button::kL1, Gesture::kPress, "SEQ.REC_TOGGLE");
 
     // SELECT шар у секвенсорі (Elektron Pattern / Track Operations & Polymetry)
     bind(ViewId::kSeq, Layer::kSelect, Button::kA,         Gesture::kPress, "STEP.PREVIEW");
     bind(ViewId::kSeq, Layer::kSelect, Button::kB,         Gesture::kPress, "SEQ.DEL_TRACK_SAFE");
-    bind(ViewId::kSeq, Layer::kSelect, Button::kX,         Gesture::kPress, "SEQ.CYCLE_LEN");
-    bind(ViewId::kSeq, Layer::kSelect, Button::kY,         Gesture::kPress, "SEQ.CYCLE_PAGE");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kX,         Gesture::kPress, "SEQ.LEN_DEC");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kY,         Gesture::kPress, "SEQ.LEN_INC");
     bind(ViewId::kSeq, Layer::kSelect, Button::kDpadLeft,  Gesture::kPress, "SEQ.LEN_DEC");
     bind(ViewId::kSeq, Layer::kSelect, Button::kDpadRight, Gesture::kPress, "SEQ.LEN_INC");
     bind(ViewId::kSeq, Layer::kSelect, Button::kStart,     Gesture::kPress, "ARP.OPEN");
@@ -121,12 +122,19 @@ Keymap::Keymap() {
     bind(ViewId::kSys, Layer::kSelect, Button::kB, Gesture::kPress, "VIEW.BACK");
 
     // =========================================================================
-    // 8. STEP INSPECTOR (ViewId::kInspect)
+    // 8. STEP EDITOR (ViewId::kInspect)
+    // Навігація вгору/вниз — D-Pad, зміна значень вліво/вправо — D-Pad
+    // Кнопка A — перемикання тригера (без зміни значень!), B — закриття
     // =========================================================================
-    bind(ViewId::kInspect, Layer::kBase, Button::kB, Gesture::kPress, "PARAM.INC");
-    bind(ViewId::kInspect, Layer::kBase, Button::kA, Gesture::kPress, "PARAM.DEC");
-    bind(ViewId::kInspect, Layer::kBase, Button::kX, Gesture::kPress, "PARAM.DEC_FAST");
-    bind(ViewId::kInspect, Layer::kBase, Button::kY, Gesture::kPress, "PARAM.INC_FAST");
+    bind(ViewId::kInspect, Layer::kBase, Button::kDpadUp,    Gesture::kPress, "NAV.UP");
+    bind(ViewId::kInspect, Layer::kBase, Button::kDpadDown,  Gesture::kPress, "NAV.DOWN");
+    bind(ViewId::kInspect, Layer::kBase, Button::kDpadLeft,  Gesture::kPress, "PARAM.DEC");
+    bind(ViewId::kInspect, Layer::kBase, Button::kDpadRight, Gesture::kPress, "PARAM.INC");
+    bind(ViewId::kInspect, Layer::kBase, Button::kX,         Gesture::kPress, "PARAM.DEC_FAST");
+    bind(ViewId::kInspect, Layer::kBase, Button::kY,         Gesture::kPress, "PARAM.INC_FAST");
+    bind(ViewId::kInspect, Layer::kBase, Button::kA,         Gesture::kPress, "SEQ.TRIG");
+    bind(ViewId::kInspect, Layer::kBase, Button::kB,         Gesture::kPress, "INSPECT.CLOSE");
+    bind(ViewId::kInspect, Layer::kSelect, Button::kB,       Gesture::kPress, "INSPECT.CLOSE");
 
     // =========================================================================
     // 9. ЖИВИЙ ПЕРФОРМАНС (ViewId::kPerf)
@@ -297,8 +305,21 @@ void InputRouter::processInput(UiContext& ctx) {
             dispatch(ctx, view, layer, ev.id, Gesture::kHold);
         }
 
-        // Автоповтор та довге утримання для параметрів A / B (крім SEQ)
-        if (ev.is_down && (ev.id == Button::kA || ev.id == Button::kB) && view != ViewId::kSeq) {
+        // Автоповтор для D-Pad (Up, Down, Left, Right)
+        bool is_dpad = (ev.id == Button::kDpadUp || ev.id == Button::kDpadDown ||
+                        ev.id == Button::kDpadLeft || ev.id == Button::kDpadRight);
+        if (ev.is_down && is_dpad) {
+            uint32_t elapsed = ctx.now_ms - press_time_ms_[idx];
+            if (elapsed >= 220) {
+                if (ctx.now_ms - repeat_last_ms_[idx] >= 75) {
+                    repeat_last_ms_[idx] = ctx.now_ms;
+                    dispatch(ctx, view, layer, ev.id, Gesture::kPress);
+                }
+            }
+        }
+
+        // Автоповтор та довге утримання для параметрів A / B (крім SEQ та STEP EDITOR)
+        if (ev.is_down && (ev.id == Button::kA || ev.id == Button::kB) && view != ViewId::kSeq && view != ViewId::kInspect) {
             uint32_t elapsed = ctx.now_ms - press_time_ms_[idx];
             if (elapsed >= 250) {
                 // Якщо утримуємо A або B на виборі ENGINE у SYNTH — відкриваємо селектор рушіїв
