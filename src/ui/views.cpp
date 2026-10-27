@@ -306,6 +306,28 @@ constexpr const char* kNoteNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G
 } // namespace
 
 void SeqView::navigate(UiContext& c, int dx, int dy, bool coarse) {
+    if (c.app.rec_mode) {
+        int t = c.app.selected_track;
+        auto tp = c.audio.getTrackParams(t);
+        const int max_lanes = (tp.engine == EngineType::kDrumRack) ? 8 : 12;
+        if (dy != 0) {
+            c.app.rec_cursor_lane = ((c.app.rec_cursor_lane + dy) % max_lanes + max_lanes) % max_lanes;
+        }
+        const int len = static_cast<int>(c.audio.getRowLength(t));
+        if (dx != 0 && len > 0) {
+            const int jump = coarse ? 4 : 1;
+            c.app.cursor_step = ((c.app.cursor_step + dx * jump) % len + len) % len;
+        }
+        const int vis_steps = static_cast<int>(kStepsPerPage);
+        if (c.app.cursor_step < c.app.seq_scroll_step) {
+            c.app.seq_scroll_step = c.app.cursor_step;
+        } else if (c.app.cursor_step >= c.app.seq_scroll_step + vis_steps) {
+            c.app.seq_scroll_step = c.app.cursor_step - vis_steps + 1;
+        }
+        c.app.seq_scroll_step = std::clamp(c.app.seq_scroll_step, 0, std::max(0, len - vis_steps));
+        return;
+    }
+
     const int active = c.audio.getActiveRowCount();
     const int slots = active < kTotalRows ? active + 1 : active;
     if (dy != 0) {
@@ -355,6 +377,134 @@ void SeqView::tick(UiContext& c) {
 }
 
 void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
+    if (c.app.rec_mode) {
+        const int t = c.app.selected_track;
+        const auto tp = c.audio.getTrackParams(t);
+        const uint32_t len = c.audio.getRowLength(t);
+        const uint32_t scroll_off = static_cast<uint32_t>(c.app.seq_scroll_step);
+        const int grid_x = area.x + 28;
+        const int step_w = 8;
+        const int grid_y = area.y + kHeaderH + 2;
+        const int len_x = grid_x + static_cast<int>(kStepsPerPage) * step_w + 4;
+        const uint32_t play = c.app.transport_playing ? (c.app.current_step % len) : UINT32_MAX;
+
+        if (tp.engine == EngineType::kDrumRack) {
+            // DRUM RACK 8 LANES
+            char hdr[96];
+            static const char* kDrumLanes[8] = {"BD", "SD", "CH", "OH", "CP", "RM", "TM", "PC"};
+            static constexpr uint8_t kDrumNotes[8] = {36, 38, 42, 46, 39, 37, 45, 49};
+            int cur_l = std::clamp(c.app.rec_cursor_lane, 0, 7);
+            std::snprintf(hdr, sizeof(hdr), "TRK %d: DRUM REC [%s] | LN %02d %s | ST%03d | L%u",
+                          t + 1, getEngineTypeName(tp.engine), cur_l + 1, kDrumLanes[cur_l], c.app.cursor_step + 1, len);
+            cv.text(area.x + 4, area.y + 3, hdr, palette::kAccentOrange);
+
+            const int row_h = std::clamp((area.h - kHeaderH - 4) / 8, 10, 16);
+            for (int l = 0; l < 8; ++l) {
+                const int y = grid_y + l * row_h;
+                const bool is_lane = (l == cur_l);
+                if (is_lane) cv.fill(area.x + 2, y, 24, row_h - 1, palette::kHeaderSel);
+                char lbl[8];
+                std::snprintf(lbl, sizeof(lbl), "%02d%s", l + 1, kDrumLanes[l]);
+                cv.text(area.x + 4, y + (row_h - 5) / 2, lbl, is_lane ? palette::kAccentOrange : palette::kTextDim);
+
+                const uint8_t target_note = kDrumNotes[l];
+                const int th = row_h - 3;
+                for (uint32_t s = 0; s < kStepsPerPage; ++s) {
+                    const uint32_t idx = scroll_off + s;
+                    const int x = grid_x + static_cast<int>(s) * step_w;
+                    if (idx < len) {
+                        const bool beat_alt = (((s / 4) + l) % 2 == 1);
+                        const ColorRGB bg_col = beat_alt ? ColorRGB{26, 26, 32} : ColorRGB{16, 16, 20};
+                        cv.fill(x, y + 1, step_w - 1, th, bg_col);
+
+                        const auto sd = c.audio.getStep(t, static_cast<int>(idx));
+                        bool active_hit = sd.enabled && (sd.note == target_note ||
+                                                         sd.chord_notes[1] == target_note ||
+                                                         sd.chord_notes[2] == target_note ||
+                                                         sd.chord_notes[3] == target_note);
+                        if (active_hit) {
+                            cv.fill(x + 1, y + 2, step_w - 3, th - 2, sd.is_param_trig ? palette::kParamTrig : palette::kAccentOrange);
+                        } else {
+                            if (s % 4 == 0) cv.fill(x + 2, y + row_h / 2 - 1, 2, 2, palette::kGridDim);
+                            else cv.fill(x + 3, y + row_h / 2, 1, 1, ColorRGB{42, 42, 50});
+                        }
+                        if (idx == play) cv.line(x + 3, y, x + 3, y + row_h - 2, palette::kCursorWhite);
+                    } else if (idx == len) {
+                        cv.line(x, y, x, y + row_h - 2, palette::kAccentOrange);
+                    } else {
+                        const bool beat_alt = (((s / 4) + l) % 2 == 1);
+                        cv.fill(x, y + 1, step_w - 1, th, beat_alt ? ColorRGB{12, 12, 16} : ColorRGB{8, 8, 10});
+                    }
+                    if (is_lane && idx == static_cast<uint32_t>(c.app.cursor_step)) {
+                        cv.rect(x - 1, y, step_w, row_h, palette::kCursorWhite);
+                    }
+                }
+                char ltxt[8];
+                std::snprintf(ltxt, sizeof(ltxt), "%u", len);
+                cv.text(len_x, y + (row_h - 5) / 2, ltxt, is_lane ? palette::kAccentOrange : palette::kGridDim);
+            }
+        } else {
+            // MELODIC SYNTH 12-SEMITONE PIANO ROLL
+            char hdr[96];
+            static const char* kSemiNames[12] = {"B ", "A#", "A ", "G#", "G ", "F#", "F ", "E ", "D#", "D ", "C#", "C "};
+            static const int kSemiIntervals[12] = {11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+            int cur_l = std::clamp(c.app.rec_cursor_lane, 0, 11);
+            int cur_pitch = c.app.rec_octave * 12 + kSemiIntervals[cur_l];
+            std::snprintf(hdr, sizeof(hdr), "TRK %d: PIANO ROLL [%s] | OCT %d | NOTE %s%d | L%u",
+                          t + 1, getEngineTypeName(tp.engine), c.app.rec_octave, kNoteNames[cur_pitch % 12], cur_pitch / 12 - 1, len);
+            cv.text(area.x + 4, area.y + 3, hdr, palette::kAccentCyan);
+
+            const int row_h = std::clamp((area.h - kHeaderH - 4) / 12, 8, 12);
+            for (int l = 0; l < 12; ++l) {
+                const int y = grid_y + l * row_h;
+                const bool is_lane = (l == cur_l);
+                if (is_lane) cv.fill(area.x + 2, y, 24, row_h - 1, palette::kHeaderSel);
+                int row_pitch = c.app.rec_octave * 12 + kSemiIntervals[l];
+                bool is_sharp = (kSemiNames[l][1] == '#');
+                char lbl[8];
+                std::snprintf(lbl, sizeof(lbl), "%-3s", kSemiNames[l]);
+                cv.text(area.x + 4, y + (row_h - 5) / 2, lbl, is_lane ? palette::kAccentCyan : (is_sharp ? palette::kGridDim : palette::kTextDim));
+
+                const int th = row_h - 2;
+                for (uint32_t s = 0; s < kStepsPerPage; ++s) {
+                    const uint32_t idx = scroll_off + s;
+                    const int x = grid_x + static_cast<int>(s) * step_w;
+                    if (idx < len) {
+                        const bool beat_alt = (((s / 4) + l) % 2 == 1);
+                        ColorRGB bg_col = is_sharp ? (beat_alt ? ColorRGB{14, 14, 18} : ColorRGB{10, 10, 14})
+                                                   : (beat_alt ? ColorRGB{26, 26, 32} : ColorRGB{18, 18, 24});
+                        cv.fill(x, y + 1, step_w - 1, th, bg_col);
+
+                        const auto sd = c.audio.getStep(t, static_cast<int>(idx));
+                        bool active_note = sd.enabled && (sd.note == row_pitch ||
+                                                          sd.chord_notes[1] == row_pitch ||
+                                                          sd.chord_notes[2] == row_pitch ||
+                                                          sd.chord_notes[3] == row_pitch);
+                        if (active_note) {
+                            cv.fill(x + 1, y + 1, step_w - 3, th - 1, sd.is_param_trig ? palette::kParamTrig : palette::kAccentCyan);
+                        } else {
+                            if (s % 4 == 0) cv.fill(x + 2, y + row_h / 2 - 1, 2, 2, palette::kGridDim);
+                            else cv.fill(x + 3, y + row_h / 2, 1, 1, ColorRGB{36, 36, 44});
+                        }
+                        if (idx == play) cv.line(x + 3, y, x + 3, y + row_h - 1, palette::kCursorWhite);
+                    } else if (idx == len) {
+                        cv.line(x, y, x, y + row_h - 1, palette::kAccentOrange);
+                    } else {
+                        const bool beat_alt = (((s / 4) + l) % 2 == 1);
+                        cv.fill(x, y + 1, step_w - 1, th, beat_alt ? ColorRGB{10, 10, 14} : ColorRGB{6, 6, 8});
+                    }
+                    if (is_lane && idx == static_cast<uint32_t>(c.app.cursor_step)) {
+                        cv.rect(x - 1, y, step_w, row_h, palette::kCursorWhite);
+                    }
+                }
+                char ltxt[8];
+                std::snprintf(ltxt, sizeof(ltxt), "%u", len);
+                cv.text(len_x, y + (row_h - 5) / 2, ltxt, is_lane ? palette::kAccentCyan : palette::kGridDim);
+            }
+        }
+        return;
+    }
+
     const int active = c.audio.getActiveRowCount();
     const bool on_add = c.app.cursor_row >= active;
     const int cur_r = on_add ? active - 1 : c.app.cursor_row;

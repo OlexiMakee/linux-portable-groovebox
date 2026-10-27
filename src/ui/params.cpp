@@ -651,13 +651,18 @@ ParamRegistry::ParamRegistry() {
             auto m = c.app.sampler.recordingMode();
             switch (m) {
                 case RecMode::kThreshold: return "THRESH";
-                case RecMode::kSyncBar:   return "SYNC 1BAR";
+                case RecMode::kSyncBar:   return "SYNC 2BAR";
                 default:                  return "MANUAL";
             }
         };
         p.step = [](UiContext& c, int dir, bool) {
             int m = (static_cast<int>(c.app.sampler.recordingMode()) + dir + 3) % 3;
-            c.app.sampler.setRecordingMode(static_cast<RecMode>(m));
+            auto mode = static_cast<RecMode>(m);
+            c.app.sampler.setRecordingMode(mode);
+            if (mode == RecMode::kSyncBar) {
+                c.app.sampler.armSyncedRecording(2, c.app.bpm, c.tel.sample_rate);
+                c.app.last_action = "SYNC LOOPER 2BARS";
+            }
         };
         add(std::move(p));
     }
@@ -718,9 +723,15 @@ ParamRegistry::ParamRegistry() {
         p.value = [](const UiContext& c) {
             return "TRK " + std::to_string(c.app.sample_target_track + 1);
         };
-        p.step = [](UiContext& c, int dir, bool) {
-            c.app.sample_target_track = (c.app.sample_target_track + dir + 4) % 4;
-            c.app.last_action = "ASSIGN TO T" + std::to_string(c.app.sample_target_track + 1);
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            if (coarse) {
+                c.app.sampler.sliceToDrumSlots(c.app.sample_trim_start, c.app.sample_trim_end);
+                c.app.last_action = "SLICED -> DRUM SLOTS 1-8";
+            } else {
+                c.app.sample_target_track = (c.app.sample_target_track + dir + 4) % 4;
+                c.app.sampler.assignTrimmedToSlot(c.app.sample_target_track, c.app.sample_trim_start, c.app.sample_trim_end);
+                c.app.last_action = "ASSIGNED -> TRK " + std::to_string(c.app.sample_target_track + 1);
+            }
         };
         add(std::move(p));
     }

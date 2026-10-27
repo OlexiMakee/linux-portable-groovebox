@@ -113,6 +113,63 @@ ActionRegistry::ActionRegistry() {
 
     // ---------------- Секвенсор: кроки, ноти, патерни ----------------
     add(Action{"SEQ.TRIG", "TRIG", [](UiContext& c) {
+        if (c.app.rec_mode) {
+            int t = c.app.selected_track;
+            auto tp = c.audio.getTrackParams(t);
+            int step = c.app.cursor_step;
+            auto st = c.audio.getStep(t, step);
+
+            if (tp.engine == EngineType::kDrumRack) {
+                static constexpr uint8_t kDrumNotes[8] = {36, 38, 42, 46, 39, 37, 45, 49};
+                uint8_t note = kDrumNotes[std::clamp(c.app.rec_cursor_lane, 0, 7)];
+                bool found = false;
+                if (st.enabled && st.note == note) {
+                    found = true;
+                    if (st.chord_notes[1] != 255) { st.note = st.chord_notes[1]; st.chord_notes[1] = 255; }
+                    else if (st.chord_notes[2] != 255) { st.note = st.chord_notes[2]; st.chord_notes[2] = 255; }
+                    else if (st.chord_notes[3] != 255) { st.note = st.chord_notes[3]; st.chord_notes[3] = 255; }
+                    else { st.enabled = false; }
+                } else {
+                    for (int ch = 1; ch < 4; ++ch) {
+                        if (st.chord_notes[ch] == note) {
+                            st.chord_notes[ch] = 255;
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if (!found) {
+                    if (!st.enabled) {
+                        st.enabled = true;
+                        st.is_param_trig = false;
+                        st.note = note;
+                    } else {
+                        for (int ch = 1; ch < 4; ++ch) {
+                            if (st.chord_notes[ch] == 255) {
+                                st.chord_notes[ch] = note;
+                                break;
+                            }
+                        }
+                    }
+                    c.audio.triggerVoice(t * 4, note, 0.90f);
+                }
+                c.audio.setStep(t, step, st);
+            } else {
+                // Melodic synth piano roll
+                int pitch = c.app.rec_octave * 12 + (11 - std::clamp(c.app.rec_cursor_lane, 0, 11));
+                if (st.enabled && st.note == pitch) {
+                    st.enabled = false;
+                } else {
+                    st.enabled = true;
+                    st.is_param_trig = false;
+                    st.note = static_cast<uint8_t>(pitch);
+                    c.audio.triggerNote(t, pitch, 0.90f);
+                }
+                c.audio.setStep(t, step, st);
+            }
+            return;
+        }
+
         const int act = c.audio.getActiveRowCount();
         if (c.app.cursor_row >= act) {
             if (act < kTotalRows) {
@@ -127,7 +184,7 @@ ActionRegistry::ActionRegistry() {
     }});
     add(Action{"SEQ.REC_TOGGLE", "REC", [](UiContext& c) {
         c.app.rec_mode = !c.app.rec_mode;
-        c.app.last_action = c.app.rec_mode ? "REC MODE" : "SEQ OVERVIEW";
+        c.app.last_action = c.app.rec_mode ? "REC EXPANDED" : "SEQ OVERVIEW";
     }});
     add(Action{"SEQ.ADD_TRACK_SINGLE", "ADD TRK", [](UiContext& c) {
         const int act = c.audio.getActiveRowCount();
@@ -149,7 +206,9 @@ ActionRegistry::ActionRegistry() {
         }
     }});
     add(Action{"SEQ.CLEAR_STEP", "DEL", [](UiContext& c) {
-        if (c.app.cursor_row < c.audio.getActiveRowCount()) {
+        if (c.app.rec_mode) {
+            c.audio.clearStep(c.app.selected_track, c.app.cursor_step);
+        } else if (c.app.cursor_row < c.audio.getActiveRowCount()) {
             c.audio.clearStep(c.app.cursor_row, c.app.cursor_step);
         }
     }});
@@ -163,9 +222,20 @@ ActionRegistry::ActionRegistry() {
             c.audio.randomizeRow(c.app.cursor_row);
         }
     }});
-    add(Action{"SEQ.NOTE_UP", "NOTE+", [](UiContext& c) {
-        if (c.app.cursor_row < c.audio.getActiveRowCount()) {
+    add(Action{"SEQ.NOTE_UP", "OCT+/NOTE+", [](UiContext& c) {
+        if (c.app.rec_mode) {
+            c.app.rec_octave = std::min(6, c.app.rec_octave + 1);
+            c.app.last_action = "REC OCTAVE " + std::to_string(c.app.rec_octave);
+        } else if (c.app.cursor_row < c.audio.getActiveRowCount()) {
             c.audio.adjustStepNote(c.app.cursor_row, c.app.cursor_step, +1);
+        }
+    }});
+    add(Action{"SEQ.NOTE_DOWN", "OCT-/NOTE-", [](UiContext& c) {
+        if (c.app.rec_mode) {
+            c.app.rec_octave = std::max(1, c.app.rec_octave - 1);
+            c.app.last_action = "REC OCTAVE " + std::to_string(c.app.rec_octave);
+        } else if (c.app.cursor_row < c.audio.getActiveRowCount()) {
+            c.audio.adjustStepNote(c.app.cursor_row, c.app.cursor_step, -1);
         }
     }});
     add(Action{"SEQ.NOTE_DOWN", "NOTE-", [](UiContext& c) {
