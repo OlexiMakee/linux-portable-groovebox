@@ -271,6 +271,30 @@ static void testInputRouterAndStepEditor() {
     bool switch_ok = hw_mon.requestUsbRoleSwitch("device_ssh");
     TEST_ASSERT(switch_ok == true, "requestUsbRoleSwitch executes asynchronously without blocking");
     TEST_ASSERT(hw_mon.getSnapshot().usb_role == "device_ssh", "USB role snapshot updated to device_ssh");
+
+    // 8. Тестування REC Mode: Piano Roll (мелодійний рушій) та Drum Lanes (драм-рек)
+    app.rec_mode = true;
+    app.selected_track = 1; // Track 2 (303 Bassline)
+    app.rec_cursor_lane = 11; // Нота C
+    app.rec_octave = 3;
+    app.cursor_step = 2;
+    ActionRegistry::instance().run("SEQ.TRIG", ctx);
+    TEST_ASSERT(audio.getStep(1, 2).enabled == true && audio.getStep(1, 2).note == 36, "REC Piano Roll sets C2 note 36 on step");
+
+    app.selected_track = 0; // Track 1 (Drum Rack)
+    auto tp_d = audio.getTrackParams(0);
+    tp_d.engine = EngineType::kDrumRack;
+    audio.setTrackParams(0, tp_d);
+    app.rec_cursor_lane = 0; // BD (note 36)
+    app.cursor_step = 0;
+    ActionRegistry::instance().run("SEQ.TRIG", ctx);
+    TEST_ASSERT(audio.getStep(0, 0).enabled == true && audio.getStep(0, 0).note == 36, "REC Drum Lanes sets BD note 36 on step");
+
+    // 9. Тестування автоматичного нарізання лупера та призначення на слоти
+    app.sampler.sliceToDrumSlots(0.0f, 1.0f);
+    TEST_ASSERT(app.sampler.drumSlot(0).loaded == true, "Looper sliceToDrumSlots populates slot 1");
+    TEST_ASSERT(app.sampler.drumSlot(7).loaded == true, "Looper sliceToDrumSlots populates slot 8");
+    app.rec_mode = false;
 }
 
 static void testViewsRendering() {

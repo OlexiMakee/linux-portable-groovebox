@@ -67,11 +67,32 @@ int main() {
         std::printf("Saved: %s\n", path);
     };
 
-    // 1. SEQ Tab
+    // 1. SEQ Tab (Overview)
     app.active_view = ViewId::kSeq;
+    app.rec_mode = false;
     input = InputState{};
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_01_seq.bmp");
+
+    // 1b. SEQ Tab (REC Mode: Drum Lanes)
+    app.rec_mode = true;
+    app.selected_track = 0;
+    auto tp0 = audio_engine.getTrackParams(0);
+    tp0.engine = EngineType::kDrumRack;
+    audio_engine.setTrackParams(0, tp0);
+    app.rec_cursor_lane = 1; // SD
+    app.cursor_step = 4;
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
+    capture("/tmp/xu10_tour/tour_01_rec_drums.bmp");
+
+    // 1c. SEQ Tab (REC Mode: Melodic Synth Piano Roll)
+    app.selected_track = 1; // 303
+    app.rec_cursor_lane = 8; // D#
+    app.rec_octave = 3;
+    app.cursor_step = 2;
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
+    capture("/tmp/xu10_tour/tour_01_rec_piano.bmp");
+    app.rec_mode = false;
 
     // 2. SYNTH Tab (Cyan tab)
     app.active_view = ViewId::kSynth;
