@@ -308,8 +308,9 @@ ActionRegistry::ActionRegistry() {
             c.app.last_action = "VIEW: MIX";
         }
     }});
-    add(Action{"TAB.R1", "PERF", [](UiContext& c) {
-        c.app.active_view = ViewId::kPerf;
+    add(Action{"TAB.R1", "SAMPLE", [](UiContext& c) {
+        c.app.active_view = ViewId::kSample;
+        c.app.last_action = "VIEW: SAMPLE";
     }});
     add(Action{"TAB.G", "SYS", [](UiContext& c) {
         if (c.app.active_view != ViewId::kSys) {
@@ -329,14 +330,14 @@ ActionRegistry::ActionRegistry() {
         c.app.arp_modal_open = !c.app.arp_modal_open;
         c.app.last_action = c.app.arp_modal_open ? "ARP OPENED" : "ARP CLOSED";
     }});
-    add(Action{"TAB.SEL_R2", "SCOPE", [](UiContext& c) {
-        if (c.app.active_view == ViewId::kScope) {
+    add(Action{"TAB.SEL_R2", "SAMPLE", [](UiContext& c) {
+        if (c.app.active_view == ViewId::kSample) {
             c.app.active_view = c.app.previous_view;
-            c.app.last_action = "SCOPE CLOSED";
+            c.app.last_action = "SAMPLE CLOSED";
         } else {
             c.app.previous_view = c.app.active_view;
-            c.app.active_view = ViewId::kScope;
-            c.app.last_action = "VIEW: SCOPE";
+            c.app.active_view = ViewId::kSample;
+            c.app.last_action = "VIEW: SAMPLE";
         }
     }});
     add(Action{"TAB.SEL_R1", "PERF", [](UiContext& c) {
@@ -357,7 +358,7 @@ ActionRegistry::ActionRegistry() {
             c.app.engine_menu_open = false;
         } else if (c.app.step_inspector_open) {
             c.app.step_inspector_open = false;
-        } else if (c.app.active_view == ViewId::kSys || c.app.active_view == ViewId::kScope || c.app.active_view == ViewId::kPerf) {
+        } else if (c.app.active_view == ViewId::kSys || c.app.active_view == ViewId::kSample || c.app.active_view == ViewId::kPerf) {
             c.app.active_view = c.app.previous_view;
         }
     }});

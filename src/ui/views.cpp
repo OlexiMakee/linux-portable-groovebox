@@ -220,8 +220,8 @@ void GridView::renderList(Canvas& cv, const UiContext& c, Rect area, bool popup)
     int y0 = area.y + kHeaderH + 2;
     if (popup) {
         row_h = kPopupRowH;
-        value_x = 64;
-        box.w = 180;
+        value_x = 54;
+        box.w = 236; // Ширше вікно для відображення піано-ролу акордів
         box.h = std::min(area.h - 8, num_rows * row_h + 18);
         box.x = area.x + (area.w - box.w) / 2;
         box.y = area.y + 6;
@@ -230,6 +230,40 @@ void GridView::renderList(Canvas& cv, const UiContext& c, Rect area, bool popup)
         cv.fill(box.x + 1, box.y + 1, box.w - 2, 10, palette::kHeaderSel);
         if (spec_.header) cv.text(box.x + 4, box.y + 3, spec_.header(c), spec_.accent);
         y0 = box.y + 14;
+
+        // Міні-піанорол акорду праворуч (Digitakt chord mini-roll)
+        const int pr_x = box.x + 154;
+        const int pr_y = y0;
+        const int pr_w = box.w - 158;
+        const int pr_h = box.h - 18;
+
+        cv.rect(pr_x, pr_y, pr_w, pr_h, palette::kGridDim);
+        cv.text(pr_x + 4, pr_y + 2, "CHORD ROLL", palette::kTextDim);
+
+        // Отримуємо активні ноти на поточному кроці
+        const int cur_r = c.app.cursor_row;
+        const int cur_s = c.app.cursor_step;
+        const auto st = (cur_r < c.audio.getActiveRowCount()) ? c.audio.getStep(cur_r, cur_s) : SequencerStep{};
+
+        const int base_oct = st.note / 12;
+        const int key_h = std::max(6, (pr_h - 16) / 12);
+        static constexpr bool is_black[12] = {false, true, false, true, false, false, true, false, true, false, true, false};
+        static constexpr const char* kKeyNames[12] = {"B", "A#", "A", "G#", "G", "F#", "F", "E", "D#", "D", "C#", "C"};
+        static constexpr int kKeyPitch[12] = {11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+
+        for (int k = 0; k < 12; ++k) {
+            int ky = pr_y + 12 + k * key_h;
+            int pitch = base_oct * 12 + kKeyPitch[k];
+            bool active = (st.note == pitch);
+            for (int cn = 1; cn < 4; ++cn) {
+                if (st.chord_notes[cn] == pitch) active = true;
+            }
+
+            ColorRGB bg = active ? palette::kAccentCyan : (is_black[k] ? ColorRGB{20, 24, 32} : ColorRGB{52, 60, 72});
+            cv.fill(pr_x + 2, ky, pr_w - 4, key_h - 1, bg);
+            ColorRGB tc = active ? palette::kBgDark : (is_black[k] ? palette::kTextDim : palette::kTextMain);
+            cv.text(pr_x + 4, ky + 1, kKeyNames[k], tc);
+        }
     } else if (spec_.header) {
         cv.text(area.x + 4, area.y + 3, spec_.header(c), spec_.accent);
     }
@@ -240,7 +274,8 @@ void GridView::renderList(Canvas& cv, const UiContext& c, Rect area, bool popup)
         const int r = scroll + i;
         const Param* p = rows[r].second.empty() ? nullptr : rows[r].second[0];
         if (!p) continue;
-        const Rect rr{box.x + 3, y0 + i * row_h, box.w - 6, row_h - 1};
+        const int row_w = popup ? 148 : box.w - 6;
+        const Rect rr{box.x + 3, y0 + i * row_h, row_w, row_h - 1};
         widgets::listRow(cv, rr, p->labelFor(c), p->value(c), r == sel_r, p->editable(), value_x, spec_.accent);
     }
 }
@@ -432,28 +467,105 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
 }
 
 // =====================================================================================
-// ScopeView
+// SampleView — станція семплювання та лупера
 // =====================================================================================
-void ScopeView::render(Canvas& cv, const UiContext& c, Rect area) const {
-    cv.text(area.x + 4, area.y + 3, "OUTPUT SCOPE & LEVELS", palette::kAccentCyan);
-    widgets::scope(cv, Rect{area.x + 4, area.y + kHeaderH + 2, area.w - 8, 96}, c.tel.scope_samples, palette::kAccentCyan);
+static const char* kSampleParams[2][4] = {
+    {"SMP.SRC", "SMP.ARM", "SMP.MODE", "SMP.THRS"},
+    {"SMP.TRIM_ST", "SMP.TRIM_END", "SMP.ZOOM", "SMP.ASSIGN"}
+};
 
-    const int y0 = area.y + kHeaderH + 104;
-    const int tracks = std::max(1, (c.audio.getActiveRowCount() + kVoicesPerTrack - 1) / kVoicesPerTrack);
-    for (int t = 0; t < kTracksCount; ++t) {
-        const int y = y0 + t * 12;
-        const auto tp = c.audio.getTrackParams(t);
-        const bool on = t < tracks;
-        char b[32];
-        std::snprintf(b, sizeof(b), "T%d %-11s", t + 1, on ? getEngineTypeName(tp.engine) : "OFF");
-        cv.text(area.x + 6, y + 2, b, on ? (tp.muted ? palette::kGridDim : palette::kTextMain) : palette::kGridDim);
-        widgets::meter(cv, Rect{area.x + 70, y, area.w - 78, 9}, on && !tp.muted ? c.tel.track_levels[t] * 1.4f : 0.0f);
+void SampleView::navigate(UiContext& c, int dx, int dy, bool) {
+    if (dy != 0) {
+        cursor_row_ = (cursor_row_ + dy + 2) % 2;
     }
-    const int yv = y0 + 4 * 12 + 2;
-    cv.text(area.x + 6, yv + 2, "OUT L", palette::kTextDim);
-    widgets::meter(cv, Rect{area.x + 34, yv, (area.w - 50) / 2, 9}, c.tel.vu_left);
-    cv.text(area.x + 38 + (area.w - 50) / 2, yv + 2, "R", palette::kTextDim);
-    widgets::meter(cv, Rect{area.x + 46 + (area.w - 50) / 2, yv, (area.w - 50) / 2 - 4, 9}, c.tel.vu_right);
+    if (dx != 0) {
+        cursor_col_ = (cursor_col_ + dx + 4) % 4;
+    }
+    c.app.grid_row[static_cast<int>(ViewId::kSample)] = cursor_row_;
+    c.app.grid_col[static_cast<int>(ViewId::kSample)] = cursor_col_;
+}
+
+const Param* SampleView::focusedParam(const UiContext&) const {
+    int r = std::clamp(cursor_row_, 0, 1);
+    int col = std::clamp(cursor_col_, 0, 3);
+    return ParamRegistry::instance().find(kSampleParams[r][col]);
+}
+
+std::string SampleView::focusId(const UiContext& c) const {
+    const Param* p = focusedParam(c);
+    return p ? p->id : "SAMPLE";
+}
+
+void SampleView::render(Canvas& cv, const UiContext& c, Rect area) const {
+    // 1. Заголовок
+    char hdr[64];
+    auto st = c.app.sampler.recordingState();
+    const char* st_name = (st == RecState::kRecording) ? "RECORDING..." : (st == RecState::kArmed ? "ARMED (WAITING)" : "STANDBY");
+    std::snprintf(hdr, sizeof(hdr), "SAMPLING WORKSTATION [%s]", st_name);
+    cv.text(area.x + 4, area.y + 3, hdr, (st == RecState::kRecording) ? palette::kLevelWarnClip : palette::kAccentCyan);
+
+    // 2. Велике вікно візуалізації хвилеформи (Elektron Digitakt style)
+    const int wf_x = area.x + 4;
+    const int wf_y = area.y + kHeaderH + 2;
+    const int wf_w = area.w - 8;
+    const int wf_h = 70;
+
+    cv.fill(wf_x, wf_y, wf_w, wf_h, palette::kPanelBg);
+    cv.rect(wf_x, wf_y, wf_w, wf_h, palette::kGridDim);
+
+    // Підсвітка активної зони обрізки (Trim Start .. Trim End)
+    const int st_px = wf_x + static_cast<int>(c.app.sample_trim_start * (wf_w - 2));
+    const int end_px = wf_x + static_cast<int>(c.app.sample_trim_end * (wf_w - 2));
+    cv.fill(st_px, wf_y + 1, std::max(2, end_px - st_px), wf_h - 2, ColorRGB{16, 28, 36});
+
+    // Центральна нульова вісь
+    const int mid_y = wf_y + wf_h / 2;
+    cv.line(wf_x + 1, mid_y, wf_x + wf_w - 2, mid_y, ColorRGB{32, 40, 52});
+
+    const auto& sbuf = c.app.sampler.recordedSample();
+    const uint32_t total_frames = sbuf.lengthFrames();
+
+    if (total_frames > 64) {
+        // Відмальовуємо піки хвилі з буфера
+        const float step_frames = static_cast<float>(total_frames) / static_cast<float>(wf_w - 4);
+        for (int px = 0; px < wf_w - 4; ++px) {
+            uint32_t f_idx = static_cast<uint32_t>(px * step_frames);
+            if (f_idx >= total_frames) break;
+            float amp = std::abs(sbuf.data_l[f_idx]);
+            int bar_h = std::clamp(static_cast<int>(amp * (wf_h / 2 - 2)), 1, wf_h / 2 - 2);
+            cv.line(wf_x + 2 + px, mid_y - bar_h, wf_x + 2 + px, mid_y + bar_h, palette::kAccentCyan);
+        }
+    } else {
+        // Якщо буфер порожній — відображаємо живий монітор сигналу
+        widgets::scope(cv, Rect{wf_x + 2, wf_y + 2, wf_w - 4, wf_h - 4}, c.tel.scope_samples, palette::kAccentCyan);
+    }
+
+    // Маркери TRIM START та TRIM END
+    cv.line(st_px, wf_y + 1, st_px, wf_y + wf_h - 2, palette::kAccentOrange);
+    cv.text(st_px + 2, wf_y + 3, "ST", palette::kAccentOrange);
+
+    cv.line(end_px, wf_y + 1, end_px, wf_y + wf_h - 2, palette::kAccentCyan);
+    cv.text(std::max(wf_x + 2, end_px - 18), wf_y + wf_h - 9, "END", palette::kAccentCyan);
+
+    // 3. Таблиця параметрів під хвилеформою (2 рядки по 4 параметри)
+    const int table_y = wf_y + wf_h + 4;
+    const int cell_w = (wf_w - 20) / 4;
+    const int cell_h = 24;
+
+    for (int r = 0; r < 2; ++r) {
+        for (int col = 0; col < 4; ++col) {
+            const Param* p = ParamRegistry::instance().find(kSampleParams[r][col]);
+            if (!p) continue;
+            const int cx = wf_x + col * (cell_w + 2);
+            const int cy = table_y + r * (cell_h + 2);
+            const bool is_sel = (r == cursor_row_ && col == cursor_col_);
+            widgets::paramCell(cv, Rect{cx, cy, cell_w, cell_h}, p->labelFor(c), p->value(c), p->norm ? p->norm(c) : -1.0f, is_sel, p->editable(), palette::kAccentCyan);
+        }
+    }
+
+    // 4. Вертикальний VU-метр входу праворуч
+    const int meter_x = wf_x + 4 * (cell_w + 2) + 2;
+    widgets::verticalMeter(cv, Rect{meter_x, table_y, 8, cell_h * 2 + 2}, c.app.sampler.inputLevelL());
 }
 
 // =====================================================================================

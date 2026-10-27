@@ -147,12 +147,12 @@ void setupAppLayout(UiShell& shell) {
     }
 
     // =========================================================================
-    // 5. ОСЦИЛОГРАФ (SCOPE)
+    // 5. РОБОЧА СТАНЦІЯ СЕМПЛЮВАННЯ (SAMPLE)
     // =========================================================================
-    shell.registerView(std::make_unique<ScopeView>());
+    shell.registerView(std::make_unique<SampleView>());
 
     // =========================================================================
-    // 6. СИСТЕМНІ НАЛАШТУВАННЯ (SYS) — ТАБЛИЧНЕ МЕНЮ 4x3 ТА СТАТУС-ОВЕРЛЕЙ
+    // 6. СИСТЕМНІ НАЛАШТУВАННЯ (SYS) — ТАБЛИЧНЕ МЕНЮ 4x2 ТА СТАТУС-ОВЕРЛЕЙ
     // =========================================================================
     {
         GridSpec sys_spec;
@@ -168,7 +168,6 @@ void setupAppLayout(UiShell& shell) {
         };
         sys_spec.rows = {
             {"PROJ", {"SYS.BANK", "SYS.PAT", "SYS.SAVE", "SYS.LOAD"}},
-            {"SMPL", {"SYS.SAMPLER", "SYS.SLICES", "SYS.REC_SRC", "SYS.REC_ARM"}},
             {"AUD",  {"SYS.BUF", "SYS.USB", "SYS.OUT", "SYS.PANIC"}}
         };
         shell.registerView(std::make_unique<GridView>(std::move(sys_spec)));
@@ -192,6 +191,9 @@ void setupAppLayout(UiShell& shell) {
         ins_spec.rows = {
             {"", {"STEP.TYPE"}},
             {"", {"STEP.NOTE"}},
+            {"", {"STEP.CHORD1"}},
+            {"", {"STEP.CHORD2"}},
+            {"", {"STEP.CHORD3"}},
             {"", {"STEP.VEL"}},
             {"", {"STEP.GATE"}},
             {"", {"STEP.SLIDE"}},
@@ -232,15 +234,15 @@ void setupAppLayout(UiShell& shell) {
 
     // =========================================================================
     // 10. ВКЛАДКИ ВЕРХНЬОГО РЯДУ
-    // Порядок зліва направо: L1 (SEQ), L2 (SYNTH), R2 (MIX <-> FX), R1 (PERF), G (SYS)
+    // Порядок зліва направо: L1 (SEQ), L2 (SYNTH), R2 (MIX <-> FX), R1 (SAMPLE), G (SYS)
     // 4 однакові вкладки під пальці по 70px + вузька SYS 40px = 320px
-    // Вкладка R1 закріплена виключно за живим Performance Mode!
+    // Вкладка R1: Робоча станція семплювання (SAMPLE). Живий PERF викликається через SELECT + R1!
     // =========================================================================
     shell.setTabSlots({
         TabSlot{"[L1]", {ViewId::kSeq}, 70},
         TabSlot{"[L2]", {ViewId::kSynth}, 70},
         TabSlot{"[R2]", {ViewId::kMix, ViewId::kFx}, 70},
-        TabSlot{"[R1]", {ViewId::kPerf}, 70},
+        TabSlot{"[R1]", {ViewId::kSample}, 70},
         TabSlot{"[G]",  {ViewId::kSys}, 40}
     });
 }
