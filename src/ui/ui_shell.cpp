@@ -142,9 +142,18 @@ void UiShell::renderTabBar(Canvas& cv, const UiContext& ctx) {
         else if (slot.key_label == "[R1]") is_held = ctx.in.r1;
         else if (slot.key_label == "[G]")  is_held = ctx.in.btn_fn;
 
-        // Формуємо підпис: наприклад "[L1] SYNTH" або "[R2] MIX"
+        // Формуємо підпис: наприклад "[L1] SYNTH" або "[R2] MIX/FX"
         std::string title = slot.key_label;
-        if (is_active && active_in_slot) {
+        if (ctx.in.btn_select) {
+            if (slot.key_label == "[L1]") title += " INSP";
+            else if (slot.key_label == "[L2]") title += " ARP";
+            else if (slot.key_label == "[R2]") title += " SCOPE";
+            else if (slot.key_label == "[R1]") title += " PERF";
+            else if (slot.key_label == "[G]")  title += " SYS";
+        } else if (slot.key_label == "[R2]") {
+            if (ctx.app.active_view == ViewId::kFx) title += " FX/MIX";
+            else title += " MIX/FX";
+        } else if (is_active && active_in_slot) {
             title += " " + active_in_slot->tabTitle(ctx);
         } else if (!slot.views.empty()) {
             IView* v0 = findView(slot.views[0]);
@@ -156,11 +165,16 @@ void UiShell::renderTabBar(Canvas& cv, const UiContext& ctx) {
 
         if (is_active) {
             ColorRGB accent = active_in_slot ? active_in_slot->accent() : palette::kAccentOrange;
+            if (ctx.app.active_view == ViewId::kFx) accent = palette::kAccentPurple;
+            if (ctx.in.btn_select) accent = palette::kParamTrig;
             cv.fill(tx + 1, 1, tw - 2, kTabBarH - 3, accent);
             cv.text(text_x, 5, title, palette::kBgDark);
         } else if (is_held) {
             cv.fill(tx + 1, 1, tw - 2, kTabBarH - 3, palette::kAccentCyan);
             cv.text(text_x, 5, title, palette::kBgDark);
+        } else if (ctx.in.btn_select) {
+            cv.rect(tx + 1, 1, tw - 2, kTabBarH - 3, palette::kParamTrig);
+            cv.text(text_x, 5, title, palette::kParamTrig);
         } else {
             cv.rect(tx + 1, 1, tw - 2, kTabBarH - 3, palette::kGridDim);
             cv.text(text_x, 5, title, (slot.key_label == "[G]") ? palette::kAccentOrange : palette::kTextMain);

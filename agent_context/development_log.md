@@ -497,3 +497,34 @@
   * Успішна крос-компіляція бінарника `build-xu10/xu10_groovebox` та деплой на консоль (PID `67984`).
   * Семпли та банки розгорнуто у `/storage/roms/groovebox/`.
   * Навантаження CPU становить лише **9.1%** (94.5% idle!), споживання пам'яті — **71.4 MB** (7.1% RAM). Звуковий вивід ALSA 32k без жодного XRUN.
+
+## [2026-10-27] Milestone 13: Specialized Synth UI Parameters, Chorus/Overdrive Integration, Sequencer Checkerboard & SELECT Shortcuts
+* **Спеціалізація параметрів вкладки SYNTH для кожного рушія (src/ui/views.hpp, src/ui/views.cpp, src/ui/layout.cpp):**
+  * Впроваджено динамічну генерацію рядків таблиці параметрів `dynamic_rows` у `GridSpec` та метод `GridView::resolveRows()`, що адаптує інтерфейс під тип рушія обраного треку:
+    * `kDrumRack`: Kit, Tune, Filter, Drive, Overdrive, Drv Tone, Chr Mix, Reverb, ADSR, Sends, Pan, Level.
+    * `kDx7`: Preset, Algo, Feedback, Bright, Cutoff, Decay, Chr Mix, Overdrive, ADSR, LFO1, Sends, Pan, Level.
+    * `kAcid303`: Cutoff, Res, Env Mod, Accent, Drive, Drv Tone, Overdrive, Chr Mix, Decay, Slide, Sends, Pan, Level.
+    * `kFm2Op`: Wave, Mod Ratio, Mod Index, Feedback, Filter, Overdrive, Chr Mix, Reverb, ADSR, Sends, Pan, Level.
+    * `kChordPad`: Root, Chord, Inversion, Voicing, Filter, Res, Drive, Overdrive, ADSR, Sends, Pan, Level.
+    * `kSampleOneShot`: Sample Sel, Tune, Start, Loop, Filter, Overdrive, Chr Mix, Reverb, ADSR, Sends, Pan, Level.
+    * `kSliceSampler`: Slices, Slice Sel, Reverse, Pitch, Filter, Overdrive, Chr Mix, Reverb, ADSR, Sends, Pan, Level.
+    * `kVaMono`: Wave, Sub, Unison, Noise, Cutoff, Res, Overdrive, Chr Mix, ADSR, Sends, Pan, Level.
+    * `kMidiOut`: Channel, Prog Chg, Bank MSB, Bank LSB, CC1, CC2, CC3, CC4, Gate Len, Transp, Octave, Velocity.
+* **Інтеграція Chorus та Overdrive у SYNTH та MIX (src/ui/layout.cpp, src/ui/actions.cpp):**
+  * У вкладці SYNTH додано параметри `FX.DRIVE`, `FX.DRV_TONE`, `FX.CHR_MIX` прямо у блоки тембру/кольору.
+  * У вкладці MIX додано виділений рядок `BUS` з прямим доступом до `OVERDRIVE`, `DRV TONE`, `CHR MIX`, `CHR RATE` поруч із шиною `MST`.
+* **Регулювання довжини треку кроком у 4 та шахова 2D-сітка секвенсора (src/audio_engine.cpp, src/ui/actions.cpp, src/ui/views.cpp):**
+  * `SEQ.LEN_INC` та `SEQ.LEN_DEC` тепер змінюють довжину кроком у 4 ($4 \le \text{len} \le 128$) для зручного створення поліритмів.
+  * У фоні секвенсора додано шахову 2D-сітку у тонких відтінках сірого (`((s / 4) + r) % 2`), що візуально розбиває трек на 4-крокові такти з яскравими точками долей та чіткою лінією межі треку.
+* **Візуалізація тогла R2 MIX/FX та шорткати SELECT (src/ui/ui_shell.cpp, src/ui/keymap.cpp, src/ui/actions.cpp):**
+  * Додано пурпурний акцент `kAccentPurple` (`#DC3CFF`) для вкладки `FX`.
+  * У вкладці MIX відображається плашка `[R2] MIX/FX` (помаранчевий колір), а при повторному натисканні — `[R2] FX/MIX` (пурпурний колір).
+  * Реалізовано шорткати `SELECT + L1, L2, R2, R1`:
+    * `SELECT + L1` $\rightarrow$ Step Inspector
+    * `SELECT + L2` $\rightarrow$ Arpeggiator Modal
+    * `SELECT + R2` $\rightarrow$ Oscilloscope View
+    * `SELECT + R1` $\rightarrow$ Performance Pads View
+  * При утриманні `SELECT` весь верхній TabBar динамічно перемикається на відображення жовтих рамок (`kParamTrig` `#FFD600`) з підписами призначених швидких вікон (`[L1] INSP`, `[L2] ARP`, `[R2] SCOPE`, `[R1] PERF`, `[G] SYS`), повністю виключаючи неінтуїтивні "приховані" комбінації.
+* **Повна ревізія тур-скріншотів та деплой на MagicX XU10:**
+  * Усі 13 скріншотів згенеровано та візуально верифіковано: відсутні накладання шрифтів, рамки та модальні вікна центровані, контрастність сітки секвенсора оптимальна для 320x240 LCD.
+  * Успішний крос-деплой на апаратну консоль MagicX XU10 (PID `75992`). Споживання CPU ~**12%**, пам'ять — **71.5 MB** (7.1% RAM). Звуковий рушій ALSA 32k без затримок та трісків.

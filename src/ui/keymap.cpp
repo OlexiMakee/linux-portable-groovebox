@@ -43,6 +43,12 @@ Keymap::Keymap() {
     bind(ALL, Layer::kSelect, Button::kDpadLeft,  Gesture::kPress, "NAV.BAR_LEFT");
     bind(ALL, Layer::kSelect, Button::kDpadRight, Gesture::kPress, "NAV.BAR_RIGHT");
 
+    // Швидкі комбінації SELECT + Shoulder (альтернативні екрани)
+    bind(ALL, Layer::kSelect, Button::kL1, Gesture::kPress, "TAB.SEL_L1");
+    bind(ALL, Layer::kSelect, Button::kL2, Gesture::kPress, "TAB.SEL_L2");
+    bind(ALL, Layer::kSelect, Button::kR2, Gesture::kPress, "TAB.SEL_R2");
+    bind(ALL, Layer::kSelect, Button::kR1, Gesture::kPress, "TAB.SEL_R1");
+
     // =========================================================================
     // 2. СЕКВЕНСОР (ViewId::kSeq)
     // =========================================================================
