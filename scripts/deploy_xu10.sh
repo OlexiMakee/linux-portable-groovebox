@@ -40,15 +40,6 @@ echo 4 > /proc/irq/26/smp_affinity 2>/dev/null || true
 # Фіксуємо CPU Governor у performance (1.5 GHz), щоб уникнути тріску/лагів на USB dwc2
 echo performance | tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor >/dev/null 2>&1 || true
 
-# Якщо консоль НЕ підключена до комп'ютера по USB-C (UDC не configured),
-# автоматично переводимо порт OTG у режим HOST і вмикаємо 5V VBUS (OTG_SWITCH) для Digitakt / Хаба / MIDI!
-UDC_STATE=\$(cat /sys/class/udc/ff300000.usb/state 2>/dev/null || echo 'none')
-if [ \"\${UDC_STATE}\" != \"configured\" ]; then
-  echo '' > /sys/kernel/config/usb_gadget/cdc/UDC 2>/dev/null || true
-  echo host > /sys/class/usb_role/ff300000.usb-role-switch/role 2>/dev/null || true
-  /usr/sbin/i2cset -f -y 0 0x20 0xb4 0x46 2>/dev/null || true
-fi
-
 # Зупиняємо всі фонові сервіси, які засмічують звук і шину
 systemctl stop pipewire-pulse.socket pipewire.socket pipewire-pulse pipewire avahi-daemon simple-http-server 2>/dev/null || true
 
