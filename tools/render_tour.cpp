@@ -91,10 +91,11 @@ int main() {
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_04_mix.bmp");
 
-    // 5. SCOPE Tab
-    app.active_view = ViewId::kScope;
+    // 5. SAMPLE Tab (Sampling Workstation)
+    app.active_view = ViewId::kSample;
     input = InputState{};
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
+    capture("/tmp/xu10_tour/tour_05_sample.bmp");
     capture("/tmp/xu10_tour/tour_05_scope.bmp");
 
     // 6. SYS Tab

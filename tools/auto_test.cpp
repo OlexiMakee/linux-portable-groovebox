@@ -145,6 +145,16 @@ static void testSequencerOperations() {
     audio.deleteRow(3);
     TEST_ASSERT(audio.getActiveRowCount() == 3, "Deleting single track decrements active rows to 3");
 
+    // 4. Поліфонія кроку (Чорди до 4 нот у Step Editor)
+    audio.setStepChordNote(0, 0, 0, 48); // C3
+    audio.setStepChordNote(0, 0, 1, 52); // E3
+    audio.setStepChordNote(0, 0, 2, 55); // G3
+    audio.setStepChordNote(0, 0, 3, 59); // B3
+    TEST_ASSERT(audio.getStepChordNote(0, 0, 0) == 48, "Chord root note is 48 (C3)");
+    TEST_ASSERT(audio.getStepChordNote(0, 0, 1) == 52, "Chord voice 2 is 52 (E3)");
+    TEST_ASSERT(audio.getStepChordNote(0, 0, 2) == 55, "Chord voice 3 is 55 (G3)");
+    TEST_ASSERT(audio.getStepChordNote(0, 0, 3) == 59, "Chord voice 4 is 59 (B3)");
+
     audio.stop();
 }
 
@@ -247,9 +257,20 @@ static void testInputRouterAndStepEditor() {
     TEST_ASSERT(app.arp_modal_open == false, "SELECT + L2 toggles ARP modal closed");
 
     ActionRegistry::instance().run("TAB.SEL_R2", ctx);
-    TEST_ASSERT(app.active_view == ViewId::kScope, "SELECT + R2 switches to SCOPE view");
+    TEST_ASSERT(app.active_view == kScope, "SELECT + R2 switches to SCOPE view");
     ActionRegistry::instance().run("VIEW.BACK", ctx);
     TEST_ASSERT(app.active_view == ViewId::kSeq, "VIEW.BACK returns from SCOPE to previous view");
+
+    // 6. Тестування переходу в робочу станцію семплювання (TAB.R1)
+    ActionRegistry::instance().run("TAB.R1", ctx);
+    TEST_ASSERT(app.active_view == ViewId::kSample, "TAB.R1 switches directly to SAMPLE workstation");
+    ActionRegistry::instance().run("VIEW.BACK", ctx);
+
+    // 7. Тестування асинхронного перемикання USB ролі (запобігання зависань)
+    HardwareMonitor hw_mon;
+    bool switch_ok = hw_mon.requestUsbRoleSwitch("device_ssh");
+    TEST_ASSERT(switch_ok == true, "requestUsbRoleSwitch executes asynchronously without blocking");
+    TEST_ASSERT(hw_mon.getSnapshot().usb_role == "device_ssh", "USB role snapshot updated to device_ssh");
 }
 
 static void testViewsRendering() {
@@ -281,7 +302,7 @@ static void testViewsRendering() {
         ViewId::kMix,
         ViewId::kFx,
         ViewId::kPerf,
-        ViewId::kScope,
+        ViewId::kSample,
         ViewId::kSys,
         ViewId::kArp
     };
