@@ -176,15 +176,26 @@ int main() {
 
     // 13. Engine Selection Modal Dropdown
     app.engine_menu_open = true;
-    app.engine_menu_sel = 8; // DX7
+    app.engine_menu_sel = 6; // SAMPLER
     input = InputState{};
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_13_engine_menu.bmp");
+    app.engine_menu_open = false;
+
+    // 14. Sample Browser Modal (Sample Pool & Filesystem)
+    app.sample_browser_open = true;
+    app.sample_browser_dir = "res/samples/drums/01_tr808";
+    app.sample_browser_items = {"[..] PARENT DIR", "[DIR] 01_tr808", "bd.wav", "sd.wav", "ch.wav", "oh.wav", "cp.wav", "rim.wav"};
+    app.sample_browser_sel = 2; // bd.wav
+    input = InputState{};
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
+    capture("/tmp/xu10_tour/tour_14_sample_browser.bmp");
+    app.sample_browser_open = false;
 
     SDL_DestroyRenderer(sw_renderer);
     SDL_FreeSurface(surf);
     SDL_Quit();
 
-    std::printf("All 13 tour screenshots generated successfully!\n");
+    std::printf("All 14 tour screenshots generated successfully!\n");
     return 0;
 }

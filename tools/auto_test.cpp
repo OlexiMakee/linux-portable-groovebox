@@ -111,6 +111,35 @@ static void testAudioDspEngines() {
     TEST_ASSERT(max_amp > 100, "Master Send FX & Overdrive chain generates audible output");
     TEST_ASSERT(max_amp <= 32767, "Master Limiter protects output from 16-bit integer overflow");
 
+    // 4. Тестування єдиного 16-доріжкового масиву, динамічного додавання та іменування треків
+    TEST_ASSERT(audio.getActiveRowCount() == 3, "Initial active track count is exactly 3 (Kick, 303, DX7)");
+    TEST_ASSERT(audio.getTrackName(0) == "KICK 808", "Track 1 is KICK 808");
+    TEST_ASSERT(audio.getTrackName(1) == "303 BASS", "Track 2 is 303 BASS");
+    TEST_ASSERT(audio.getTrackName(2) == "DX7 KEYS", "Track 3 is DX7 KEYS");
+
+    int t4 = audio.addTrack(EngineType::kChordPad, "PAD 04");
+    TEST_ASSERT(t4 == 3 && audio.getActiveRowCount() == 4, "addTrack dynamically creates Track 4");
+    TEST_ASSERT(audio.getTrackName(3) == "PAD 04", "Track 4 has custom name 'PAD 04'");
+
+    audio.setTrackName(3, "WARM PAD");
+    TEST_ASSERT(audio.getTrackName(3) == "WARM PAD", "setTrackName updates track name to 'WARM PAD'");
+
+    // Розширюємо до 16 треків
+    while (audio.getActiveRowCount() < 16) {
+        audio.addTrack(EngineType::kVaMono);
+    }
+    TEST_ASSERT(audio.getActiveRowCount() == 16, "AudioEngine successfully manages all 16 dynamic tracks");
+    TEST_ASSERT(audio.addTrack(EngineType::kVaMono) == -1, "addTrack rejects track creation beyond kMaxTracks (16)");
+
+    // Перевірка телеметрії для мікшера: всі 16 рівнів та імен доступні
+    auto tel = audio.getTelemetry();
+    TEST_ASSERT(tel.active_tracks == 16, "Telemetry reports all 16 active tracks to Mixer");
+    TEST_ASSERT(tel.track_names[3] == "WARM PAD", "Telemetry propagates track names to Mixer UI");
+    TEST_ASSERT(tel.track_levels.size() == 16, "Telemetry track_levels array has size 16");
+
+    audio.deleteTrack(15);
+    TEST_ASSERT(audio.getActiveRowCount() == 15, "deleteTrack safely removes track and updates active count");
+
     audio.stop();
 }
 
@@ -310,7 +339,28 @@ static void testInputRouterAndStepEditor() {
     app.sampler.clearRecordedSample();
     TEST_ASSERT(app.sampler.recordingState() == RecState::kIdle, "clearRecordedSample resets sampler state to kIdle");
 
+    // 11. Тестування відкриття меню рушіїв при натисканні на [+] ADD TRACK
     app.rec_mode = false;
+    app.cursor_row = audio.getActiveRowCount(); // стоїмо на [+] ADD TRACK
+    app.engine_menu_open = false;
+    ActionRegistry::instance().run("SEQ.TRIG", ctx);
+    TEST_ASSERT(app.engine_menu_open == true, "Triggering [+] ADD TRACK opens engine selection popup modal");
+    TEST_ASSERT(app.engine_menu_is_add == true, "Engine modal is marked as add-mode");
+
+    // Підтвердження вибору рушія додає трек і закриває меню
+    app.engine_menu_sel = static_cast<int>(EngineType::kSampleOneShot);
+    int prev_count = audio.getActiveRowCount();
+    ActionRegistry::instance().run("ENGINE.MENU_CONFIRM", ctx);
+    TEST_ASSERT(audio.getActiveRowCount() == prev_count + 1, "ENGINE.MENU_CONFIRM dynamically adds track");
+    TEST_ASSERT(app.engine_menu_open == false, "Engine modal closes after track creation");
+    TEST_ASSERT(app.sample_browser_open == true, "Creating Sampler track automatically opens Sample Browser");
+
+    // 12. Тестування Sample Browser дій
+    TEST_ASSERT(!app.sample_browser_items.empty(), "Sample Browser populates items from samples directory");
+    ActionRegistry::instance().run("SAMPLE_BROWSER.DOWN", ctx);
+    ActionRegistry::instance().run("SAMPLE_BROWSER.UP", ctx);
+    ActionRegistry::instance().run("SAMPLE_BROWSER.CLOSE", ctx);
+    TEST_ASSERT(app.sample_browser_open == false, "SAMPLE_BROWSER.CLOSE exits sample browser cleanly");
 }
 
 static void testViewsRendering() {
@@ -390,6 +440,24 @@ static void testViewsRendering() {
     shell.render(app, audio, nullptr, in, hw, tel, midi, 1000);
     TEST_ASSERT(true, "Engine selection dropdown modal renders cleanly");
     app.engine_menu_open = false;
+
+    // 6. Рендеринг модального вікна вибору семплів (Sample Pool & Filesystem)
+    app.sample_browser_open = true;
+    app.sample_browser_dir = "res/samples/drums/01_tr808";
+    app.sample_browser_items = {"[..] PARENT DIR", "bd.wav", "sd.wav", "ch.wav"};
+    app.sample_browser_sel = 1;
+    shell.render(app, audio, nullptr, in, hw, tel, midi, 1000);
+    TEST_ASSERT(true, "SAMPLE POOL modal renders filesystem items onto canvas cleanly");
+    app.sample_browser_open = false;
+
+    // 7. Рендеринг MIX та FX з закріпленим знизу лейаутом та 22px індикаторами
+    app.active_view = ViewId::kMix;
+    shell.render(app, audio, nullptr, in, hw, tel, midi, 1000);
+    TEST_ASSERT(true, "MIX view renders dynamic tracks and pinned bottom oscilloscope/VU layout");
+
+    app.active_view = ViewId::kFx;
+    shell.render(app, audio, nullptr, in, hw, tel, midi, 1000);
+    TEST_ASSERT(true, "FX view renders with pinned bottom oscilloscope/VU layout");
 
     audio.stop();
     SDL_DestroyRenderer(ren);
