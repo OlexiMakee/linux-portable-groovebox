@@ -192,48 +192,102 @@ bool SamplerEngine::loadWavFile(const std::string& path, SampleBuffer& target) {
     std::ifstream is(path, std::ios::binary);
     if (!is.is_open()) return false;
 
-    char header[44];
-    is.read(header, 44);
-    if (is.gcount() < 44) return false;
+    char riff_head[12];
+    is.read(riff_head, 12);
+    if (is.gcount() < 12) return false;
 
-    // Перевірка "RIFF" та "WAVE"
-    if (std::memcmp(header, "RIFF", 4) != 0 || std::memcmp(header + 8, "WAVE", 4) != 0) {
+    if (std::memcmp(riff_head, "RIFF", 4) != 0 || std::memcmp(riff_head + 8, "WAVE", 4) != 0) {
         return false;
     }
 
-    uint16_t num_channels = *reinterpret_cast<uint16_t*>(header + 22);
-    uint32_t sample_rate = *reinterpret_cast<uint32_t*>(header + 24);
-    uint16_t bits_per_sample = *reinterpret_cast<uint16_t*>(header + 34);
-    uint32_t data_size = *reinterpret_cast<uint32_t*>(header + 40);
+    uint16_t audio_format = 0;
+    uint16_t num_channels = 0;
+    uint32_t sample_rate = 0;
+    uint16_t bits_per_sample = 0;
+    bool found_fmt = false;
 
-    if (num_channels == 0 || bits_per_sample != 16) {
-        return false; // Поки підтримуємо стандартний 16-бітний WAV
-    }
+    while (is) {
+        char chunk_hdr[8];
+        is.read(chunk_hdr, 8);
+        if (is.gcount() < 8) break;
 
-    uint32_t total_samples = data_size / 2;
-    uint32_t frames = total_samples / num_channels;
+        uint32_t chunk_size = 0;
+        std::memcpy(&chunk_size, chunk_hdr + 4, 4);
 
-    std::vector<int16_t> raw(total_samples);
-    is.read(reinterpret_cast<char*>(raw.data()), data_size);
+        if (std::memcmp(chunk_hdr, "fmt ", 4) == 0) {
+            std::vector<char> fmt_buf(chunk_size);
+            is.read(fmt_buf.data(), chunk_size);
+            if (is.gcount() < 16) return false;
 
-    target.data_l.resize(frames);
-    target.data_r.resize(frames);
-    target.sample_rate = sample_rate;
+            std::memcpy(&audio_format, fmt_buf.data(), 2);
+            std::memcpy(&num_channels, fmt_buf.data() + 2, 2);
+            std::memcpy(&sample_rate, fmt_buf.data() + 4, 4);
+            std::memcpy(&bits_per_sample, fmt_buf.data() + 14, 2);
+            found_fmt = true;
+        } else if (std::memcmp(chunk_hdr, "data", 4) == 0) {
+            if (!found_fmt || num_channels == 0 || sample_rate == 0) return false;
 
-    for (uint32_t i = 0; i < frames; ++i) {
-        if (num_channels == 1) {
-            float s = static_cast<float>(raw[i]) / 32768.0f;
-            target.data_l[i] = s;
-            target.data_r[i] = s;
+            uint32_t bytes_per_sample = bits_per_sample / 8;
+            if (bytes_per_sample == 0) bytes_per_sample = 2;
+            uint32_t frame_bytes = num_channels * bytes_per_sample;
+            if (frame_bytes == 0) return false;
+
+            uint32_t frames = chunk_size / frame_bytes;
+            if (frames == 0) return false;
+
+            std::vector<char> raw_bytes(chunk_size);
+            is.read(raw_bytes.data(), chunk_size);
+            uint32_t bytes_read = static_cast<uint32_t>(is.gcount());
+            frames = std::min(frames, bytes_read / frame_bytes);
+
+            target.data_l.resize(frames);
+            target.data_r.resize(frames);
+            target.sample_rate = sample_rate;
+
+            const char* ptr = raw_bytes.data();
+            for (uint32_t i = 0; i < frames; ++i) {
+                float s_l = 0.0f;
+                float s_r = 0.0f;
+                if (bits_per_sample == 16) {
+                    const int16_t* s16 = reinterpret_cast<const int16_t*>(ptr);
+                    s_l = static_cast<float>(s16[0]) / 32768.0f;
+                    s_r = (num_channels > 1) ? (static_cast<float>(s16[1]) / 32768.0f) : s_l;
+                } else if (bits_per_sample == 24) {
+                    const uint8_t* u = reinterpret_cast<const uint8_t*>(ptr);
+                    int32_t val_l = (static_cast<int32_t>(u[0]) << 8) | (static_cast<int32_t>(u[1]) << 16) | (static_cast<int32_t>(static_cast<int8_t>(u[2])) << 24);
+                    s_l = static_cast<float>(val_l) / 2147483648.0f;
+                    if (num_channels > 1) {
+                        int32_t val_r = (static_cast<int32_t>(u[3]) << 8) | (static_cast<int32_t>(u[4]) << 16) | (static_cast<int32_t>(static_cast<int8_t>(u[5])) << 24);
+                        s_r = static_cast<float>(val_r) / 2147483648.0f;
+                    } else {
+                        s_r = s_l;
+                    }
+                } else if (bits_per_sample == 32) {
+                    if (audio_format == 3) {
+                        const float* f32 = reinterpret_cast<const float*>(ptr);
+                        s_l = f32[0];
+                        s_r = (num_channels > 1) ? f32[1] : s_l;
+                    } else {
+                        const int32_t* s32 = reinterpret_cast<const int32_t*>(ptr);
+                        s_l = static_cast<float>(s32[0]) / 2147483648.0f;
+                        s_r = (num_channels > 1) ? (static_cast<float>(s32[1]) / 2147483648.0f) : s_l;
+                    }
+                }
+                target.data_l[i] = s_l;
+                target.data_r[i] = s_r;
+                ptr += frame_bytes;
+            }
+
+            target.name = path.substr(path.find_last_of("/\\") + 1);
+            target.loaded = true;
+            return true;
         } else {
-            target.data_l[i] = static_cast<float>(raw[i * 2]) / 32768.0f;
-            target.data_r[i] = static_cast<float>(raw[i * 2 + 1]) / 32768.0f;
+            uint32_t skip = chunk_size + (chunk_size & 1u);
+            is.seekg(skip, std::ios::cur);
         }
     }
 
-    target.name = path.substr(path.find_last_of("/\\") + 1);
-    target.loaded = true;
-    return true;
+    return false;
 }
 
 bool SamplerEngine::loadDrumKit(const std::string& kit_dir) {

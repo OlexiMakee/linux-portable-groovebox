@@ -7,36 +7,35 @@
 
 namespace groovebox {
 
-// Типи синтезаторних та семплерних движків
+// Типи синтезаторних та семплерних движків (лише чисті семплери та синтезатори, нуль драм-реків)
 enum class EngineType : uint8_t {
-    kVaMono       = 0, // PolyBLEP Saw/Pulse + Sub Osc
-    kFm2Op        = 1, // 2-Operator FM (Ratio, Index, Feedback)
-    kAcid303      = 2, // Acid 303 Bassline (Waveform, Cutoff, Reso, EnvMod, Accent)
-    kChordPad     = 3, // 4-Voice Chord Synth (Chord Type, Detune, Cutoff, Attack/Decay)
-    kDrumRack     = 4, // 8-Slot Sample Drum Rack (TR-808/909/707/Linn/DMX...)
-    kDrumSyn      = 4, // Backwards-compatible alias for Drum Rack
-    kMidiOut      = 5, // External MIDI Gear Sequencer Track
-    kSampleOneShot = 6, // Sample-based One-Shot Player
-    kSliceSampler  = 7, // Loop Slicer Sampler with P-Lock Slices
-    kDx7          = 8, // Yamaha DX7 6-Operator FM Synthesizer (ROM1A + SysEx)
-    kCount        = 9
+    kVaMono        = 0, // PolyBLEP Saw/Pulse + Sub Osc
+    kFm2Op         = 1, // 2-Operator FM (Ratio, Index, Feedback)
+    kAcid303       = 2, // Acid 303 Bassline (Waveform, Cutoff, Reso, EnvMod, Accent)
+    kChordPad      = 3, // 4-Voice Chord Synth (Chord Type, Detune, Cutoff, Attack/Decay)
+    kSampleOneShot = 4, // Універсальний семплер моно/стерео семплів з пулу
+    kSliceSampler  = 5, // Loop Slicer Sampler with P-Lock Slices
+    kDx7           = 6, // Yamaha DX7 6-Operator FM Synthesizer (ROM1A + SysEx)
+    kMidiOut       = 7, // External MIDI Gear Sequencer Track
+    kCount         = 8,
+    kDrumRack      = 254, // Псевдонім сумісності для поетапного рефакторингу
+    kDrumSyn       = 255  // Псевдонім сумісності для поетапного рефакторингу
 };
 
-inline constexpr EngineType kDrumSyn = EngineType::kDrumRack;
 inline constexpr EngineType kSampleDrums = EngineType::kSampleOneShot;
+inline constexpr EngineType kDrumSyn = EngineType::kSampleOneShot;
 
 inline constexpr const char* getEngineTypeName(EngineType type) {
     switch (type) {
-        case EngineType::kVaMono:       return "VA SAW+SUB";
-        case EngineType::kFm2Op:        return "2-OP FM";
-        case EngineType::kAcid303:      return "ACID 303";
-        case EngineType::kChordPad:     return "CHORD PAD";
-        case EngineType::kDrumRack:     return "DRUM RACK";
-        case EngineType::kMidiOut:      return "MIDI OUT";
-        case EngineType::kSampleOneShot:return "SMPL ONESHOT";
-        case EngineType::kSliceSampler: return "SLICER";
-        case EngineType::kDx7:          return "DX7 6-OP";
-        default:                        return "UNKNOWN";
+        case EngineType::kVaMono:        return "VA SAW+SUB";
+        case EngineType::kFm2Op:         return "2-OP FM";
+        case EngineType::kAcid303:       return "ACID 303";
+        case EngineType::kChordPad:      return "CHORD PAD";
+        case EngineType::kSampleOneShot: return "SAMPLER";
+        case EngineType::kSliceSampler:  return "LOOP SLICER";
+        case EngineType::kDx7:           return "DX7 6-OP";
+        case EngineType::kMidiOut:       return "MIDI OUT";
+        default:                         return "UNKNOWN";
     }
 }
 
@@ -235,16 +234,14 @@ inline constexpr const char* kParamNames[static_cast<int>(EngineType::kCount)][k
     {"CUTOFF", "RESO", "ENV MOD", "DECAY", "ACCENT", "WAVEFRM"},
     // kChordPad
     {"CUTOFF", "RESO", "CHORD", "DECAY", "DETUNE", "ENV MOD"},
-    // kDrumRack
-    {"KIT SEL", "TUNE", "DECAY", "FILTER", "DRIVE", "REVERB"},
-    // kMidiOut
-    {"CHANNEL", "CC A", "CC B", "CC C", "CC D", "PROGRAM"},
-    // kSampleOneShot
+    // kSampleOneShot (SAMPLER)
     {"SAMPLE", "PITCH", "DECAY", "FILTER", "DRIVE", "START"},
     // kSliceSampler
     {"SAMPLE", "SLICE", "PITCH", "DECAY", "FILTER", "REVERSE"},
     // kDx7
-    {"PRESET", "CUTOFF", "BRIGHT", "DECAY", "ALGO", "FEEDBCK"}
+    {"PRESET", "CUTOFF", "BRIGHT", "DECAY", "ALGO", "FEEDBCK"},
+    // kMidiOut
+    {"CHANNEL", "CC A", "CC B", "CC C", "CC D", "PROGRAM"}
 };
 
 inline constexpr const char* getParamName(EngineType type, int param_idx) {

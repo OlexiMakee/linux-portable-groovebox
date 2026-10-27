@@ -103,8 +103,20 @@ void AudioEngine::initDefaultPattern() {
     std::snprintf(tracks_[0].name, sizeof(tracks_[0].name), "KICK 808");
     tracks_[0].engine = EngineType::kSampleOneShot;
     tracks_[0].p = {0.00f, 0.50f, 0.40f, 0.85f, 0.15f, 0.15f};
-    tracks_[0].attack = 0.002f; tracks_[0].decay = 0.35f; tracks_[0].sustain = 0.00f; tracks_[0].release = 0.05f;
+    tracks_[0].attack = 0.002f; tracks_[0].decay = 2.00f; tracks_[0].sustain = 0.00f; tracks_[0].release = 0.10f;
     tracks_[0].level = 0.90f; tracks_[0].pan = 0.00f; tracks_[0].delay_send = 0.10f; tracks_[0].reverb_send = 0.05f;
+
+    static const char* kDefaultKickCandidates[] = {
+        "/storage/roms/groovebox/samples/drums/01_tr808/bd.wav",
+        "/storage/dev/groovebox/res/samples/drums/01_tr808/bd.wav",
+        "res/samples/drums/01_tr808/bd.wav",
+        "../res/samples/drums/01_tr808/bd.wav"
+    };
+    for (const char* kp : kDefaultKickCandidates) {
+        if (sampler().loadWavFile(kp, sampler().trackSample(0))) {
+            break;
+        }
+    }
 
     tracks_[1] = TrackParameters{};
     std::snprintf(tracks_[1].name, sizeof(tracks_[1].name), "303 BASS");
@@ -139,7 +151,7 @@ void AudioEngine::initDefaultPattern() {
         row_lengths_[r].store(16, std::memory_order_relaxed);
         for (uint32_t s = 0; s < kMaxSteps; ++s) {
             uint8_t def_note = 48;
-            if (r == 0) def_note = 36;      // Kick C1
+            if (r == 0) def_note = 48;      // Sampler Root C2
             else if (r == 1) def_note = 36; // 303 C1
             else if (r == 2) def_note = 60; // DX7 C3
             else def_note = 48;
@@ -290,14 +302,7 @@ void AudioEngine::previewStep(int row, int step_idx) {
     }
     uint8_t note = st.note;
     if (!st.enabled) {
-        int t = getRowTrack(r);
-        int v = getRowVoice(r);
-        if (t < 4 && tracks_[t].engine == EngineType::kDrumSyn) {
-            static constexpr uint8_t kDrumNotes[4] = {36, 38, 42, 46};
-            note = kDrumNotes[std::clamp(v, 0, 3)];
-        } else {
-            note = 48 + (r % 4) * 4;
-        }
+        note = 48 + (r % 4) * 4;
     }
     float vel = st.enabled ? st.velocity : 0.85f;
     float cut = st.has_plock ? st.plock_cutoff : -1.0f;
@@ -306,8 +311,6 @@ void AudioEngine::previewStep(int row, int step_idx) {
 
 void AudioEngine::randomizeRow(int row) {
     int r = std::clamp(row, 0, kTotalRows - 1);
-    int t = getRowTrack(r);
-    int v = getRowVoice(r);
     uint32_t len = getRowLength(r);
     std::lock_guard<std::mutex> lock(state_mutex_);
 
@@ -316,38 +319,18 @@ void AudioEngine::randomizeRow(int row) {
         return (rng_state_ >> 16) & 0xFF;
     };
 
-    bool is_drum = (t < 4 && tracks_[t].engine == EngineType::kDrumSyn);
+    static constexpr uint8_t kScale[8] = {36, 39, 41, 43, 46, 48, 51, 53};
 
     for (uint32_t s = 0; s < len; ++s) {
         uint32_t rnd = randByte();
-        bool trig = false;
-        uint8_t note = 48;
+        bool trig = (rnd < 120);
+        uint8_t note = (r == 0) ? 48 : kScale[randByte() % 8];
         float vel = 0.80f + (randByte() % 20) * 0.01f;
         float gate = 0.50f + (randByte() % 30) * 0.01f;
 
-        if (is_drum) {
-            static constexpr uint8_t kDrumNotes[4] = {36, 38, 42, 46};
-            note = kDrumNotes[std::clamp(v, 0, 3)];
-            if (v == 0) { // BD
-                trig = (s % 4 == 0) || ((s % 16 == 10 || s % 16 == 14) && (rnd < 90));
-            } else if (v == 1) { // SD
-                trig = (s % 8 == 4) || ((s % 8 == 7 || s % 8 == 2) && (rnd < 70));
-            } else if (v == 2) { // CH
-                trig = (s % 2 == 0) || (rnd < 90);
-                vel = (s % 4 == 0) ? 0.90f : 0.65f;
-            } else { // OH
-                trig = (s % 4 == 2) && (rnd < 150);
-            }
-        } else {
-            // Мелодійний синт: пентатоніка
-            static constexpr uint8_t kScale[8] = {36, 39, 41, 43, 46, 48, 51, 53};
-            trig = (rnd < 110);
-            note = kScale[rnd % 8];
-        }
-
         pattern_[r][s].enabled = trig;
         pattern_[r][s].is_param_trig = false;
-        pattern_[r][s].slide = !is_drum && (randByte() < 40);
+        pattern_[r][s].slide = (randByte() < 30);
         pattern_[r][s].note = note;
         pattern_[r][s].velocity = vel;
         pattern_[r][s].gate_len = gate;
@@ -458,7 +441,6 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
     if (row < 0 || row >= kTotalRows) return;
     std::lock_guard<std::mutex> lock(state_mutex_);
     int t = row_track_[row];
-    int v_idx = row_voice_[row];
     if (tracks_[t].muted) return;
 
     if (tracks_[t].engine == EngineType::kMidiOut) {
@@ -499,26 +481,7 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
         v.is_legato = false;
         v.freq = midiToFreq(midi_note);
 
-        if (tracks_[t].engine == EngineType::kDrumRack) {
-            static constexpr int kDrumNotes[4] = {36, 38, 42, 46};
-            int d_note = (midi_note > 0) ? midi_note : kDrumNotes[v_idx];
-            v.freq = midiToFreq(d_note);
-            // Визначаємо слот барабанів (0=BD, 1=SD, 2=CH, 3=OH, 4=CP, 5=Rim, 6=Tom, 7=Perc)
-            if (d_note == 36) v.drum_slot = 0;
-            else if (d_note == 38 || d_note == 40) v.drum_slot = 1;
-            else if (d_note == 42 || d_note == 44) v.drum_slot = 2;
-            else if (d_note == 46) v.drum_slot = 3;
-            else if (d_note == 39) v.drum_slot = 4;
-            else if (d_note == 37) v.drum_slot = 5;
-            else if (d_note == 41 || d_note == 45) v.drum_slot = 6;
-            else v.drum_slot = static_cast<uint8_t>(v_idx % kDrumSlots);
-
-            v.phase1 = 0.0f; // скидання позиції відтворення семпла
-            float att = 0.001f;
-            float dec = 0.05f + tracks_[t].p[2] * 0.85f;
-            v.amp_adsr.trigger(att, dec, 0.0f, sr);
-            v.filter_adsr.trigger(0.001f, dec * 0.7f, 0.0f, sr);
-        } else if (tracks_[t].engine == EngineType::kDx7) {
+        if (tracks_[t].engine == EngineType::kDx7) {
             int p_idx = std::clamp(static_cast<int>(tracks_[t].p[0] * (dx7_engine_.patchCount() - 1) + 0.5f), 0, dx7_engine_.patchCount() - 1);
             v.dx7_voice.trigger(dx7_engine_.getPatch(p_idx), static_cast<float>(midi_note), velocity, sr);
             v.amp_adsr.trigger(0.001f, 0.99f, 1.0f, sr);
@@ -535,16 +498,8 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
 }
 
 int AudioEngine::allocateVoice(int track, int midi_note) {
-    if (track < 0 || track >= 4) return 0;
+    if (track < 0 || track >= kMaxTracks) return 0;
     const int base = track * kVoicesPerTrack;
-
-    if (tracks_[track].engine == EngineType::kDrumRack) {
-        if (midi_note == 36) return base + 0;
-        if (midi_note == 38 || midi_note == 40) return base + 1;
-        if (midi_note == 42 || midi_note == 44) return base + 2;
-        if (midi_note == 46 || midi_note == 39) return base + 3;
-        return base + (std::abs(midi_note - 36) % kVoicesPerTrack);
-    }
 
     // 1. Якщо та ж нота вже звучить у голосі треку — перевикористовуємо її
     for (int i = 0; i < kVoicesPerTrack; ++i) {
@@ -997,27 +952,10 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
 
             float raw = 0.0f;
 
-            if (tp.engine == EngineType::kDrumRack) {
-                const auto& sb = sampler().drumSlot(v.drum_slot);
+            if (tp.engine == EngineType::kSampleOneShot) {
+                const auto& sb = sampler().trackSample(t);
                 if (sb.loaded && sb.lengthFrames() > 0) {
-                    float pitch_ratio = std::pow(2.0f, (tp.p[1] - 0.5f) * 2.0f);
-                    float step = pitch_ratio * (static_cast<float>(sb.sample_rate) * inv_sr);
-                    uint32_t f0 = static_cast<uint32_t>(v.phase1);
-                    if (f0 + 1 < sb.lengthFrames()) {
-                        float frac = v.phase1 - static_cast<float>(f0);
-                        raw = sb.data_l[f0] + frac * (sb.data_l[f0 + 1] - sb.data_l[f0]);
-                        v.phase1 += step;
-                    } else {
-                        raw = 0.0f;
-                        v.active = false;
-                    }
-                } else {
-                    raw = 0.0f;
-                }
-            } else if (tp.engine == EngineType::kSampleOneShot) {
-                const auto& sb = sampler().recordedSample();
-                if (sb.loaded && sb.lengthFrames() > 0) {
-                    float note_pitch = static_cast<float>(v.note_num) - 60.0f + (tp.p[1] - 0.5f) * 24.0f;
+                    float note_pitch = static_cast<float>(v.note_num) - 48.0f + (tp.p[1] - 0.5f) * 24.0f;
                     float pitch_ratio = std::pow(2.0f, note_pitch / 12.0f);
                     float step = pitch_ratio * (static_cast<float>(sb.sample_rate) * inv_sr);
                     uint32_t f0 = static_cast<uint32_t>(v.phase1);
