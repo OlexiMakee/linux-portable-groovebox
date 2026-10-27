@@ -150,6 +150,8 @@ void UiShell::renderTabBar(Canvas& cv, const UiContext& ctx) {
             else if (slot.key_label == "[R2]") title += " SCOPE";
             else if (slot.key_label == "[R1]") title += " PERF";
             else if (slot.key_label == "[G]")  title += " SYS";
+        } else if (slot.key_label == "[L1]") {
+            title += ctx.app.rec_mode ? " REC" : " SEQ";
         } else if (slot.key_label == "[R2]") {
             if (ctx.app.active_view == ViewId::kFx) title += " FX/MIX";
             else title += " MIX/FX";

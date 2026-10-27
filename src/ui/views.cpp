@@ -251,18 +251,22 @@ void GridView::renderList(Canvas& cv, const UiContext& c, Rect area, bool popup)
 namespace {
 
 const char* voiceLabel(EngineType e, int voice) {
-    static constexpr const char* kDrum[4] = {"BD", "SD", "CH", "OH"};
-    static constexpr const char* kVoice[4] = {"V1", "V2", "V3", "V4"};
-    return e == EngineType::kDrumSyn ? kDrum[std::clamp(voice, 0, 3)] : kVoice[std::clamp(voice, 0, 3)];
+    (void)voice;
+    switch (e) {
+        case EngineType::kSampleOneShot: return "SMP";
+        case EngineType::kDrumRack:     return "DRM";
+        case EngineType::kAcid303:      return "303";
+        case EngineType::kDx7:          return "DX7";
+        case EngineType::kChordPad:     return "PAD";
+        case EngineType::kFm2Op:        return "FM2";
+        case EngineType::kVaMono:       return "VAM";
+        case EngineType::kSliceSampler: return "SLC";
+        case EngineType::kMidiOut:      return "MID";
+        default:                        return "TRK";
+    }
 }
 
 constexpr const char* kNoteNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-
-void clampStepToRow(UiContext& c) {
-    const uint32_t len = c.audio.getRowLength(c.app.cursor_row);
-    if (c.app.cursor_step >= static_cast<int>(len)) c.app.cursor_step = static_cast<int>(len) - 1;
-    c.app.seq_page = c.app.cursor_step / static_cast<int>(kStepsPerPage);
-}
 
 } // namespace
 
@@ -270,19 +274,27 @@ void SeqView::navigate(UiContext& c, int dx, int dy, bool coarse) {
     const int active = c.audio.getActiveRowCount();
     const int slots = active < kTotalRows ? active + 1 : active;
     if (dy != 0) {
-        const int jump = coarse ? kVoicesPerTrack : 1;
-        c.app.cursor_row = ((c.app.cursor_row + dy * jump) % slots + slots) % slots;
+        c.app.cursor_row = ((c.app.cursor_row + dy) % slots + slots) % slots;
         if (c.app.cursor_row < active) {
             c.app.selected_track = c.audio.getRowTrack(c.app.cursor_row);
-            clampStepToRow(c);
+            const uint32_t len = c.audio.getRowLength(c.app.cursor_row);
+            if (c.app.cursor_step >= static_cast<int>(len)) c.app.cursor_step = static_cast<int>(len) - 1;
         }
     }
     if (dx != 0 && c.app.cursor_row < active) {
         const int len = static_cast<int>(c.audio.getRowLength(c.app.cursor_row));
-        const int jump = coarse ? 16 : 1;
+        const int jump = coarse ? 4 : 1;
         c.app.cursor_step = ((c.app.cursor_step + dx * jump) % len + len) % len;
-        c.app.seq_page = c.app.cursor_step / static_cast<int>(kStepsPerPage);
     }
+    // Плавний горизонтальний скрол: сітка слідує за курсором по 1 кроку
+    const int vis_steps = static_cast<int>(kStepsPerPage);
+    if (c.app.cursor_step < c.app.seq_scroll_step) {
+        c.app.seq_scroll_step = c.app.cursor_step;
+    } else if (c.app.cursor_step >= c.app.seq_scroll_step + vis_steps) {
+        c.app.seq_scroll_step = c.app.cursor_step - vis_steps + 1;
+    }
+    const int cur_len = (c.app.cursor_row < active) ? static_cast<int>(c.audio.getRowLength(c.app.cursor_row)) : 16;
+    c.app.seq_scroll_step = std::clamp(c.app.seq_scroll_step, 0, std::max(0, cur_len - vis_steps));
 }
 
 std::string SeqView::focusId(const UiContext& c) const {
@@ -322,11 +334,11 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
         cv.text(area.x + 4, area.y + 3, hdr, palette::kAccentCyan);
     } else {
         const char* trig = !st.enabled ? "---" : (st.is_param_trig ? "P-LOCK" : "NOTE");
-        std::snprintf(hdr, sizeof(hdr), "R%02d %s | ST%03d %s%d %s%s | P%d/%u L%u",
+        std::snprintf(hdr, sizeof(hdr), "R%02d %s | ST%03d %s%d %s%s | L%u",
                       cur_r + 1, getEngineTypeName(tp.engine), c.app.cursor_step + 1,
                       kNoteNames[st.note % 12], st.note / 12 - 1, trig,
                       (st.slide && tp.engine != EngineType::kDrumSyn) ? " SLD" : "",
-                      c.app.seq_page + 1, (cur_len + kStepsPerPage - 1) / kStepsPerPage, cur_len);
+                      cur_len);
         cv.text(area.x + 4, area.y + 3, hdr, st.is_param_trig ? palette::kParamTrig : palette::kAccentOrange);
     }
 
@@ -334,8 +346,8 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
     const int step_w = 8;
     const int grid_y = area.y + kHeaderH + 2;
     const int slots = active < kTotalRows ? active + 1 : active;
-    const int row_h = std::clamp((area.h - kHeaderH - 4) / std::max(1, slots), 8, 13);
-    const uint32_t page_off = static_cast<uint32_t>(c.app.seq_page) * kStepsPerPage;
+    const int row_h = std::clamp((area.h - kHeaderH - 4) / std::max(1, slots), 10, 20);
+    const uint32_t scroll_off = static_cast<uint32_t>(c.app.seq_scroll_step);
     const int len_x = grid_x + static_cast<int>(kStepsPerPage) * step_w + 4;
 
     for (int r = 0; r < active; ++r) {
@@ -358,7 +370,7 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
         const uint32_t play = c.app.transport_playing ? (c.app.current_step % len) : UINT32_MAX;
         const int th = row_h - 3;
         for (uint32_t s = 0; s < kStepsPerPage; ++s) {
-            const uint32_t idx = page_off + s;
+            const uint32_t idx = scroll_off + s;
             const int x = grid_x + static_cast<int>(s) * step_w;
             if (idx < len) {
                 // Шахматка відтінків сірого: чергування 4-крокових долей (бітів) та рядків
