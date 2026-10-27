@@ -30,14 +30,6 @@ void setupAppLayout(UiShell& shell) {
         synth_spec.dynamic_rows = [](const UiContext& c) -> std::vector<GridRow> {
             const auto tp = c.audio.getTrackParams(c.app.selected_track);
             switch (tp.engine) {
-                case EngineType::kDrumRack:
-                    return {
-                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.RND"}},
-                        {"DRUM",  {"TRK.P1", "TRK.P2", "TRK.P4", "TRK.P5"}},
-                        {"COLOR", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.P6"}},
-                        {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
-                    };
                 case EngineType::kDx7:
                     return {
                         {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.RND"}},

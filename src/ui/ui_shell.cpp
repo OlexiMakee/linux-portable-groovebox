@@ -380,7 +380,7 @@ void UiShell::render(
         }
 
         cv.line(bx + 2, by + bh - 14, bx + bw - 3, by + bh - 14, palette::kGridDim);
-        cv.text(bx + 6, by + bh - 10, "[A] SELECT/ENTER   [B] BACK/CLOSE", palette::kTextDim);
+        cv.text(bx + 6, by + bh - 10, "[A] SELECT  [B] CLOSE  [<] PARENT", palette::kTextDim);
     }
 
     // 4. Нижній інформаційний рядок (HUD)

@@ -301,7 +301,6 @@ namespace {
     (void)voice;
     switch (e) {
         case EngineType::kSampleOneShot: return "SMP";
-        case EngineType::kDrumRack:     return "DRM";
         case EngineType::kAcid303:      return "303";
         case EngineType::kDx7:          return "DX7";
         case EngineType::kChordPad:     return "PAD";
@@ -319,9 +318,8 @@ constexpr const char* kNoteNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G
 
 void SeqView::navigate(UiContext& c, int dx, int dy, bool coarse) {
     if (c.app.rec_mode) {
-        int t = c.app.selected_track;
-        auto tp = c.audio.getTrackParams(t);
-        const int max_lanes = (tp.engine == EngineType::kDrumRack) ? 8 : 12;
+        const int t = c.app.selected_track;
+        const int max_lanes = 12;
         if (dy != 0) {
             c.app.rec_cursor_lane = ((c.app.rec_cursor_lane + dy) % max_lanes + max_lanes) % max_lanes;
         }
@@ -400,119 +398,62 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
         const int len_x = grid_x + static_cast<int>(kStepsPerPage) * step_w + 4;
         const uint32_t play = c.app.transport_playing ? (c.app.current_step % len) : UINT32_MAX;
 
-        if (tp.engine == EngineType::kDrumRack) {
-            // DRUM RACK 8 LANES
-            char hdr[96];
-            static const char* kDrumLanes[8] = {"BD", "SD", "CH", "OH", "CP", "RM", "TM", "PC"};
-            static constexpr uint8_t kDrumNotes[8] = {36, 38, 42, 46, 39, 37, 45, 49};
-            int cur_l = std::clamp(c.app.rec_cursor_lane, 0, 7);
-            std::snprintf(hdr, sizeof(hdr), "TRK %d: DRUM REC [%s] | LN %02d %s | ST%03d | L%u",
-                          t + 1, getEngineTypeName(tp.engine), cur_l + 1, kDrumLanes[cur_l], c.app.cursor_step + 1, len);
-            cv.text(area.x + 4, area.y + 3, hdr, palette::kAccentOrange);
+        // Універсальний 12-півтоновий Piano Roll для всіх доріжок (включаючи Sampler)
+        char hdr[96];
+        static const char* kSemiNames[12] = {"B ", "A#", "A ", "G#", "G ", "F#", "F ", "E ", "D#", "D ", "C#", "C "};
+        static const int kSemiIntervals[12] = {11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+        int cur_l = std::clamp(c.app.rec_cursor_lane, 0, 11);
+        int cur_pitch = c.app.rec_octave * 12 + kSemiIntervals[cur_l];
+        std::snprintf(hdr, sizeof(hdr), "TRK %d: PIANO ROLL [%s] | OCT %d | NOTE %s%d | L%u",
+                      t + 1, getEngineTypeName(tp.engine), c.app.rec_octave, kNoteNames[cur_pitch % 12], cur_pitch / 12 - 1, len);
+        cv.text(area.x + 4, area.y + 3, hdr, palette::kAccentCyan);
 
-            const int row_h = std::clamp((area.h - kHeaderH - 4) / 8, 10, 16);
-            for (int l = 0; l < 8; ++l) {
-                const int y = grid_y + l * row_h;
-                const bool is_lane = (l == cur_l);
-                if (is_lane) cv.fill(area.x + 2, y, 24, row_h - 1, palette::kHeaderSel);
-                char lbl[8];
-                std::snprintf(lbl, sizeof(lbl), "%02d%s", l + 1, kDrumLanes[l]);
-                cv.text(area.x + 4, y + (row_h - 5) / 2, lbl, is_lane ? palette::kAccentOrange : palette::kTextDim);
+        const int row_h = std::clamp((area.h - kHeaderH - 4) / 12, 8, 12);
+        for (int l = 0; l < 12; ++l) {
+            const int y = grid_y + l * row_h;
+            const bool is_lane = (l == cur_l);
+            if (is_lane) cv.fill(area.x + 2, y, 24, row_h - 1, palette::kHeaderSel);
+            int row_pitch = c.app.rec_octave * 12 + kSemiIntervals[l];
+            bool is_sharp = (kSemiNames[l][1] == '#');
+            char lbl[8];
+            std::snprintf(lbl, sizeof(lbl), "%-3s", kSemiNames[l]);
+            cv.text(area.x + 4, y + (row_h - 5) / 2, lbl, is_lane ? palette::kAccentCyan : (is_sharp ? palette::kGridDim : palette::kTextDim));
 
-                const uint8_t target_note = kDrumNotes[l];
-                const int th = row_h - 3;
-                for (uint32_t s = 0; s < kStepsPerPage; ++s) {
-                    const uint32_t idx = scroll_off + s;
-                    const int x = grid_x + static_cast<int>(s) * step_w;
-                    if (idx < len) {
-                        const bool beat_alt = (((s / 4) + l) % 2 == 1);
-                        const ColorRGB bg_col = beat_alt ? ColorRGB{26, 26, 32} : ColorRGB{16, 16, 20};
-                        cv.fill(x, y + 1, step_w - 1, th, bg_col);
+            const int th = row_h - 2;
+            for (uint32_t s = 0; s < kStepsPerPage; ++s) {
+                const uint32_t idx = scroll_off + s;
+                const int x = grid_x + static_cast<int>(s) * step_w;
+                if (idx < len) {
+                    const bool beat_alt = (((s / 4) + l) % 2 == 1);
+                    ColorRGB bg_col = is_sharp ? (beat_alt ? ColorRGB{14, 14, 18} : ColorRGB{10, 10, 14})
+                                               : (beat_alt ? ColorRGB{26, 26, 32} : ColorRGB{18, 18, 24});
+                    cv.fill(x, y + 1, step_w - 1, th, bg_col);
 
-                        const auto sd = c.audio.getStep(t, static_cast<int>(idx));
-                        bool active_hit = sd.enabled && (sd.note == target_note ||
-                                                         sd.chord_notes[1] == target_note ||
-                                                         sd.chord_notes[2] == target_note ||
-                                                         sd.chord_notes[3] == target_note);
-                        if (active_hit) {
-                            cv.fill(x + 1, y + 2, step_w - 3, th - 2, sd.is_param_trig ? palette::kParamTrig : palette::kAccentOrange);
-                        } else {
-                            if (s % 4 == 0) cv.fill(x + 2, y + row_h / 2 - 1, 2, 2, palette::kGridDim);
-                            else cv.fill(x + 3, y + row_h / 2, 1, 1, ColorRGB{42, 42, 50});
-                        }
-                        if (idx == play) cv.line(x + 3, y, x + 3, y + row_h - 2, palette::kCursorWhite);
-                    } else if (idx == len) {
-                        cv.line(x, y, x, y + row_h - 2, palette::kAccentOrange);
+                    const auto sd = c.audio.getStep(t, static_cast<int>(idx));
+                    bool active_note = sd.enabled && (sd.note == row_pitch ||
+                                                      sd.chord_notes[1] == row_pitch ||
+                                                      sd.chord_notes[2] == row_pitch ||
+                                                      sd.chord_notes[3] == row_pitch);
+                    if (active_note) {
+                        cv.fill(x + 1, y + 1, step_w - 3, th - 1, sd.is_param_trig ? palette::kParamTrig : palette::kAccentCyan);
                     } else {
-                        const bool beat_alt = (((s / 4) + l) % 2 == 1);
-                        cv.fill(x, y + 1, step_w - 1, th, beat_alt ? ColorRGB{12, 12, 16} : ColorRGB{8, 8, 10});
+                        if (s % 4 == 0) cv.fill(x + 2, y + row_h / 2 - 1, 2, 2, palette::kGridDim);
+                        else cv.fill(x + 3, y + row_h / 2, 1, 1, ColorRGB{36, 36, 44});
                     }
-                    if (is_lane && idx == static_cast<uint32_t>(c.app.cursor_step)) {
-                        cv.rect(x - 1, y, step_w, row_h, palette::kCursorWhite);
-                    }
+                    if (idx == play) cv.line(x + 3, y, x + 3, y + row_h - 1, palette::kCursorWhite);
+                } else if (idx == len) {
+                    cv.line(x, y, x, y + row_h - 1, palette::kAccentOrange);
+                } else {
+                    const bool beat_alt = (((s / 4) + l) % 2 == 1);
+                    cv.fill(x, y + 1, step_w - 1, th, beat_alt ? ColorRGB{10, 10, 14} : ColorRGB{6, 6, 8});
                 }
-                char ltxt[8];
-                std::snprintf(ltxt, sizeof(ltxt), "%u", len);
-                cv.text(len_x, y + (row_h - 5) / 2, ltxt, is_lane ? palette::kAccentOrange : palette::kGridDim);
-            }
-        } else {
-            // MELODIC SYNTH 12-SEMITONE PIANO ROLL
-            char hdr[96];
-            static const char* kSemiNames[12] = {"B ", "A#", "A ", "G#", "G ", "F#", "F ", "E ", "D#", "D ", "C#", "C "};
-            static const int kSemiIntervals[12] = {11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
-            int cur_l = std::clamp(c.app.rec_cursor_lane, 0, 11);
-            int cur_pitch = c.app.rec_octave * 12 + kSemiIntervals[cur_l];
-            std::snprintf(hdr, sizeof(hdr), "TRK %d: PIANO ROLL [%s] | OCT %d | NOTE %s%d | L%u",
-                          t + 1, getEngineTypeName(tp.engine), c.app.rec_octave, kNoteNames[cur_pitch % 12], cur_pitch / 12 - 1, len);
-            cv.text(area.x + 4, area.y + 3, hdr, palette::kAccentCyan);
-
-            const int row_h = std::clamp((area.h - kHeaderH - 4) / 12, 8, 12);
-            for (int l = 0; l < 12; ++l) {
-                const int y = grid_y + l * row_h;
-                const bool is_lane = (l == cur_l);
-                if (is_lane) cv.fill(area.x + 2, y, 24, row_h - 1, palette::kHeaderSel);
-                int row_pitch = c.app.rec_octave * 12 + kSemiIntervals[l];
-                bool is_sharp = (kSemiNames[l][1] == '#');
-                char lbl[8];
-                std::snprintf(lbl, sizeof(lbl), "%-3s", kSemiNames[l]);
-                cv.text(area.x + 4, y + (row_h - 5) / 2, lbl, is_lane ? palette::kAccentCyan : (is_sharp ? palette::kGridDim : palette::kTextDim));
-
-                const int th = row_h - 2;
-                for (uint32_t s = 0; s < kStepsPerPage; ++s) {
-                    const uint32_t idx = scroll_off + s;
-                    const int x = grid_x + static_cast<int>(s) * step_w;
-                    if (idx < len) {
-                        const bool beat_alt = (((s / 4) + l) % 2 == 1);
-                        ColorRGB bg_col = is_sharp ? (beat_alt ? ColorRGB{14, 14, 18} : ColorRGB{10, 10, 14})
-                                                   : (beat_alt ? ColorRGB{26, 26, 32} : ColorRGB{18, 18, 24});
-                        cv.fill(x, y + 1, step_w - 1, th, bg_col);
-
-                        const auto sd = c.audio.getStep(t, static_cast<int>(idx));
-                        bool active_note = sd.enabled && (sd.note == row_pitch ||
-                                                          sd.chord_notes[1] == row_pitch ||
-                                                          sd.chord_notes[2] == row_pitch ||
-                                                          sd.chord_notes[3] == row_pitch);
-                        if (active_note) {
-                            cv.fill(x + 1, y + 1, step_w - 3, th - 1, sd.is_param_trig ? palette::kParamTrig : palette::kAccentCyan);
-                        } else {
-                            if (s % 4 == 0) cv.fill(x + 2, y + row_h / 2 - 1, 2, 2, palette::kGridDim);
-                            else cv.fill(x + 3, y + row_h / 2, 1, 1, ColorRGB{36, 36, 44});
-                        }
-                        if (idx == play) cv.line(x + 3, y, x + 3, y + row_h - 1, palette::kCursorWhite);
-                    } else if (idx == len) {
-                        cv.line(x, y, x, y + row_h - 1, palette::kAccentOrange);
-                    } else {
-                        const bool beat_alt = (((s / 4) + l) % 2 == 1);
-                        cv.fill(x, y + 1, step_w - 1, th, beat_alt ? ColorRGB{10, 10, 14} : ColorRGB{6, 6, 8});
-                    }
-                    if (is_lane && idx == static_cast<uint32_t>(c.app.cursor_step)) {
-                        cv.rect(x - 1, y, step_w, row_h, palette::kCursorWhite);
-                    }
+                if (is_lane && idx == static_cast<uint32_t>(c.app.cursor_step)) {
+                    cv.rect(x - 1, y, step_w, row_h, palette::kCursorWhite);
                 }
-                char ltxt[8];
-                std::snprintf(ltxt, sizeof(ltxt), "%u", len);
-                cv.text(len_x, y + (row_h - 5) / 2, ltxt, is_lane ? palette::kAccentCyan : palette::kGridDim);
             }
+            char ltxt[8];
+            std::snprintf(ltxt, sizeof(ltxt), "%u", len);
+            cv.text(len_x, y + (row_h - 5) / 2, ltxt, is_lane ? palette::kAccentCyan : palette::kGridDim);
         }
         return;
     }
@@ -535,7 +476,7 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
         std::snprintf(hdr, sizeof(hdr), "R%02d [%s: %s] | ST%03d %s%d %s%s | L%u",
                       cur_r + 1, trk_nm.c_str(), getEngineTypeName(tp.engine), c.app.cursor_step + 1,
                       kNoteNames[st.note % 12], st.note / 12 - 1, trig,
-                      (st.slide && tp.engine != EngineType::kDrumSyn) ? " SLD" : "",
+                      (st.slide ? " SLD" : ""),
                       cur_len);
         cv.text(area.x + 4, area.y + 3, hdr, st.is_param_trig ? palette::kParamTrig : palette::kAccentOrange);
     }
@@ -782,7 +723,6 @@ std::string PerfView::focusId(const UiContext& c) const {
 void PerfView::render(Canvas& cv, const UiContext& c, Rect area) const {
     const int t = c.app.selected_track;
     const auto tp = c.audio.getTrackParams(t);
-    const bool is_drum = (tp.engine == EngineType::kDrumSyn);
     const auto scale = c.app.arpeggiator.config().scale;
     const int root_semi = c.app.arpeggiator.config().root_note % 12;
 
@@ -800,27 +740,19 @@ void PerfView::render(Canvas& cv, const UiContext& c, Rect area) const {
         int x, y, w, h;
     };
 
-    std::string n0, n1, n2, n3;
-    if (is_drum) {
-        n0 = "BD KICK";
-        n1 = "SD SNARE";
-        n2 = "CH CL.HAT";
-        n3 = "OH OP.HAT";
-    } else {
-        auto chord = getChordIntervals(ChordType::kSeventh, scale);
-        int base_root = c.app.perf_octave * 12 + root_semi;
-        auto getNoteStr = [&](int offset, const char* deg) {
-            int n = quantizeToScale(base_root + offset, base_root, scale);
-            char b[24];
-            constexpr const char* kNotes[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-            std::snprintf(b, sizeof(b), "%s%d (%s)", kNotes[n % 12], n / 12 - 1, deg);
-            return std::string(b);
-        };
-        n0 = getNoteStr(chord.size() > 0 ? chord[0] : 0, "ROOT");
-        n1 = getNoteStr(chord.size() > 1 ? chord[1] : 4, "3RD");
-        n2 = getNoteStr(chord.size() > 2 ? chord[2] : 7, "5TH");
-        n3 = getNoteStr(chord.size() > 3 ? chord[3] : 11, "7TH");
-    }
+    auto chord = getChordIntervals(ChordType::kSeventh, scale);
+    int base_root = c.app.perf_octave * 12 + root_semi;
+    auto getNoteStr = [&](int offset, const char* deg) {
+        int n = quantizeToScale(base_root + offset, base_root, scale);
+        char b[24];
+        constexpr const char* kNotes[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+        std::snprintf(b, sizeof(b), "%s%d (%s)", kNotes[n % 12], n / 12 - 1, deg);
+        return std::string(b);
+    };
+    std::string n0 = getNoteStr(chord.size() > 0 ? chord[0] : 0, "ROOT");
+    std::string n1 = getNoteStr(chord.size() > 1 ? chord[1] : 4, "3RD");
+    std::string n2 = getNoteStr(chord.size() > 2 ? chord[2] : 7, "5TH");
+    std::string n3 = getNoteStr(chord.size() > 3 ? chord[3] : 11, "7TH");
 
     const int cx = area.x + 105;
     const int cy = area.y + 70;
