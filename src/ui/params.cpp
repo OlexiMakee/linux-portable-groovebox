@@ -604,6 +604,127 @@ ParamRegistry::ParamRegistry() {
         add(std::move(p));
     }
 
+    // =========================================================================
+    // SAMPLING WORKSTATION (SMP.*)
+    // =========================================================================
+    {
+        Param p;
+        p.id = "SMP.SRC";
+        p.label = "SRC";
+        p.value = [](const UiContext& c) {
+            return c.in.headphones_plugged ? "LINE-IN" : "MASTER";
+        };
+        p.step = [](UiContext& c, int, bool) {
+            c.app.last_action = "REC SRC TOGGLED";
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SMP.ARM";
+        p.label = "REC ARM";
+        p.value = [](const UiContext& c) {
+            auto st = c.app.sampler.recordingState();
+            switch (st) {
+                case RecState::kArmed: return "ARMED";
+                case RecState::kRecording: return "RECORD";
+                case RecState::kFinished: return "DONE";
+                default: return "OFF";
+            }
+        };
+        p.step = [](UiContext& c, int, bool) {
+            if (c.app.sampler.recordingState() == RecState::kIdle) {
+                c.app.sampler.armRecording();
+                c.app.last_action = "REC ARMED";
+            } else {
+                c.app.sampler.stopRecording();
+                c.app.last_action = "REC STOPPED";
+            }
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SMP.MODE";
+        p.label = "MODE";
+        p.value = [](const UiContext& c) {
+            auto m = c.app.sampler.recordingMode();
+            switch (m) {
+                case RecMode::kThreshold: return "THRESH";
+                case RecMode::kSyncBar:   return "SYNC 1BAR";
+                default:                  return "MANUAL";
+            }
+        };
+        p.step = [](UiContext& c, int dir, bool) {
+            int m = (static_cast<int>(c.app.sampler.recordingMode()) + dir + 3) % 3;
+            c.app.sampler.setRecordingMode(static_cast<RecMode>(m));
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SMP.THRS";
+        p.label = "THRESH";
+        p.value = [](const UiContext&) { return "-18 DB"; };
+        p.step = [](UiContext& c, int, bool) { c.app.last_action = "THRESH SET"; };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SMP.TRIM_ST";
+        p.label = "TRIM ST";
+        p.value = [](const UiContext& c) {
+            char b[16];
+            std::snprintf(b, sizeof(b), "%d%%", static_cast<int>(c.app.sample_trim_start * 100.0f));
+            return std::string(b);
+        };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            float d = coarse ? 0.10f : 0.01f;
+            c.app.sample_trim_start = std::clamp(c.app.sample_trim_start + dir * d, 0.0f, c.app.sample_trim_end - 0.02f);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SMP.TRIM_END";
+        p.label = "TRIM END";
+        p.value = [](const UiContext& c) {
+            char b[16];
+            std::snprintf(b, sizeof(b), "%d%%", static_cast<int>(c.app.sample_trim_end * 100.0f));
+            return std::string(b);
+        };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            float d = coarse ? 0.10f : 0.01f;
+            c.app.sample_trim_end = std::clamp(c.app.sample_trim_end + dir * d, c.app.sample_trim_start + 0.02f, 1.0f);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SMP.ZOOM";
+        p.label = "ZOOM";
+        p.value = [](const UiContext& c) {
+            return std::to_string(c.app.sample_zoom) + "X";
+        };
+        p.step = [](UiContext& c, int dir, bool) {
+            c.app.sample_zoom = std::clamp(c.app.sample_zoom + dir, 1, 8);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SMP.ASSIGN";
+        p.label = "ASSIGN";
+        p.value = [](const UiContext& c) {
+            return "TRK " + std::to_string(c.app.sample_target_track + 1);
+        };
+        p.step = [](UiContext& c, int dir, bool) {
+            c.app.sample_target_track = (c.app.sample_target_track + dir + 4) % 4;
+            c.app.last_action = "ASSIGN TO T" + std::to_string(c.app.sample_target_track + 1);
+        };
+        add(std::move(p));
+    }
+
     // ===== STEP.* — крок під курсором секвенсора (INSPECT) =====
     add(stepParam("STEP.TYPE", "TYPE",
         [](const SequencerStep& s, const TrackParameters&) {
@@ -616,10 +737,50 @@ ParamRegistry::ParamRegistry() {
             s.enabled = state != 0;
             s.is_param_trig = state == 2;
         }));
-    add(stepParam("STEP.NOTE", "NOTE",
+    add(stepParam("STEP.NOTE", "NOTE 1",
         [](const SequencerStep& s, const TrackParameters&) { return noteName(s.note) + " (" + std::to_string(s.note) + ")"; },
         [](SequencerStep& s, const TrackParameters&, int dir, bool coarse) {
             s.note = static_cast<uint8_t>(std::clamp(s.note + dir * (coarse ? 12 : 1), 0, 127));
+            s.chord_notes[0] = s.note;
+        }));
+    add(stepParam("STEP.CHORD1", "NOTE 2",
+        [](const SequencerStep& s, const TrackParameters&) {
+            if (s.chord_notes[1] == 255) return std::string("--- (OFF)");
+            return noteName(s.chord_notes[1]) + " (" + std::to_string(s.chord_notes[1]) + ")";
+        },
+        [](SequencerStep& s, const TrackParameters&, int dir, bool coarse) {
+            if (s.chord_notes[1] == 255 && dir > 0) s.chord_notes[1] = static_cast<uint8_t>(std::clamp(s.note + 4, 0, 127));
+            else if (s.chord_notes[1] != 255) {
+                int n = static_cast<int>(s.chord_notes[1]) + dir * (coarse ? 12 : 1);
+                if (n < 24) s.chord_notes[1] = 255;
+                else s.chord_notes[1] = static_cast<uint8_t>(std::clamp(n, 24, 127));
+            }
+        }));
+    add(stepParam("STEP.CHORD2", "NOTE 3",
+        [](const SequencerStep& s, const TrackParameters&) {
+            if (s.chord_notes[2] == 255) return std::string("--- (OFF)");
+            return noteName(s.chord_notes[2]) + " (" + std::to_string(s.chord_notes[2]) + ")";
+        },
+        [](SequencerStep& s, const TrackParameters&, int dir, bool coarse) {
+            if (s.chord_notes[2] == 255 && dir > 0) s.chord_notes[2] = static_cast<uint8_t>(std::clamp(s.note + 7, 0, 127));
+            else if (s.chord_notes[2] != 255) {
+                int n = static_cast<int>(s.chord_notes[2]) + dir * (coarse ? 12 : 1);
+                if (n < 24) s.chord_notes[2] = 255;
+                else s.chord_notes[2] = static_cast<uint8_t>(std::clamp(n, 24, 127));
+            }
+        }));
+    add(stepParam("STEP.CHORD3", "NOTE 4",
+        [](const SequencerStep& s, const TrackParameters&) {
+            if (s.chord_notes[3] == 255) return std::string("--- (OFF)");
+            return noteName(s.chord_notes[3]) + " (" + std::to_string(s.chord_notes[3]) + ")";
+        },
+        [](SequencerStep& s, const TrackParameters&, int dir, bool coarse) {
+            if (s.chord_notes[3] == 255 && dir > 0) s.chord_notes[3] = static_cast<uint8_t>(std::clamp(s.note + 11, 0, 127));
+            else if (s.chord_notes[3] != 255) {
+                int n = static_cast<int>(s.chord_notes[3]) + dir * (coarse ? 12 : 1);
+                if (n < 24) s.chord_notes[3] = 255;
+                else s.chord_notes[3] = static_cast<uint8_t>(std::clamp(n, 24, 127));
+            }
         }));
     add(stepParam("STEP.VEL", "VELOCITY",
         [](const SequencerStep& s, const TrackParameters&) { return fmt127(s.velocity); },

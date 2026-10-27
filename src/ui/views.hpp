@@ -94,14 +94,23 @@ public:
     void tick(UiContext& c) override;
 };
 
-// ---------------- ScopeView: осцилограф + рівні ----------------
-class ScopeView : public IView {
+// ---------------- SampleView: станція семплювання та лупера ----------------
+class SampleView : public IView {
 public:
-    ScopeView() : IView(ViewId::kScope) {}
+    SampleView() : IView(ViewId::kSample) {}
+    std::string tabTitle(const UiContext&) const override { return "SAMPLE"; }
     ColorRGB accent() const override { return palette::kAccentCyan; }
     void render(Canvas& cv, const UiContext& c, Rect area) const override;
-    void navigate(UiContext&, int, int, bool) override {}
+    void navigate(UiContext& c, int dx, int dy, bool coarse) override;
+    const Param* focusedParam(const UiContext& c) const override;
+    std::string focusId(const UiContext& c) const override;
+
+private:
+    mutable int cursor_row_ = 0;
+    mutable int cursor_col_ = 0;
 };
+
+using ScopeView = SampleView;
 
 // ---------------- PerfView: живий перформанс та гра на педах ----------------
 class PerfView : public IView {

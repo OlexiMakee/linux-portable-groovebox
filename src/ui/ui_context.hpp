@@ -23,17 +23,19 @@ enum class ViewId : uint8_t {
     kPerf,     // PERF    — жива гра (педи, октави, макроси)
     kFx,       // FX      — send-ефекти та вихідна шина
     kMix,      // MIX     — мікшер треків + MASTER
-    kScope,    // SCOPE   — осцилограф + VU
+    kSample,   // SAMPLE  — станція семплювання, візуалізація хвилі та лупер
     kSys,      // SYS     — системні налаштування
     kArp,      // ARP     — параметри подвійного арпеджиратора та евклідового генератора
     kInspect,  // INSPECT — інспектор кроку (popup поверх SEQ, поки затиснута A)
     kCount
 };
 
+inline constexpr ViewId kScope = ViewId::kSample;
+
 inline constexpr int kViewCount = static_cast<int>(ViewId::kCount);
 
 inline constexpr const char* kViewNames[kViewCount] = {
-    "SEQ", "SYNTH", "PERF", "FX", "MIX", "SCOPE", "SYS", "ARP", "INSPECT"
+    "SEQ", "SYNTH", "PERF", "FX", "MIX", "SAMPLE", "SYS", "ARP", "INSPECT"
 };
 
 inline constexpr const char* viewName(ViewId v) {
@@ -68,6 +70,10 @@ struct AppModel {
 
     // Семплер, лупер та слайсер
     SamplerEngine sampler;
+    float sample_trim_start = 0.0f; // 0.0 .. 1.0 (Digitakt Trim Start)
+    float sample_trim_end = 1.0f;   // 0.0 .. 1.0 (Digitakt Trim End)
+    int sample_zoom = 1;            // 1x .. 8x
+    int sample_target_track = 0;    // 0..3 (призначення семплу на трек)
 
     // Курсор (рядок/колонка/скрол) для кожного табличного вікна
     std::array<int, kViewCount> grid_row{};
