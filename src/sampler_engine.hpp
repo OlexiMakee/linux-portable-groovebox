@@ -27,6 +27,7 @@ enum class RecState : uint8_t {
     kIdle = 0,
     kArmed,
     kRecording,
+    kOverdub,
     kFinished
 };
 
@@ -58,7 +59,16 @@ public:
 
     void armRecording();
     void startRecording();
+    void startOverdub();
     void stopRecording();
+    void clearRecordedSample();
+
+    float overdubFeedback() const { return overdub_feedback_.load(std::memory_order_relaxed); }
+    void setOverdubFeedback(float fb) { overdub_feedback_.store(std::clamp(fb, 0.20f, 1.0f), std::memory_order_relaxed); }
+
+    int activePlaybackSlice() const { return active_playback_slice_.load(std::memory_order_relaxed); }
+    void setActivePlaybackSlice(int s) { active_playback_slice_.store(s, std::memory_order_relaxed); }
+    uint32_t loopPlaybackFrame() const { return loop_play_pos_.load(std::memory_order_relaxed); }
 
     // Обробка вхідного стерео аудіоблоку від ALSA Capture
     void processAudioInput(const float* in_l, const float* in_r, uint32_t frames);
@@ -93,6 +103,9 @@ private:
     std::atomic<RecState> rec_state_{RecState::kIdle};
     std::atomic<uint32_t> rec_write_idx_{0};
     std::atomic<uint32_t> target_frames_{0}; // для темпо-синхронізованого запису
+    std::atomic<uint32_t> loop_play_pos_{0};
+    std::atomic<int> active_playback_slice_{-1};
+    std::atomic<float> overdub_feedback_{0.85f};
     std::atomic<float> input_level_l_{0.0f};
     std::atomic<float> input_level_r_{0.0f};
 

@@ -43,9 +43,22 @@ void SamplerEngine::startRecording() {
     rec_state_.store(RecState::kRecording, std::memory_order_relaxed);
 }
 
+void SamplerEngine::startOverdub() {
+    rec_state_.store(RecState::kOverdub, std::memory_order_relaxed);
+}
+
 void SamplerEngine::stopRecording() {
     rec_state_.store(RecState::kFinished, std::memory_order_relaxed);
     sliceGrid(active_slices_);
+}
+
+void SamplerEngine::clearRecordedSample() {
+    std::fill(rec_buffer_.data_l.begin(), rec_buffer_.data_l.end(), 0.0f);
+    std::fill(rec_buffer_.data_r.begin(), rec_buffer_.data_r.end(), 0.0f);
+    rec_write_idx_.store(0, std::memory_order_relaxed);
+    loop_play_pos_.store(0, std::memory_order_relaxed);
+    active_playback_slice_.store(-1, std::memory_order_relaxed);
+    rec_state_.store(RecState::kIdle, std::memory_order_relaxed);
 }
 
 void SamplerEngine::processAudioInput(const float* in_l, const float* in_r, uint32_t frames) {
@@ -77,9 +90,29 @@ void SamplerEngine::processAudioInput(const float* in_l, const float* in_r, uint
                 rec_buffer_.data_l[idx] = sl;
                 rec_buffer_.data_r[idx] = sr;
                 rec_write_idx_.store(idx + 1, std::memory_order_relaxed);
+                if (target > 0) {
+                    active_playback_slice_.store(static_cast<int>((idx * 8) / target), std::memory_order_relaxed);
+                }
             } else {
-                rec_state_.store(RecState::kFinished, std::memory_order_relaxed);
-                sliceGrid(8);
+                if (rec_mode_ == RecMode::kSyncBar) {
+                    rec_state_.store(RecState::kOverdub, std::memory_order_relaxed);
+                    loop_play_pos_.store(0, std::memory_order_relaxed);
+                    sliceGrid(8);
+                } else {
+                    rec_state_.store(RecState::kFinished, std::memory_order_relaxed);
+                    sliceGrid(active_slices_);
+                }
+            }
+        } else if (state == RecState::kOverdub) {
+            uint32_t target = target_frames_.load(std::memory_order_relaxed);
+            if (target > 0) {
+                uint32_t cur_pos = loop_play_pos_.load(std::memory_order_relaxed);
+                uint32_t next_pos = (cur_pos + 1) % target;
+                float fb = overdub_feedback_.load(std::memory_order_relaxed);
+                rec_buffer_.data_l[cur_pos] = std::clamp(rec_buffer_.data_l[cur_pos] * fb + sl, -1.0f, 1.0f);
+                rec_buffer_.data_r[cur_pos] = std::clamp(rec_buffer_.data_r[cur_pos] * fb + sr, -1.0f, 1.0f);
+                loop_play_pos_.store(next_pos, std::memory_order_relaxed);
+                active_playback_slice_.store(static_cast<int>((cur_pos * 8) / target), std::memory_order_relaxed);
             }
         }
     }
