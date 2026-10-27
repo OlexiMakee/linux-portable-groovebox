@@ -94,38 +94,34 @@ AudioEngine::~AudioEngine() {
 void AudioEngine::initDefaultPattern() {
     std::lock_guard<std::mutex> lock(state_mutex_);
 
-    // За замовчуванням 4 збалансовані інструменти:
-    // T1: 8-SLOT DRUM RACK (TR-808 / TR-909 / LinnDrum)
+    // За замовчуванням 1 інструмент = 1 доріжка:
+    // T1: SAMPLE ONESHOT (Kick 808)
     // T2: ACID 303 BASSLINE (Legato Slide, Accent)
     // T3: YAMAHA DX7 6-OP (ROM1A E.PIANO 1 / BASS 1 / LEAD)
     // T4: CHORD PAD (4-Voice Polyphonic Detuned Pad)
-    tracks_[0] = {EngineType::kDrumRack, {0.00f, 0.50f, 0.40f, 0.85f, 0.15f, 0.15f}, 0.002f, 0.35f, 0.00f, 0.05f, 0.90f,  0.00f, 0.10f, false};
-    tracks_[1] = {EngineType::kAcid303,  {0.62f, 0.55f, 0.60f, 0.22f, 0.70f, 0.00f}, 0.005f, 0.28f, 0.00f, 0.05f, 0.85f, -0.15f, 0.20f, false};
-    tracks_[2] = {EngineType::kDx7,      {0.32f, 0.75f, 0.60f, 0.40f, 0.00f, 0.30f}, 0.005f, 0.45f, 0.00f, 0.05f, 0.85f,  0.15f, 0.25f, false};
-    tracks_[3] = {EngineType::kChordPad, {0.55f, 0.35f, 0.00f, 0.45f, 0.25f, 0.40f}, 0.010f, 0.45f, 0.00f, 0.05f, 0.75f, -0.20f, 0.30f, false};
+    tracks_[0] = {EngineType::kSampleOneShot, {0.00f, 0.50f, 0.40f, 0.85f, 0.15f, 0.15f}, 0.002f, 0.35f, 0.00f, 0.05f, 0.90f,  0.00f, 0.10f, false};
+    tracks_[1] = {EngineType::kAcid303,       {0.62f, 0.55f, 0.60f, 0.22f, 0.70f, 0.00f}, 0.005f, 0.28f, 0.00f, 0.05f, 0.85f, -0.15f, 0.20f, false};
+    tracks_[2] = {EngineType::kDx7,           {0.32f, 0.75f, 0.60f, 0.40f, 0.00f, 0.30f}, 0.005f, 0.45f, 0.00f, 0.05f, 0.85f,  0.15f, 0.25f, false};
+    tracks_[3] = {EngineType::kChordPad,      {0.55f, 0.35f, 0.00f, 0.45f, 0.25f, 0.40f}, 0.010f, 0.45f, 0.00f, 0.05f, 0.75f, -0.20f, 0.30f, false};
 
     pattern_length_.store(64);
-    active_rows_count_ = 8; // Тільки 8 активних рядків за замовчуванням!
+    active_rows_count_ = 3; // Рівно 3 доріжки за замовчуванням: Kick, 303, DX7
 
-    // Мапінг 16 рядків: T0 Drums (0..3), T1 VA Synth (4..7), T2 Acid 303 (8..11), T3 FM 2-Op (12..15)
-    for (int i = 0; i < 4; ++i) { row_track_[i] = 0; row_voice_[i] = i; }
-    for (int i = 0; i < 4; ++i) { row_track_[4 + i] = 1; row_voice_[4 + i] = i; }
-    for (int i = 0; i < 4; ++i) { row_track_[8 + i] = 2; row_voice_[8 + i] = i; }
-    for (int i = 0; i < 4; ++i) { row_track_[12 + i] = 3; row_voice_[12 + i] = i; }
+    // Мапінг 1:1 — кожен рядок відповідає своєму інструменту
+    for (int i = 0; i < kTotalRows; ++i) {
+        row_track_[i] = std::min(i, 3);
+        row_voice_[i] = 0;
+    }
 
-    // Дефолтна довжина для всіх рядків: 16 кроків, усі кроки чисті та порожні (нуль хардкоду Моцарта)
+    // Дефолтна довжина для всіх рядків: 16 кроків, усі кроки чисті та порожні
     for (int r = 0; r < kTotalRows; ++r) {
         row_lengths_[r].store(16, std::memory_order_relaxed);
         for (uint32_t s = 0; s < kMaxSteps; ++s) {
             uint8_t def_note = 48;
-            if (r < 4) {
-                static constexpr uint8_t kDefDrum[4] = {36, 38, 42, 46};
-                def_note = kDefDrum[r];
-            } else if (r >= 8 && r < 12) {
-                def_note = 36; // 303 Bassline
-            } else {
-                def_note = 48 + (r % 4) * 4;
-            }
+            if (r == 0) def_note = 36;      // Kick C1
+            else if (r == 1) def_note = 36; // 303 C1
+            else if (r == 2) def_note = 60; // DX7 C3
+            else def_note = 48;
             pattern_[r][s] = {false, false, false, def_note, 0.90f, 0.60f, 100, TrigCondition::kNone, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
         }
     }

@@ -125,6 +125,10 @@ ActionRegistry::ActionRegistry() {
             c.audio.toggleStep(c.app.cursor_row, c.app.cursor_step);
         }
     }});
+    add(Action{"SEQ.REC_TOGGLE", "REC", [](UiContext& c) {
+        c.app.rec_mode = !c.app.rec_mode;
+        c.app.last_action = c.app.rec_mode ? "REC MODE" : "SEQ OVERVIEW";
+    }});
     add(Action{"SEQ.ADD_TRACK_SINGLE", "ADD TRK", [](UiContext& c) {
         const int act = c.audio.getActiveRowCount();
         if (act < kTotalRows) {
@@ -183,7 +187,6 @@ ActionRegistry::ActionRegistry() {
         if (c.app.cursor_row < c.audio.getActiveRowCount()) {
             const uint32_t next = c.audio.cycleRowLength(c.app.cursor_row);
             if (c.app.cursor_step >= static_cast<int>(next)) c.app.cursor_step = static_cast<int>(next - 1);
-            c.app.seq_page = c.app.cursor_step / static_cast<int>(kStepsPerPage);
         }
     }});
     add(Action{"SEQ.LEN_INC", "LEN+", [](UiContext& c) {
@@ -192,7 +195,6 @@ ActionRegistry::ActionRegistry() {
             uint32_t next = std::min(128u, ((len / 4u) + 1u) * 4u);
             c.audio.setRowLength(c.app.cursor_row, next);
             if (c.app.cursor_step >= static_cast<int>(next)) c.app.cursor_step = static_cast<int>(next - 1);
-            c.app.seq_page = c.app.cursor_step / static_cast<int>(kStepsPerPage);
         }
     }});
     add(Action{"SEQ.LEN_DEC", "LEN-", [](UiContext& c) {
@@ -201,37 +203,35 @@ ActionRegistry::ActionRegistry() {
             uint32_t next = len > 4u ? ((len - 1u) / 4u) * 4u : 4u;
             c.audio.setRowLength(c.app.cursor_row, next);
             if (c.app.cursor_step >= static_cast<int>(next)) c.app.cursor_step = static_cast<int>(next - 1);
-            c.app.seq_page = c.app.cursor_step / static_cast<int>(kStepsPerPage);
         }
     }});
-    add(Action{"SEQ.CYCLE_PAGE", "PAGE", [](UiContext& c) {
-        if (c.app.cursor_row < c.audio.getActiveRowCount()) {
-            const uint32_t len = c.audio.getRowLength(c.app.cursor_row);
-            const uint32_t max_p = (len + kStepsPerPage - 1) / kStepsPerPage;
-            if (max_p > 1) {
-                c.app.seq_page = (c.app.seq_page + 1) % max_p;
-                c.app.cursor_step = c.app.seq_page * static_cast<int>(kStepsPerPage) + (c.app.cursor_step % static_cast<int>(kStepsPerPage));
-                if (c.app.cursor_step >= static_cast<int>(len)) c.app.cursor_step = static_cast<int>(len - 1);
-            }
+    add(Action{"SEQ.CYCLE_PAGE", "ADD TRK", [](UiContext& c) {
+        const int act = c.audio.getActiveRowCount();
+        if (act < kTotalRows) {
+            c.audio.setActiveRowCount(act + 1);
+            c.app.cursor_row = act;
+            c.app.selected_track = act;
+            c.app.last_action = "TRACK ADDED";
         }
     }});
     add(Action{"SEQ.ADD_TRACK", "ADD", [](UiContext& c) {
         const int act = c.audio.getActiveRowCount();
         if (act < kTotalRows) {
-            c.audio.setActiveRowCount(act + kVoicesPerTrack);
+            c.audio.setActiveRowCount(act + 1);
             c.app.cursor_row = act;
-            c.app.selected_track = act / kVoicesPerTrack;
+            c.app.selected_track = act;
+            c.app.last_action = "TRACK ADDED";
         }
     }});
     add(Action{"SEQ.DEL_TRACK", "DEL", [](UiContext& c) {
         const int act = c.audio.getActiveRowCount();
-        if (act > kVoicesPerTrack) {
-            c.audio.setActiveRowCount(act - kVoicesPerTrack);
-            if (c.app.cursor_row >= act - kVoicesPerTrack) {
-                c.app.cursor_row = act - kVoicesPerTrack - 1;
+        if (act > 1) {
+            c.audio.setActiveRowCount(act - 1);
+            if (c.app.cursor_row >= act - 1) {
+                c.app.cursor_row = act - 2;
             }
-            if (c.app.selected_track >= (act - kVoicesPerTrack) / kVoicesPerTrack) {
-                c.app.selected_track = std::max(0, (act - kVoicesPerTrack) / kVoicesPerTrack - 1);
+            if (c.app.selected_track >= act - 1) {
+                c.app.selected_track = std::max(0, act - 2);
             }
         }
     }});
