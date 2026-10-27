@@ -93,6 +93,11 @@ public:
     const SampleBuffer& drumSlot(int slot) const;
     void setDrumSlot(int slot, SampleBuffer buf);
 
+    // Семпли окремих треків (1..16 треків)
+    const SampleBuffer& trackSample(int track) const;
+    SampleBuffer& trackSample(int track);
+    void setTrackSample(int track, SampleBuffer buf);
+
     // --- 4. Live Looper & Slice Assignment ---
     void assignTrimmedToSlot(int slot, float trim_st = 0.0f, float trim_end = 1.0f);
     void sliceToDrumSlots(float trim_st = 0.0f, float trim_end = 1.0f);
@@ -114,6 +119,7 @@ private:
     int active_slices_ = 16;
 
     std::array<SampleBuffer, kDrumSlots> drum_slots_{};
+    std::array<SampleBuffer, 16> track_samples_{};
 };
 
 } // namespace groovebox

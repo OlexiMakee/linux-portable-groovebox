@@ -90,7 +90,15 @@ struct AppModel {
     // Модальне вікно арпеджиатора та випадаюче меню вибору рушія
     bool arp_modal_open = false;
     bool engine_menu_open = false;
+    bool engine_menu_is_add = false;
     int engine_menu_sel = 0;
+
+    // Семпл-браузер (доступ до файлової системи)
+    bool sample_browser_open = false;
+    int sample_browser_target_track = 0;
+    std::string sample_browser_dir;
+    std::vector<std::string> sample_browser_items;
+    int sample_browser_sel = 0;
 
     // Короткий статус останньої дії (для HUD)
     std::string last_action = "READY";

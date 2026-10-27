@@ -31,6 +31,9 @@ SamplerEngine::SamplerEngine() {
         }
         drum_slots_[i].loaded = true;
     }
+    for (int i = 0; i < 16; ++i) {
+        track_samples_[i] = drum_slots_[i % kDrumSlots];
+    }
 }
 
 void SamplerEngine::armRecording() {
@@ -341,6 +344,23 @@ void SamplerEngine::sliceToDrumSlots(float trim_st, float trim_end) {
         buf.loaded = true;
         drum_slots_[i] = std::move(buf);
     }
+}
+
+const SampleBuffer& SamplerEngine::trackSample(int track) const {
+    int t = std::clamp(track, 0, 15);
+    if (track_samples_[t].loaded) return track_samples_[t];
+    if (drum_slots_[t % kDrumSlots].loaded) return drum_slots_[t % kDrumSlots];
+    return rec_buffer_;
+}
+
+SampleBuffer& SamplerEngine::trackSample(int track) {
+    int t = std::clamp(track, 0, 15);
+    return track_samples_[t];
+}
+
+void SamplerEngine::setTrackSample(int track, SampleBuffer buf) {
+    int t = std::clamp(track, 0, 15);
+    track_samples_[t] = std::move(buf);
 }
 
 } // namespace groovebox
