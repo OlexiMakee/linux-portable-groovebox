@@ -107,10 +107,6 @@ Param engineParam(int idx) {
                 int a = std::clamp(static_cast<int>(tp.p[4] * 31.99f) + 1, 1, 32);
                 return "ALGO " + std::to_string(a);
             }
-        } else if (tp.engine == EngineType::kDrumRack && idx == 0) {
-            static const char* kKits[] = {"TR-808", "TR-909", "TR-707", "LINN", "DMX", "CR-78", "SP1200", "TR-606"};
-            int k = std::clamp(static_cast<int>(tp.p[0] * 7.99f), 0, 7);
-            return std::string(kKits[k]);
         }
         return fmt127(tp.p[idx]);
     };
@@ -127,23 +123,6 @@ Param engineParam(int idx) {
                 c.audio.setTrackParams(t, tp);
                 return;
             }
-        } else if (tp.engine == EngineType::kDrumRack && idx == 0) {
-            int cur = std::clamp(static_cast<int>(tp.p[0] * 7.99f), 0, 7);
-            int next = std::clamp(cur + dir, 0, 7);
-            tp.p[0] = static_cast<float>(next) / 7.0f;
-            static const char* kKitDirs[] = {
-                "res/samples/drums/01_tr808",
-                "res/samples/drums/02_tr909",
-                "res/samples/drums/03_tr707",
-                "res/samples/drums/04_linndrum",
-                "res/samples/drums/05_oberheim_dmx",
-                "res/samples/drums/06_cr78",
-                "res/samples/drums/07_sp1200",
-                "res/samples/drums/08_tr606"
-            };
-            c.audio.sampler().loadDrumKit(kKitDirs[next]);
-            c.audio.setTrackParams(t, tp);
-            return;
         }
         c.audio.adjustTrackParam(t, idx, dir * (coarse ? 0.10f : 0.02f));
     };
@@ -251,7 +230,6 @@ ParamRegistry::ParamRegistry() {
         p.id = "TRK.WAVE_SAMPLE";
         p.dyn_label = [](const UiContext& c) {
             const auto tp = c.audio.getTrackParams(trk(c, -1));
-            if (tp.engine == EngineType::kDrumRack) return std::string("KIT");
             if (tp.engine == EngineType::kDx7) return std::string("PATCH");
             if (tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler) {
                 return std::string("SAMPLE");
@@ -261,11 +239,6 @@ ParamRegistry::ParamRegistry() {
         p.label = "WAVE";
         p.value = [](const UiContext& c) -> std::string {
             const auto tp = c.audio.getTrackParams(trk(c, -1));
-            if (tp.engine == EngineType::kDrumRack) {
-                static const char* kKits[] = {"TR-808", "TR-909", "TR-707", "LINN", "DMX", "CR-78", "SP1200", "TR-606"};
-                int k = std::clamp(static_cast<int>(tp.p[0] * 7.99f), 0, 7);
-                return std::string(kKits[k]);
-            }
             if (tp.engine == EngineType::kDx7) {
                 int p_idx = std::clamp(static_cast<int>(tp.p[0] * (c.audio.dx7().patchCount() - 1) + 0.5f), 0, c.audio.dx7().patchCount() - 1);
                 return c.audio.dx7().getPatch(p_idx).name;
@@ -282,43 +255,30 @@ ParamRegistry::ParamRegistry() {
         };
         p.norm = [](const UiContext& c) {
             const auto tp = c.audio.getTrackParams(trk(c, -1));
-            return (tp.engine == EngineType::kDrumRack || tp.engine == EngineType::kDx7 ||
+            return (tp.engine == EngineType::kDx7 ||
                     tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler) ? tp.p[0] : tp.p[5];
         };
         p.step = [](UiContext& c, int dir, bool) {
             const int t = trk(c, -1);
             auto tp = c.audio.getTrackParams(t);
-            if (tp.engine == EngineType::kDrumRack) {
-                int cur = std::clamp(static_cast<int>(tp.p[0] * 7.99f), 0, 7);
-                int next = std::clamp(cur + dir, 0, 7);
-                tp.p[0] = static_cast<float>(next) / 7.0f;
-                static const char* kKitDirs[] = {
-                    "res/samples/drums/01_tr808",
-                    "res/samples/drums/02_tr909",
-                    "res/samples/drums/03_tr707",
-                    "res/samples/drums/04_linndrum",
-                    "res/samples/drums/05_oberheim_dmx",
-                    "res/samples/drums/06_cr78",
-                    "res/samples/drums/07_sp1200",
-                    "res/samples/drums/08_tr606"
-                };
-                c.audio.sampler().loadDrumKit(kKitDirs[next]);
-            } else if (tp.engine == EngineType::kDx7) {
+            if (tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler) {
+                c.app.sample_browser_target_track = t;
+                ActionRegistry::instance().run("SAMPLE_BROWSER.OPEN", c);
+                return;
+            }
+            if (tp.engine == EngineType::kDx7) {
                 int total = c.audio.dx7().patchCount();
                 if (total > 0) {
                     int cur = std::clamp(static_cast<int>(tp.p[0] * (total - 1) + 0.5f), 0, total - 1);
                     int next = std::clamp(cur + dir, 0, total - 1);
                     tp.p[0] = static_cast<float>(next) / static_cast<float>(total - 1);
+                    c.audio.setTrackParams(t, tp);
                 }
-            } else if (tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler) {
-                c.app.sample_browser_target_track = t;
-                ActionRegistry::instance().run("SAMPLE_BROWSER.OPEN", c);
                 return;
-            } else {
-                int cur = std::clamp(static_cast<int>(tp.p[5] * 4.99f), 0, 4);
-                int next = (cur + dir + 5) % 5;
-                tp.p[5] = static_cast<float>(next) / 4.0f;
             }
+            int cur = std::clamp(static_cast<int>(tp.p[5] * 4.99f), 0, 4);
+            int next = (cur + dir + 5) % 5;
+            tp.p[5] = static_cast<float>(next) / 4.0f;
             c.audio.setTrackParams(t, tp);
         };
         add(std::move(p));
@@ -839,12 +799,11 @@ ParamRegistry::ParamRegistry() {
             s.gate_len = std::clamp(s.gate_len + dir * 0.10f, 0.10f, 2.0f);
         }));
     add(stepParam("STEP.SLIDE", "SLIDE",
-        [](const SequencerStep& s, const TrackParameters& tp) {
-            if (tp.engine == EngineType::kDrumSyn) return std::string("N/A (DRUM)");
+        [](const SequencerStep& s, const TrackParameters&) {
             return std::string(s.slide ? "ON" : "OFF");
         },
-        [](SequencerStep& s, const TrackParameters& tp, int, bool) {
-            if (tp.engine != EngineType::kDrumSyn) s.slide = !s.slide;
+        [](SequencerStep& s, const TrackParameters&, int, bool) {
+            s.slide = !s.slide;
         }));
     add(stepParam("STEP.ATK", "ATTACK",
         [](const SequencerStep& s, const TrackParameters& tp) { return fmt127(lockedOr(s.attack, tp.attack)) + (s.attack >= 0 ? " L" : ""); },

@@ -253,6 +253,8 @@ void InputRouter::processInput(UiContext& ctx) {
     if (ctx.app.sample_browser_open) {
         if (in.up_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.UP", ctx);
         else if (in.down_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.DOWN", ctx);
+        else if (in.left_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.PARENT", ctx);
+        else if (in.right_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.CONFIRM", ctx);
         else if (in.a_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.CONFIRM", ctx);
         else if (in.b_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.CLOSE", ctx);
         return;
