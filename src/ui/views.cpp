@@ -17,6 +17,7 @@ constexpr int kListRowH = 13;
 constexpr int kPopupRowH = 10;
 
 int visibleRows(const GridSpec& s, Rect area) {
+    if (s.id == ViewId::kMix || s.id == ViewId::kFx) return 7;
     switch (s.style) {
         case GridStyle::kTable: return std::max(1, (area.h - kHeaderH) / kTableRowH);
         case GridStyle::kList:  return std::max(1, (area.h - kHeaderH - 2) / kListRowH);
@@ -150,16 +151,16 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
 
     auto rows = resolveRows(c);
     const int total_rows = static_cast<int>(rows.size());
-    // У вкладці MIX показуємо тільки стільки смуг, скільки реально існує + рядок Master/Bus
-    const int act_tracks = (spec_.id == ViewId::kMix) ? std::min(total_rows - 1, c.audio.getActiveRowCount()) : total_rows;
-    const int rows_to_draw = (spec_.id == ViewId::kMix) ? act_tracks + 1 : total_rows;
-
     const int sel_r = rowOf(c);
     const int sel_c = colOf(c);
 
+    const bool has_pinned_bottom = (spec_.id == ViewId::kMix || spec_.id == ViewId::kFx);
+    const int vis = has_pinned_bottom ? 7 : visibleRows(spec_, area);
+    const int scroll = std::clamp(c.app.grid_scroll[static_cast<int>(spec_.id)], 0, std::max(0, total_rows - vis));
+    const int rows_to_draw = std::min(vis, total_rows - scroll);
+
     for (int i = 0; i < rows_to_draw; ++i) {
-        // Для MIX останній рядок — завжди MST (індекс total_rows - 1)
-        const int r = (spec_.id == ViewId::kMix && i == act_tracks) ? (total_rows - 1) : i;
+        const int r = scroll + i;
         const int y = table_y0 + i * kTableRowH;
         cv.text(box.x + 4, y + 8, rows[r].first, r == sel_r ? spec_.accent : palette::kTextDim);
 
@@ -179,32 +180,43 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
         }
     }
 
-    if (spec_.id == ViewId::kMix) {
-        // Нижня панель індикації: вертикальні міні-VU для кожного треку зліва направо + квадратний Scope (24x24) + Master L/R VU
-        const int lower_y = table_y0 + rows_to_draw * kTableRowH + 4;
-        const int lower_h = (area.y + area.h) - lower_y - 2;
+    // Тонка смуга вертикального скролу для таблиці
+    if (total_rows > vis) {
+        const int bar_x = area.x + area.w - 3;
+        const int bar_y0 = table_y0;
+        const int bar_h = vis * kTableRowH;
+        cv.fill(bar_x, bar_y0, 2, bar_h, palette::kPanelBg);
+        const int thumb_h = std::max(8, bar_h * vis / total_rows);
+        const int thumb_y = bar_y0 + (bar_h - thumb_h) * scroll / std::max(1, total_rows - vis);
+        cv.fill(bar_x, thumb_y, 2, thumb_h, spec_.accent);
+    }
 
-        if (lower_h >= 16) {
-            // 1. Вертикальні міні-VU для кожної доріжки зліва направо
-            for (int t = 0; t < act_tracks; ++t) {
-                const int mx = area.x + 8 + t * 15;
-                char tb[8];
-                std::snprintf(tb, sizeof(tb), "T%d", t + 1);
-                cv.text(mx, lower_y + lower_h - 6, tb, palette::kTextDim);
-                widgets::verticalMeter(cv, Rect{mx, lower_y, 9, lower_h - 8}, c.tel.track_levels[t]);
-            }
+    // Закріплений знизу над HUD лейаут індикації (Scope + VU для кожного треку + Master)
+    if (has_pinned_bottom) {
+        const int lower_y = area.y + area.h - 26;
+        cv.line(area.x, lower_y, area.x + area.w - 1, lower_y, palette::kGridDim);
+        cv.fill(area.x, lower_y + 1, area.w, 25, palette::kPanelBg);
 
-            // 2. Справа: Master L та R вертикальні міні-VU
-            const int mst_x = area.x + area.w - 22;
-            widgets::verticalMeter(cv, Rect{mst_x, lower_y, 8, lower_h - 8}, c.tel.vu_left);
-            widgets::verticalMeter(cv, Rect{mst_x + 10, lower_y, 8, lower_h - 8}, c.tel.vu_right);
-            cv.text(mst_x + 3, lower_y + lower_h - 6, "M", palette::kAccentOrange);
+        // 1. Квадратний міні-осцилограф висотою 22px
+        widgets::scope(cv, Rect{area.x + 4, lower_y + 2, 22, 22}, c.tel.scope_samples, palette::kAccentCyan);
 
-            // 3. Ліворуч від Master шкали: маленький квадратний осцилограф (без напису SCOPE!)
-            const int sc_dim = std::min(32, lower_h - 8);
-            const int sc_x = mst_x - sc_dim - 10;
-            widgets::scope(cv, Rect{sc_x, lower_y, sc_dim, sc_dim}, c.tel.scope_samples, palette::kAccentCyan);
+        // 2. Компактні індикатори рівнів для ВСІХ активних треків (висота відповідає осцилографу 22px)
+        const int act_tracks = c.audio.getActiveRowCount();
+        for (int t = 0; t < act_tracks && t < kMaxTracks; ++t) {
+            const int mx = area.x + 32 + t * 14;
+            if (mx + 10 >= area.x + area.w - 26) break; // Захист від наїзду на Master
+            widgets::verticalMeter(cv, Rect{mx, lower_y + 2, 8, 14}, c.tel.track_levels[t]);
+            char tb[4];
+            std::snprintf(tb, sizeof(tb), "%d", t + 1);
+            const bool is_muted = c.audio.getTrackParams(t).muted;
+            cv.text(mx + 1, lower_y + 17, tb, is_muted ? palette::kGridDim : palette::kTextDim);
         }
+
+        // 3. Справа: Master L та R вертикальні міні-VU
+        const int mst_x = area.x + area.w - 24;
+        widgets::verticalMeter(cv, Rect{mst_x, lower_y + 2, 8, 14}, c.tel.vu_left);
+        widgets::verticalMeter(cv, Rect{mst_x + 10, lower_y + 2, 8, 14}, c.tel.vu_right);
+        cv.text(mst_x + 1, lower_y + 17, "MST", palette::kAccentOrange);
     }
 }
 
@@ -285,7 +297,7 @@ void GridView::renderList(Canvas& cv, const UiContext& c, Rect area, bool popup)
 // =====================================================================================
 namespace {
 
-const char* voiceLabel(EngineType e, int voice) {
+[[maybe_unused]] const char* voiceLabel(EngineType e, int voice) {
     (void)voice;
     switch (e) {
         case EngineType::kSampleOneShot: return "SMP";
@@ -515,12 +527,13 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
     // Заголовок: лише контекст курсора (транспорт/BPM — у HUD, підказки — у HUD)
     char hdr[96];
     if (on_add) {
-        std::snprintf(hdr, sizeof(hdr), "[+] NEW TRACK SLOT (%d/%d ROWS USED)", active, kTotalRows);
+        std::snprintf(hdr, sizeof(hdr), "[+] ADD TRACK (%d/%d TRACKS ACTIVE) | [A] SELECT ENGINE", active, kTotalRows);
         cv.text(area.x + 4, area.y + 3, hdr, palette::kAccentCyan);
     } else {
         const char* trig = !st.enabled ? "---" : (st.is_param_trig ? "P-LOCK" : "NOTE");
-        std::snprintf(hdr, sizeof(hdr), "R%02d %s | ST%03d %s%d %s%s | L%u",
-                      cur_r + 1, getEngineTypeName(tp.engine), c.app.cursor_step + 1,
+        std::string trk_nm = c.audio.getTrackName(cur_r);
+        std::snprintf(hdr, sizeof(hdr), "R%02d [%s: %s] | ST%03d %s%d %s%s | L%u",
+                      cur_r + 1, trk_nm.c_str(), getEngineTypeName(tp.engine), c.app.cursor_step + 1,
                       kNoteNames[st.note % 12], st.note / 12 - 1, trig,
                       (st.slide && tp.engine != EngineType::kDrumSyn) ? " SLD" : "",
                       cur_len);
@@ -546,9 +559,10 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
         if (v == 0 && r > 0) cv.line(area.x + 2, y - 1, area.x + area.w - 3, y - 1, palette::kGridDim);
         if (is_cur) cv.fill(area.x + 2, y, 24, row_h - 1, palette::kHeaderSel);
 
-        // Одна (не дубльована) мітка рядка: номер + голос
         char lbl[8];
-        std::snprintf(lbl, sizeof(lbl), "%02d%s", r + 1, voiceLabel(trk.engine, v));
+        std::string trk_nm = c.audio.getTrackName(t);
+        if (trk_nm.length() > 3) trk_nm = trk_nm.substr(0, 3);
+        std::snprintf(lbl, sizeof(lbl), "%02d%s", r + 1, trk_nm.c_str());
         const ColorRGB lc = is_cur ? palette::kAccentOrange : (trk.muted ? palette::kGridDim : palette::kTextDim);
         cv.text(area.x + 4, y + (row_h - 5) / 2, lbl, lc);
 

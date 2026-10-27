@@ -324,7 +324,7 @@ void UiShell::render(
         cv.fill(mx, my, mw, mh, palette::kPanelBg);
         cv.rect(mx, my, mw, mh, palette::kAccentCyan);
         cv.fill(mx + 1, my + 1, mw - 2, 10, palette::kHeaderSel);
-        cv.text(mx + 4, my + 3, "SELECT SYNTH ENGINE", palette::kAccentCyan);
+        cv.text(mx + 4, my + 3, app.engine_menu_is_add ? "ADD TRACK: SELECT ENGINE" : "EDIT TRACK: SELECT ENGINE", palette::kAccentCyan);
         for (int e = 0; e < static_cast<int>(EngineType::kCount); ++e) {
             const int ey = my + 14 + e * 11;
             const bool sel = (e == app.engine_menu_sel);
@@ -332,8 +332,55 @@ void UiShell::render(
                 cv.fill(mx + 3, ey, mw - 6, 10, palette::kHeaderSel);
                 cv.rect(mx + 3, ey, mw - 6, 10, palette::kAccentCyan);
             }
-            cv.text(mx + 8, ey + 2, getEngineTypeName(static_cast<EngineType>(e)), sel ? palette::kAccentCyan : palette::kTextMain);
+            std::string label = getEngineTypeName(static_cast<EngineType>(e));
+            if (static_cast<EngineType>(e) == EngineType::kSampleOneShot) label = "SAMPLER (ONE-SHOT)";
+            else if (static_cast<EngineType>(e) == EngineType::kSliceSampler) label = "LOOP SLICER";
+            cv.text(mx + 8, ey + 2, label, sel ? palette::kAccentCyan : palette::kTextMain);
         }
+    }
+
+    // Модальне вікно вибору семплів (Sample Pool & Filesystem)
+    if (app.sample_browser_open) {
+        const int bw = 260;
+        const int bh = 144;
+        const int bx = (logical_w_ - bw) / 2;
+        const int by = (logical_h_ - bh) / 2;
+
+        cv.fill(bx, by, bw, bh, palette::kPanelBg);
+        cv.rect(bx, by, bw, bh, palette::kAccentCyan);
+        cv.fill(bx + 1, by + 1, bw - 2, 11, palette::kHeaderSel);
+
+        std::string disp_dir = app.sample_browser_dir;
+        auto pos = disp_dir.find("samples");
+        if (pos != std::string::npos) disp_dir = disp_dir.substr(pos);
+        char hdr[80];
+        std::snprintf(hdr, sizeof(hdr), "SAMPLE POOL: %s", disp_dir.c_str());
+        cv.text(bx + 4, by + 3, hdr, palette::kAccentCyan);
+
+        const int max_vis = 8;
+        const int total_items = static_cast<int>(app.sample_browser_items.size());
+        int scroll = 0;
+        if (app.sample_browser_sel >= max_vis) {
+            scroll = app.sample_browser_sel - max_vis + 1;
+        }
+        scroll = std::clamp(scroll, 0, std::max(0, total_items - max_vis));
+
+        for (int i = 0; i < max_vis && scroll + i < total_items; ++i) {
+            const int idx = scroll + i;
+            const int iy = by + 16 + i * 13;
+            const bool sel = (idx == app.sample_browser_sel);
+            if (sel) {
+                cv.fill(bx + 3, iy, bw - 6, 12, palette::kHeaderSel);
+                cv.rect(bx + 3, iy, bw - 6, 12, palette::kAccentCyan);
+            }
+            const std::string& item = app.sample_browser_items[idx];
+            bool is_dir = (item.rfind("[DIR] ", 0) == 0 || item.rfind("[..]", 0) == 0);
+            ColorRGB col = sel ? palette::kAccentCyan : (is_dir ? palette::kAccentOrange : palette::kTextMain);
+            cv.text(bx + 8, iy + 3, item, col);
+        }
+
+        cv.line(bx + 2, by + bh - 14, bx + bw - 3, by + bh - 14, palette::kGridDim);
+        cv.text(bx + 6, by + bh - 10, "[A] SELECT/ENTER   [B] BACK/CLOSE", palette::kTextDim);
     }
 
     // 4. Нижній інформаційний рядок (HUD)

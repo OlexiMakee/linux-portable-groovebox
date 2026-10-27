@@ -20,9 +20,11 @@ void setupAppLayout(UiShell& shell) {
         synth_spec.accent = palette::kAccentCyan;
         synth_spec.tab_title = [](const UiContext&) { return "SYNTH"; };
         synth_spec.header = [](const UiContext& c) {
-            char b[64];
+            char b[80];
             const auto tp = c.audio.getTrackParams(c.app.selected_track);
-            std::snprintf(b, sizeof(b), "SYNTH TRK T%d [%s]", c.app.selected_track + 1, getEngineTypeName(tp.engine));
+            std::string nm = c.audio.getTrackName(c.app.selected_track);
+            std::snprintf(b, sizeof(b), "SYNTH [T%02d/%02d: %s - %s] | < SEL+X/Y >",
+                          c.app.selected_track + 1, c.audio.getActiveRowCount(), nm.c_str(), getEngineTypeName(tp.engine));
             return std::string(b);
         };
         synth_spec.dynamic_rows = [](const UiContext& c) -> std::vector<GridRow> {
@@ -131,17 +133,28 @@ void setupAppLayout(UiShell& shell) {
         mix_spec.style = GridStyle::kTable;
         mix_spec.accent = palette::kAccentOrange;
         mix_spec.tab_title = [](const UiContext&) { return "MIX/FX"; };
-        mix_spec.header = [](const UiContext&) { return "MIXER CHANNELS & MASTER"; };
-        mix_spec.on_focus = [](UiContext& c, int r) {
-            if (r >= 0 && r < 4) c.app.selected_track = r;
+        mix_spec.header = [](const UiContext& c) {
+            char b[64];
+            std::snprintf(b, sizeof(b), "MIXER [%02d CHANNELS ACTIVE] & BUS/MST", c.audio.getActiveRowCount());
+            return std::string(b);
         };
-        mix_spec.rows = {
-            {"T1",  {"T1.LVL", "T1.PAN", "T1.DLY", "T1.REV", "T1.MUTE"}},
-            {"T2",  {"T2.LVL", "T2.PAN", "T2.DLY", "T2.REV", "T2.MUTE"}},
-            {"T3",  {"T3.LVL", "T3.PAN", "T3.DLY", "T3.REV", "T3.MUTE"}},
-            {"T4",  {"T4.LVL", "T4.PAN", "T4.DLY", "T4.REV", "T4.MUTE"}},
-            {"BUS", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "FX.CHR_RATE"}},
-            {"MST", {"MST.VOL", "DLY.FBK", "REV.RET", "MST.BPM"}}
+        mix_spec.on_focus = [](UiContext& c, int r) {
+            if (r >= 0 && r < c.audio.getActiveRowCount()) c.app.selected_track = r;
+        };
+        mix_spec.dynamic_rows = [](const UiContext& c) -> std::vector<GridRow> {
+            std::vector<GridRow> rows;
+            const int count = c.audio.getActiveRowCount();
+            for (int t = 0; t < count; ++t) {
+                std::string nm = c.audio.getTrackName(t);
+                if (nm.length() > 5) nm = nm.substr(0, 5);
+                char title[16];
+                std::snprintf(title, sizeof(title), "%02d:%s", t + 1, nm.c_str());
+                std::string pre = "T" + std::to_string(t + 1) + ".";
+                rows.push_back({title, {pre + "LVL", pre + "PAN", pre + "DLY", pre + "REV", pre + "MUTE"}});
+            }
+            rows.push_back({"BUS", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "FX.CHR_RATE"}});
+            rows.push_back({"MST", {"MST.VOL", "DLY.FBK", "REV.RET", "MST.BPM"}});
+            return rows;
         };
         shell.registerView(std::make_unique<GridView>(std::move(mix_spec)));
     }
