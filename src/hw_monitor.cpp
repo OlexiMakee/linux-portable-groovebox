@@ -75,7 +75,7 @@ bool HardwareMonitor::requestUsbRoleSwitch(const std::string& target_role) {
     }
     std::string cmd;
     if (target_role == "host") {
-        cmd = "modprobe snd-usb-audio autoclock=0 lowlatency=0 2>/dev/null; modprobe snd-rawmidi 2>/dev/null; modprobe snd-seq-midi 2>/dev/null; echo 4 > /proc/irq/26/smp_affinity 2>/dev/null; ";
+        cmd = "modprobe snd-usb-audio autoclock=0 lowlatency=0 2>/dev/null; modprobe snd-rawmidi 2>/dev/null; modprobe snd-seq-midi 2>/dev/null; ";
         if (!prof.gadget_conf_path.empty()) cmd += "echo 'USB_MODE=disabled' > " + prof.gadget_conf_path + " 2>/dev/null; ";
         cmd += "echo '' > /sys/kernel/config/usb_gadget/cdc/UDC 2>/dev/null; ";
         cmd += "echo host > " + prof.role_switch_path + " 2>/dev/null; ";
@@ -85,11 +85,15 @@ bool HardwareMonitor::requestUsbRoleSwitch(const std::string& target_role) {
         if (!prof.vbus_off_cmd.empty()) cmd += prof.vbus_off_cmd + " 2>/dev/null; ";
         if (!prof.gadget_conf_path.empty()) cmd += "echo 'USB_MODE=cdc' > " + prof.gadget_conf_path + " 2>/dev/null; ";
         cmd += "echo device > " + prof.role_switch_path + " 2>/dev/null; ";
-        cmd += "/usr/bin/usbgadget start cdc 2>/dev/null; systemctl start sshd.service 2>/dev/null; ";
+        // Safe gadget init for ROCKNIX without blocking on systemctl
+        cmd += "which usbgadget >/dev/null 2>&1 && usbgadget start cdc 2>/dev/null; ";
+        cmd += "which /etc/init.d/S50sshd >/dev/null 2>&1 && /etc/init.d/S50sshd restart 2>/dev/null; ";
     }
-    cmd = "(" + cmd + ") &";
-    int rc = std::system(cmd.c_str());
-    (void)rc;
+    // Launch in detached thread to guarantee zero UI frame drops or blocking
+    std::thread([cmd]() {
+        int rc = std::system(cmd.c_str());
+        (void)rc;
+    }).detach();
 #endif
     {
         std::lock_guard<std::mutex> lock(mutex_);

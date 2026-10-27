@@ -107,10 +107,13 @@ Keymap::Keymap() {
     bind(ViewId::kMix, Layer::kBase, Button::kY, Gesture::kPress, "MUTE.CUR");
 
     // =========================================================================
-    // 6. ОСЦИЛОГРАФ (ViewId::kScope)
+    // 6. РОБОЧА СТАНЦІЯ СЕМПЛЮВАННЯ (ViewId::kSample)
     // =========================================================================
-    bind(ViewId::kScope, Layer::kBase, Button::kA, Gesture::kPress, "MUTE.CUR");
-    bind(ViewId::kScope, Layer::kBase, Button::kB, Gesture::kPress, "VIEW.BACK");
+    bind(ViewId::kSample, Layer::kBase, Button::kB, Gesture::kPress, "PARAM.INC");
+    bind(ViewId::kSample, Layer::kBase, Button::kA, Gesture::kPress, "PARAM.DEC");
+    bind(ViewId::kSample, Layer::kBase, Button::kX, Gesture::kPress, "PARAM.DEC_FAST");
+    bind(ViewId::kSample, Layer::kBase, Button::kY, Gesture::kPress, "PARAM.INC_FAST");
+    bind(ViewId::kSample, Layer::kSelect, Button::kB, Gesture::kPress, "VIEW.BACK");
 
     // =========================================================================
     // 7. СИСТЕМНІ НАЛАШТУВАННЯ (ViewId::kSys)
