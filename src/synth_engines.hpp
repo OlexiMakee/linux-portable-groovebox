@@ -43,9 +43,10 @@ inline constexpr const char* getEngineTypeName(EngineType type) {
 // Кожен движок має 6 уніфікованих нормалізованих параметрів (0.0f .. 1.0f),
 // назви яких автоматично підтягуються в інтерфейс (нуль хардкоду в UI!)
 inline constexpr int kParamsPerTrack = 6;
-inline constexpr int kTotalRows = 16;         // 4 доріжки x 4 голоси
-inline constexpr int kTracksCount = 4;
-inline constexpr int kVoicesPerTrack = 4;
+inline constexpr int kTotalRows = 16;
+inline constexpr int kMaxTracks = 16;
+inline constexpr int kTracksCount = 16;
+inline constexpr int kVoicesPerTrack = 1;
 inline constexpr uint32_t kMaxSteps = 128;
 inline constexpr uint32_t kStepsPerPage = 32; // 32 видимих кроки на сторінку (велика читабельна сітка 7px)
 inline constexpr uint32_t kMaxPages = 4;      // До 4 сторінок: P1 (0..31), P2 (32..63), P3 (64..95), P4 (96..127)
@@ -203,6 +204,7 @@ struct LfoParameters {
 };
 
 struct TrackParameters {
+    char name[16] = "";
     EngineType engine = EngineType::kVaMono;
     std::array<float, kParamsPerTrack> p{0.55f, 0.35f, 0.50f, 0.35f, 0.30f, 0.40f};
     float attack = 0.005f;  // 5ms

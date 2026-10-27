@@ -99,22 +99,43 @@ void AudioEngine::initDefaultPattern() {
     // T2: ACID 303 BASSLINE (Legato Slide, Accent)
     // T3: YAMAHA DX7 6-OP (ROM1A E.PIANO 1 / BASS 1 / LEAD)
     // T4: CHORD PAD (4-Voice Polyphonic Detuned Pad)
-    tracks_[0] = {EngineType::kSampleOneShot, {0.00f, 0.50f, 0.40f, 0.85f, 0.15f, 0.15f}, 0.002f, 0.35f, 0.00f, 0.05f, 0.90f,  0.00f, 0.10f, false};
-    tracks_[1] = {EngineType::kAcid303,       {0.62f, 0.55f, 0.60f, 0.22f, 0.70f, 0.00f}, 0.005f, 0.28f, 0.00f, 0.05f, 0.85f, -0.15f, 0.20f, false};
-    tracks_[2] = {EngineType::kDx7,           {0.32f, 0.75f, 0.60f, 0.40f, 0.00f, 0.30f}, 0.005f, 0.45f, 0.00f, 0.05f, 0.85f,  0.15f, 0.25f, false};
-    tracks_[3] = {EngineType::kChordPad,      {0.55f, 0.35f, 0.00f, 0.45f, 0.25f, 0.40f}, 0.010f, 0.45f, 0.00f, 0.05f, 0.75f, -0.20f, 0.30f, false};
+    tracks_[0] = TrackParameters{};
+    std::snprintf(tracks_[0].name, sizeof(tracks_[0].name), "KICK 808");
+    tracks_[0].engine = EngineType::kSampleOneShot;
+    tracks_[0].p = {0.00f, 0.50f, 0.40f, 0.85f, 0.15f, 0.15f};
+    tracks_[0].attack = 0.002f; tracks_[0].decay = 0.35f; tracks_[0].sustain = 0.00f; tracks_[0].release = 0.05f;
+    tracks_[0].level = 0.90f; tracks_[0].pan = 0.00f; tracks_[0].delay_send = 0.10f; tracks_[0].reverb_send = 0.05f;
+
+    tracks_[1] = TrackParameters{};
+    std::snprintf(tracks_[1].name, sizeof(tracks_[1].name), "303 BASS");
+    tracks_[1].engine = EngineType::kAcid303;
+    tracks_[1].p = {0.62f, 0.55f, 0.60f, 0.22f, 0.70f, 0.00f};
+    tracks_[1].attack = 0.005f; tracks_[1].decay = 0.28f; tracks_[1].sustain = 0.00f; tracks_[1].release = 0.05f;
+    tracks_[1].level = 0.85f; tracks_[1].pan = -0.15f; tracks_[1].delay_send = 0.20f; tracks_[1].reverb_send = 0.15f;
+
+    tracks_[2] = TrackParameters{};
+    std::snprintf(tracks_[2].name, sizeof(tracks_[2].name), "DX7 KEYS");
+    tracks_[2].engine = EngineType::kDx7;
+    tracks_[2].p = {0.32f, 0.75f, 0.60f, 0.40f, 0.00f, 0.30f};
+    tracks_[2].attack = 0.005f; tracks_[2].decay = 0.45f; tracks_[2].sustain = 0.00f; tracks_[2].release = 0.05f;
+    tracks_[2].level = 0.85f; tracks_[2].pan = 0.15f; tracks_[2].delay_send = 0.25f; tracks_[2].reverb_send = 0.20f;
+
+    for (int i = 3; i < kMaxTracks; ++i) {
+        tracks_[i] = TrackParameters{};
+        std::snprintf(tracks_[i].name, sizeof(tracks_[i].name), "TRACK %02d", i + 1);
+    }
 
     pattern_length_.store(64);
     active_rows_count_ = 3; // Рівно 3 доріжки за замовчуванням: Kick, 303, DX7
 
     // Мапінг 1:1 — кожен рядок відповідає своєму інструменту
-    for (int i = 0; i < kTotalRows; ++i) {
-        row_track_[i] = std::min(i, 3);
+    for (int i = 0; i < kMaxTracks; ++i) {
+        row_track_[i] = static_cast<uint8_t>(i);
         row_voice_[i] = 0;
     }
 
     // Дефолтна довжина для всіх рядків: 16 кроків, усі кроки чисті та порожні
-    for (int r = 0; r < kTotalRows; ++r) {
+    for (int r = 0; r < kMaxTracks; ++r) {
         row_lengths_[r].store(16, std::memory_order_relaxed);
         for (uint32_t s = 0; s < kMaxSteps; ++s) {
             uint8_t def_note = 48;
@@ -129,17 +150,17 @@ void AudioEngine::initDefaultPattern() {
 
 TrackParameters AudioEngine::getTrackParams(int track) const {
     std::lock_guard<std::mutex> lock(state_mutex_);
-    return tracks_[std::clamp(track, 0, 3)];
+    return tracks_[std::clamp(track, 0, kMaxTracks - 1)];
 }
 
 void AudioEngine::setTrackParams(int track, const TrackParameters& tp) {
     std::lock_guard<std::mutex> lock(state_mutex_);
-    tracks_[std::clamp(track, 0, 3)] = tp;
+    tracks_[std::clamp(track, 0, kMaxTracks - 1)] = tp;
 }
 
 void AudioEngine::cycleTrackEngine(int track, int dir) {
     std::lock_guard<std::mutex> lock(state_mutex_);
-    auto& tr = tracks_[std::clamp(track, 0, 3)];
+    auto& tr = tracks_[std::clamp(track, 0, kMaxTracks - 1)];
     int count = static_cast<int>(EngineType::kCount);
     int next = (static_cast<int>(tr.engine) + dir + count) % count;
     tr.engine = static_cast<EngineType>(next);
@@ -147,10 +168,47 @@ void AudioEngine::cycleTrackEngine(int track, int dir) {
 
 void AudioEngine::adjustTrackParam(int track, int param_idx, float delta) {
     std::lock_guard<std::mutex> lock(state_mutex_);
-    auto& tr = tracks_[std::clamp(track, 0, 3)];
+    auto& tr = tracks_[std::clamp(track, 0, kMaxTracks - 1)];
     if (param_idx >= 0 && param_idx < kParamsPerTrack) {
         tr.p[param_idx] = std::clamp(tr.p[param_idx] + delta, 0.0f, 1.0f);
     }
+}
+
+int AudioEngine::addTrack(EngineType engine, const std::string& name) {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (active_rows_count_ >= kMaxTracks) return -1;
+    int idx = active_rows_count_;
+    auto& trk = tracks_[idx];
+    trk = TrackParameters{};
+    trk.engine = engine;
+    if (!name.empty()) {
+        std::snprintf(trk.name, sizeof(trk.name), "%s", name.c_str());
+    } else {
+        std::snprintf(trk.name, sizeof(trk.name), "%s %02d", getEngineTypeName(engine), idx + 1);
+    }
+    row_lengths_[idx].store(16, std::memory_order_relaxed);
+    row_track_[idx] = static_cast<uint8_t>(idx);
+    row_voice_[idx] = 0;
+    pattern_[idx].fill(SequencerStep{});
+    active_rows_count_++;
+    return idx;
+}
+
+bool AudioEngine::deleteTrack(int track_idx) {
+    deleteRow(track_idx);
+    return true;
+}
+
+void AudioEngine::setTrackName(int track, const std::string& name) {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    int t = std::clamp(track, 0, kMaxTracks - 1);
+    std::snprintf(tracks_[t].name, sizeof(tracks_[t].name), "%s", name.c_str());
+}
+
+std::string AudioEngine::getTrackName(int track) const {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    int t = std::clamp(track, 0, kMaxTracks - 1);
+    return tracks_[t].name[0] ? std::string(tracks_[t].name) : ("TRK " + std::to_string(t + 1));
 }
 
 SequencerStep AudioEngine::getStep(int row, int step_idx) const {
@@ -210,11 +268,13 @@ void AudioEngine::deleteRow(int row) {
     std::lock_guard<std::mutex> lock(state_mutex_);
     if (active_rows_count_ <= 1 || row < 0 || row >= active_rows_count_) return;
     for (int r = row; r < active_rows_count_ - 1; ++r) {
+        tracks_[r] = tracks_[r + 1];
         pattern_[r] = pattern_[r + 1];
         row_lengths_[r].store(row_lengths_[r + 1].load(std::memory_order_relaxed), std::memory_order_relaxed);
-        row_track_[r] = row_track_[r + 1];
-        row_voice_[r] = row_voice_[r + 1];
+        row_track_[r] = static_cast<uint8_t>(r);
+        row_voice_[r] = 0;
     }
+    tracks_[active_rows_count_ - 1] = TrackParameters{};
     pattern_[active_rows_count_ - 1].fill(SequencerStep{});
     row_lengths_[active_rows_count_ - 1].store(16, std::memory_order_relaxed);
     active_rows_count_--;
@@ -833,7 +893,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
     const float drv_amt   = params_.drive_amount.load(std::memory_order_relaxed);
     const float drv_tone  = params_.drive_tone.load(std::memory_order_relaxed);
 
-    std::array<TrackParameters, 4> local_tracks;
+    std::array<TrackParameters, kMaxTracks> local_tracks;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         local_tracks = tracks_;
@@ -870,9 +930,9 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
     };
 
     float dt_block = inv_sr * static_cast<float>(frames);
-    std::array<float, 4> lfo1_val{0.0f, 0.0f, 0.0f, 0.0f};
-    std::array<float, 4> lfo2_val{0.0f, 0.0f, 0.0f, 0.0f};
-    for (int t = 0; t < 4; ++t) {
+    std::array<float, kMaxTracks> lfo1_val{};
+    std::array<float, kMaxTracks> lfo2_val{};
+    for (int t = 0; t < active_rows_count_; ++t) {
         lfo1_val[t] = computeLfo(local_tracks[t].lfo1, dt_block);
         lfo2_val[t] = computeLfo(local_tracks[t].lfo2, dt_block);
     }
@@ -891,7 +951,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
 
     float max_l = 0.0f;
     float max_r = 0.0f;
-    std::array<float, 4> trk_peak{0.0f, 0.0f, 0.0f, 0.0f};
+    std::array<float, kMaxTracks> trk_peak{};
     uint32_t sc_idx = scope_write_idx_.load(std::memory_order_relaxed);
     const uint32_t delay_len = (sample_rate == 48000u) ? 12000u : 8000u; // ~250ms tempo delay
 
@@ -905,7 +965,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
 
         for (int r = 0; r < active_rows_count_; ++r) {
             auto& v = voices_[r];
-            int t = std::clamp(static_cast<int>(row_track_[r]), 0, 3);
+            int t = std::clamp(static_cast<int>(row_track_[r]), 0, kMaxTracks - 1);
             const auto& tp = local_tracks[t];
             if (tp.muted || !v.active) continue;
 
@@ -1185,7 +1245,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
     vu_r_.store(next_r, std::memory_order_relaxed);
     peak_hold_.store(std::max({next_l, next_r, peak_hold_.load(std::memory_order_relaxed) * 0.96f}), std::memory_order_relaxed);
 
-    for (int t = 0; t < 4; ++t) {
+    for (int t = 0; t < kMaxTracks; ++t) {
         float prev_t = track_vu_[t].load(std::memory_order_relaxed);
         track_vu_[t].store(std::max(trk_peak[t], prev_t * 0.86f), std::memory_order_relaxed);
     }
@@ -1375,8 +1435,10 @@ AudioEngineTelemetry AudioEngine::getTelemetry() const {
     t.vu_right = vu_r_.load(std::memory_order_relaxed);
     t.peak_hold = peak_hold_.load(std::memory_order_relaxed);
 
-    for (int i = 0; i < 4; ++i) {
+    t.active_tracks = active_rows_count_;
+    for (int i = 0; i < kMaxTracks; ++i) {
         t.track_levels[i] = track_vu_[i].load(std::memory_order_relaxed);
+        t.track_names[i] = tracks_[i].name[0] ? std::string(tracks_[i].name) : ("TRK " + std::to_string(i + 1));
     }
 
     uint32_t r_idx = scope_write_idx_.load(std::memory_order_relaxed);

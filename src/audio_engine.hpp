@@ -46,7 +46,9 @@ struct AudioEngineTelemetry {
     float vu_left = 0.0f;
     float vu_right = 0.0f;
     float peak_hold = 0.0f;
-    std::array<float, 4> track_levels{0.0f, 0.0f, 0.0f, 0.0f};
+    int active_tracks = 3;
+    std::array<float, kMaxTracks> track_levels{};
+    std::array<std::string, kMaxTracks> track_names{};
     std::array<float, 256> scope_samples{};
 };
 
@@ -89,9 +91,15 @@ public:
     uint8_t getStepChordNote(int row, int step_idx, int slot) const;
     void lockStepCutoff(int row, int step_idx, float cutoff_val);
 
-    // Кількість активних рядків секвенсора (за замовчуванням 8: 4 drums + 4 VA)
+    // Кількість активних треків секвенсора (від 1 до 16)
+    int getTrackCount() const { return active_rows_count_; }
     int getActiveRowCount() const { return active_rows_count_; }
-    void setActiveRowCount(int count) { active_rows_count_ = std::clamp(count, 1, kTotalRows); }
+    void setActiveRowCount(int count) { active_rows_count_ = std::clamp(count, 1, kMaxTracks); }
+
+    int addTrack(EngineType engine, const std::string& name = "");
+    bool deleteTrack(int track_idx);
+    void setTrackName(int track, const std::string& name);
+    std::string getTrackName(int track) const;
 
     // Повне скидання звуку (Panic / Kill all voices + clear delay)
     void panic();
@@ -153,16 +161,17 @@ private:
 
     SynthParams params_;
     mutable std::mutex state_mutex_;
-    std::array<TrackParameters, 4> tracks_{};
+    std::array<TrackParameters, kMaxTracks> tracks_{};
     std::atomic<uint32_t> pattern_length_{64};
-    std::array<std::atomic<uint32_t>, kTotalRows> row_lengths_{};
-    std::array<uint8_t, kTotalRows> row_track_{};
-    std::array<uint8_t, kTotalRows> row_voice_{};
-    std::array<std::array<SequencerStep, kMaxSteps>, kTotalRows> pattern_{};
-    int active_rows_count_ = 8;
+    std::array<std::atomic<uint32_t>, kMaxTracks> row_lengths_{};
+    std::array<uint8_t, kMaxTracks> row_track_{};
+    std::array<uint8_t, kMaxTracks> row_voice_{};
+    std::array<std::array<SequencerStep, kMaxSteps>, kMaxTracks> pattern_{};
+    int active_rows_count_ = 3;
     std::atomic<bool> fill_mode_{false};
     uint32_t cycle_counter_ = 0;
-    std::array<bool, kTotalRows> prev_step_fired_{};
+    std::array<bool, kMaxTracks> prev_step_fired_{};
+    std::array<std::atomic<float>, kMaxTracks> track_vu_{};
     uint32_t voice_alloc_counter_ = 0;
     int allocateVoice(int track, int midi_note);
     MidiOutCallback midi_out_cb_;
@@ -193,7 +202,7 @@ private:
         Dx7Voice dx7_voice{};
     };
 
-    std::array<VoiceState, kTotalRows> voices_{};
+    std::array<VoiceState, kMaxTracks> voices_{};
     uint32_t rng_state_ = 0x12345678u;
 
     // Стерео пінг-понг ділей буфер (до 0.5 сек на 48k)
@@ -229,7 +238,6 @@ private:
     std::atomic<float> vu_l_{0.0f};
     std::atomic<float> vu_r_{0.0f};
     std::atomic<float> peak_hold_{0.0f};
-    std::array<std::atomic<float>, 4> track_vu_{};
 
     std::array<std::atomic<float>, 256> scope_ring_{};
     std::atomic<uint32_t> scope_write_idx_{0};
