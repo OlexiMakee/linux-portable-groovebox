@@ -13,13 +13,16 @@ enum class EngineType : uint8_t {
     kFm2Op        = 1, // 2-Operator FM (Ratio, Index, Feedback)
     kAcid303      = 2, // Acid 303 Bassline (Waveform, Cutoff, Reso, EnvMod, Accent)
     kChordPad     = 3, // 4-Voice Chord Synth (Chord Type, Detune, Cutoff, Attack/Decay)
-    kDrumSyn       = 4, // Analog Drum Synth (Kick/Tom/Zap/Noise Perc)
-    kMidiOut       = 5, // External MIDI Gear Sequencer Track
+    kDrumRack     = 4, // 8-Slot Sample Drum Rack (TR-808/909/707/Linn/DMX...)
+    kDrumSyn      = 4, // Backwards-compatible alias for Drum Rack
+    kMidiOut      = 5, // External MIDI Gear Sequencer Track
     kSampleOneShot = 6, // Sample-based One-Shot Player
     kSliceSampler  = 7, // Loop Slicer Sampler with P-Lock Slices
-    kCount         = 8
+    kDx7          = 8, // Yamaha DX7 6-Operator FM Synthesizer (ROM1A + SysEx)
+    kCount        = 9
 };
 
+inline constexpr EngineType kDrumSyn = EngineType::kDrumRack;
 inline constexpr EngineType kSampleDrums = EngineType::kSampleOneShot;
 
 inline constexpr const char* getEngineTypeName(EngineType type) {
@@ -28,10 +31,11 @@ inline constexpr const char* getEngineTypeName(EngineType type) {
         case EngineType::kFm2Op:        return "2-OP FM";
         case EngineType::kAcid303:      return "ACID 303";
         case EngineType::kChordPad:     return "CHORD PAD";
-        case EngineType::kDrumSyn:      return "ANALOG DRUM";
+        case EngineType::kDrumRack:     return "DRUM RACK";
         case EngineType::kMidiOut:      return "MIDI OUT";
         case EngineType::kSampleOneShot:return "SMPL ONESHOT";
         case EngineType::kSliceSampler: return "SLICER";
+        case EngineType::kDx7:          return "DX7 6-OP";
         default:                        return "UNKNOWN";
     }
 }
@@ -229,14 +233,16 @@ inline constexpr const char* kParamNames[static_cast<int>(EngineType::kCount)][k
     {"CUTOFF", "RESO", "ENV MOD", "DECAY", "ACCENT", "WAVEFRM"},
     // kChordPad
     {"CUTOFF", "RESO", "CHORD", "DECAY", "DETUNE", "ENV MOD"},
-    // kDrumSyn
-    {"TUNE", "SWEEP", "DECAY", "NOISE", "DRIVE", "CLICK"},
+    // kDrumRack
+    {"KIT SEL", "TUNE", "DECAY", "FILTER", "DRIVE", "REVERB"},
     // kMidiOut
     {"CHANNEL", "CC A", "CC B", "CC C", "CC D", "PROGRAM"},
-    // kSampleDrums
-    {"KIT SEL", "PITCH", "DECAY", "FILTER", "DRIVE", "START"},
+    // kSampleOneShot
+    {"SAMPLE", "PITCH", "DECAY", "FILTER", "DRIVE", "START"},
     // kSliceSampler
-    {"SAMPLE", "SLICE", "PITCH", "DECAY", "FILTER", "REVERSE"}
+    {"SAMPLE", "SLICE", "PITCH", "DECAY", "FILTER", "REVERSE"},
+    // kDx7
+    {"PRESET", "CUTOFF", "BRIGHT", "DECAY", "ALGO", "FEEDBCK"}
 };
 
 inline constexpr const char* getParamName(EngineType type, int param_idx) {

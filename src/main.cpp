@@ -74,6 +74,7 @@ int main(int argc, char* argv[]) {
     audio_engine.triggerNote(3, 60, 0.70f);
 
     groovebox::AppModel app;
+    audio_engine.setSampler(&app.sampler);
     bool quit = false;
     bool ui_dirty = true;
     uint32_t last_render_ms = 0;

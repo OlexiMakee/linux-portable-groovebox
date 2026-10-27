@@ -1,4 +1,5 @@
 #include "sampler_engine.hpp"
+#include "rom_samples.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -15,6 +16,21 @@ SamplerEngine::SamplerEngine() {
     rec_buffer_.sample_rate = 48000;
     rec_buffer_.name = "LIVE REC";
     sliceGrid(16);
+
+    // Завантажуємо вбудований фабричний ROM-набір ударних у слоти
+    for (int i = 0; i < kDrumSlots; ++i) {
+        const auto& item = rom::kDefaultDrumKit[i];
+        drum_slots_[i].sample_rate = item.sample_rate;
+        drum_slots_[i].name = item.name;
+        drum_slots_[i].data_l.resize(item.length);
+        drum_slots_[i].data_r.resize(item.length);
+        for (uint32_t s = 0; s < item.length; ++s) {
+            float val = static_cast<float>(item.data[s]) / 32768.0f;
+            drum_slots_[i].data_l[s] = val;
+            drum_slots_[i].data_r[s] = val;
+        }
+        drum_slots_[i].loaded = true;
+    }
 }
 
 void SamplerEngine::armRecording() {

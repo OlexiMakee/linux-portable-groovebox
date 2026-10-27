@@ -45,9 +45,17 @@ std::vector<std::string> ActionRegistry::ids() const {
 ActionRegistry::ActionRegistry() {
     // ---------------- Навігація ----------------
     add(Action{"NAV.UP", "UP", [](UiContext& c) {
+        if (c.app.engine_menu_open) {
+            c.app.engine_menu_sel = (c.app.engine_menu_sel - 1 + static_cast<int>(EngineType::kCount)) % static_cast<int>(EngineType::kCount);
+            return;
+        }
         if (c.shell) c.shell->currentView(c).navigate(c, 0, -1, false);
     }});
     add(Action{"NAV.DOWN", "DOWN", [](UiContext& c) {
+        if (c.app.engine_menu_open) {
+            c.app.engine_menu_sel = (c.app.engine_menu_sel + 1) % static_cast<int>(EngineType::kCount);
+            return;
+        }
         if (c.shell) c.shell->currentView(c).navigate(c, 0, 1, false);
     }});
     add(Action{"NAV.LEFT", "LEFT", [](UiContext& c) {
@@ -71,12 +79,20 @@ ActionRegistry::ActionRegistry() {
 
     // ---------------- Редагування параметра у фокусі ----------------
     add(Action{"PARAM.INC", "VAL+", [](UiContext& c) {
+        if (c.app.engine_menu_open) {
+            ActionRegistry::instance().run("ENGINE.MENU_CONFIRM", c);
+            return;
+        }
         if (c.shell) {
             const Param* p = c.shell->currentView(c).focusedParam(c);
             if (p && p->step) p->step(c, 1, false);
         }
     }});
     add(Action{"PARAM.DEC", "VAL-", [](UiContext& c) {
+        if (c.app.engine_menu_open) {
+            ActionRegistry::instance().run("ENGINE.MENU_CLOSE", c);
+            return;
+        }
         if (c.shell) {
             const Param* p = c.shell->currentView(c).focusedParam(c);
             if (p && p->step) p->step(c, -1, false);

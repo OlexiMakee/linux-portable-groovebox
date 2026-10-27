@@ -1,6 +1,8 @@
 #pragma once
 
+#include "dx7_engine.hpp"
 #include "net_audio_streamer.hpp"
+#include "sampler_engine.hpp"
 #include "synth_engines.hpp"
 
 #include <array>
@@ -126,6 +128,13 @@ public:
 
     NetAudioStreamer& netStreamer() { return net_streamer_; }
 
+    void setSampler(SamplerEngine* s) { sampler_ptr_ = s; }
+    SamplerEngine& sampler() { return sampler_ptr_ ? *sampler_ptr_ : local_sampler_; }
+    const SamplerEngine& sampler() const { return sampler_ptr_ ? *sampler_ptr_ : local_sampler_; }
+
+    Dx7Engine& dx7() { return dx7_engine_; }
+    const Dx7Engine& dx7() const { return dx7_engine_; }
+
     AudioEngineTelemetry getTelemetry() const;
 
 private:
@@ -176,6 +185,8 @@ private:
         float svf_band = 0.0f;
         float last_out = 0.0f;
         float plock_cutoff = -1.0f;
+        uint8_t drum_slot = 0;
+        Dx7Voice dx7_voice{};
     };
 
     std::array<VoiceState, kTotalRows> voices_{};
@@ -218,6 +229,10 @@ private:
 
     std::array<std::atomic<float>, 256> scope_ring_{};
     std::atomic<uint32_t> scope_write_idx_{0};
+
+    SamplerEngine local_sampler_;
+    SamplerEngine* sampler_ptr_ = nullptr;
+    Dx7Engine dx7_engine_;
 
 #if defined(__linux__)
     std::thread alsa_thread_;

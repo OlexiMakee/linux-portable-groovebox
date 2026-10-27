@@ -94,13 +94,15 @@ AudioEngine::~AudioEngine() {
 void AudioEngine::initDefaultPattern() {
     std::lock_guard<std::mutex> lock(state_mutex_);
 
-    // За замовчуванням рівно 2 чисті інструменти (без Моцарта):
-    // T1 (рядки 0..3): ANALOG DRUMS (BD, SD, CH, OH)
-    // T2 (рядки 4..7): VIRTUAL ANALOG SYNTH (4 голоси: V1..V4)
-    tracks_[0] = {EngineType::kDrumSyn,  {0.30f, 0.50f, 0.40f, 0.15f, 0.35f, 0.50f}, 0.005f, 0.35f, 0.00f, 0.05f, 0.90f,  0.00f, 0.08f, false};
-    tracks_[1] = {EngineType::kVaMono,   {0.45f, 0.28f, 0.48f, 0.25f, 0.50f, 0.45f}, 0.008f, 0.30f, 0.00f, 0.05f, 0.82f, -0.15f, 0.15f, false};
-    tracks_[2] = {EngineType::kAcid303,  {0.62f, 0.55f, 0.60f, 0.22f, 0.70f, 0.00f}, 0.005f, 0.28f, 0.00f, 0.05f, 0.85f,  0.15f, 0.25f, false};
-    tracks_[3] = {EngineType::kFm2Op,    {0.55f, 0.35f, 0.45f, 0.28f, 0.25f, 0.40f}, 0.010f, 0.45f, 0.00f, 0.05f, 0.75f, -0.20f, 0.30f, false};
+    // За замовчуванням 4 збалансовані інструменти:
+    // T1: 8-SLOT DRUM RACK (TR-808 / TR-909 / LinnDrum)
+    // T2: ACID 303 BASSLINE (Legato Slide, Accent)
+    // T3: YAMAHA DX7 6-OP (ROM1A E.PIANO 1 / BASS 1 / LEAD)
+    // T4: CHORD PAD (4-Voice Polyphonic Detuned Pad)
+    tracks_[0] = {EngineType::kDrumRack, {0.00f, 0.50f, 0.40f, 0.85f, 0.15f, 0.15f}, 0.002f, 0.35f, 0.00f, 0.05f, 0.90f,  0.00f, 0.10f, false};
+    tracks_[1] = {EngineType::kAcid303,  {0.62f, 0.55f, 0.60f, 0.22f, 0.70f, 0.00f}, 0.005f, 0.28f, 0.00f, 0.05f, 0.85f, -0.15f, 0.20f, false};
+    tracks_[2] = {EngineType::kDx7,      {0.32f, 0.75f, 0.60f, 0.40f, 0.00f, 0.30f}, 0.005f, 0.45f, 0.00f, 0.05f, 0.85f,  0.15f, 0.25f, false};
+    tracks_[3] = {EngineType::kChordPad, {0.55f, 0.35f, 0.00f, 0.45f, 0.25f, 0.40f}, 0.010f, 0.45f, 0.00f, 0.05f, 0.75f, -0.20f, 0.30f, false};
 
     pattern_length_.store(64);
     active_rows_count_ = 8; // Тільки 8 активних рядків за замовчуванням!
@@ -429,14 +431,34 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
         v.is_legato = false;
         v.freq = midiToFreq(midi_note);
 
-        if (tracks_[t].engine == EngineType::kDrumSyn) {
+        if (tracks_[t].engine == EngineType::kDrumRack) {
             static constexpr int kDrumNotes[4] = {36, 38, 42, 46};
             int d_note = (midi_note > 0) ? midi_note : kDrumNotes[v_idx];
             v.freq = midiToFreq(d_note);
+            // Визначаємо слот барабанів (0=BD, 1=SD, 2=CH, 3=OH, 4=CP, 5=Rim, 6=Tom, 7=Perc)
+            if (d_note == 36) v.drum_slot = 0;
+            else if (d_note == 38 || d_note == 40) v.drum_slot = 1;
+            else if (d_note == 42 || d_note == 44) v.drum_slot = 2;
+            else if (d_note == 46) v.drum_slot = 3;
+            else if (d_note == 39) v.drum_slot = 4;
+            else if (d_note == 37) v.drum_slot = 5;
+            else if (d_note == 41 || d_note == 45) v.drum_slot = 6;
+            else v.drum_slot = static_cast<uint8_t>(v_idx % kDrumSlots);
+
+            v.phase1 = 0.0f; // скидання позиції відтворення семпла
             float att = 0.001f;
-            float dec = (v_idx == 0) ? 0.38f : (v_idx == 1 ? 0.22f : (v_idx == 2 ? 0.06f : 0.30f));
+            float dec = 0.05f + tracks_[t].p[2] * 0.85f;
             v.amp_adsr.trigger(att, dec, 0.0f, sr);
             v.filter_adsr.trigger(0.001f, dec * 0.7f, 0.0f, sr);
+        } else if (tracks_[t].engine == EngineType::kDx7) {
+            int p_idx = std::clamp(static_cast<int>(tracks_[t].p[0] * (dx7_engine_.patchCount() - 1) + 0.5f), 0, dx7_engine_.patchCount() - 1);
+            v.dx7_voice.trigger(dx7_engine_.getPatch(p_idx), static_cast<float>(midi_note), velocity, sr);
+            v.amp_adsr.trigger(0.001f, 0.99f, 1.0f, sr);
+            v.filter_adsr.trigger(0.001f, 0.99f, 1.0f, sr);
+        } else if (tracks_[t].engine == EngineType::kSampleOneShot || tracks_[t].engine == EngineType::kSliceSampler) {
+            v.phase1 = 0.0f;
+            v.amp_adsr.trigger(tracks_[t].attack, tracks_[t].decay, tracks_[t].sustain, sr);
+            v.filter_adsr.trigger(tracks_[t].attack * 0.6f, tracks_[t].decay, tracks_[t].sustain, sr);
         } else {
             v.amp_adsr.trigger(tracks_[t].attack, tracks_[t].decay, tracks_[t].sustain, sr);
             v.filter_adsr.trigger(tracks_[t].attack * 0.6f, tracks_[t].decay, tracks_[t].sustain, sr);
@@ -448,12 +470,12 @@ int AudioEngine::allocateVoice(int track, int midi_note) {
     if (track < 0 || track >= 4) return 0;
     const int base = track * kVoicesPerTrack;
 
-    // Якщо це драм-машина (BD=36, SD=38, CH=42, OH=46)
-    if (tracks_[track].engine == EngineType::kDrumSyn) {
+    if (tracks_[track].engine == EngineType::kDrumRack) {
         if (midi_note == 36) return base + 0;
-        if (midi_note == 38) return base + 1;
-        if (midi_note == 42) return base + 2;
-        if (midi_note == 46) return base + 3;
+        if (midi_note == 38 || midi_note == 40) return base + 1;
+        if (midi_note == 42 || midi_note == 44) return base + 2;
+        if (midi_note == 46 || midi_note == 39) return base + 3;
+        return base + (std::abs(midi_note - 36) % kVoicesPerTrack);
     }
 
     // 1. Якщо та ж нота вже звучить у голосі треку — перевикористовуємо її
@@ -873,6 +895,9 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                         v.active = false;
                         continue;
                     }
+                    if (tp.engine == EngineType::kDx7) {
+                        v.dx7_voice.release(static_cast<float>(sample_rate));
+                    }
                     v.amp_adsr.release(tp.release, static_cast<float>(sample_rate));
                     v.filter_adsr.release(tp.release, static_cast<float>(sample_rate));
                 }
@@ -887,108 +912,137 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                 continue;
             }
 
-            float cur_freq = v.freq;
-            if (tp.engine == EngineType::kAcid303 && v.is_legato) {
-                v.current_pitch = (1.0f - v.glide_coef) * v.target_pitch + v.glide_coef * v.current_pitch;
-                cur_freq = 440.0f * std::pow(2.0f, (v.current_pitch - 69.0f) / 12.0f);
-            } else if (tp.engine == EngineType::kDrumSyn) {
-                // Різний характер для 4 голосів ударних: Kick, Snare, Cl-Hat, Op-Hat
-                if (v_idx == 0) {
-                    // Kick: швидкий спад висоти від 160 Гц до 45 Гц
-                    cur_freq = v.freq * (0.60f + v.pitch_env * 3.5f * tp.p[1]);
-                    v.pitch_env *= 0.992f;
-                } else if (v_idx == 1) {
-                    // Snare
-                    cur_freq = v.freq * (0.90f + v.pitch_env * 1.8f);
-                    v.pitch_env *= 0.985f;
-                } else if (v_idx == 2) {
-                    // Closed Hat
-                    cur_freq = 6000.0f + tp.p[0] * 3000.0f;
-                } else {
-                    // Open Hat / Tom
-                    cur_freq = v.freq * (0.80f + v.pitch_env * 2.0f);
-                    v.pitch_env *= 0.990f;
-                }
-            }
-
-            const float dt = std::clamp(cur_freq * inv_sr, 0.0001f, 0.45f);
-            v.phase1 += dt;
-            if (v.phase1 >= 1.0f) v.phase1 -= 1.0f;
-
             float raw = 0.0f;
-            switch (tp.engine) {
-                case EngineType::kVaMono: {
-                    v.phase2 += dt * 0.5f;
-                    if (v.phase2 >= 1.0f) v.phase2 -= 1.0f;
-                    float pw = std::clamp(0.15f + tp.p[5] * 0.70f, 0.1f, 0.9f);
-                    float saw = (2.0f * v.phase1 - 1.0f) - polyBlep(v.phase1, dt);
-                    float pulse = (v.phase1 < pw ? 1.0f : -1.0f)
-                                  + polyBlep(v.phase1, dt)
-                                  - polyBlep(std::fmod(v.phase1 - pw + 1.0f, 1.0f), dt);
-                    float sub = (v.phase2 < 0.5f) ? 0.65f : -0.65f;
-                    raw = (saw * 0.50f + pulse * 0.35f) + sub * tp.p[4];
-                    break;
-                }
-                case EngineType::kFm2Op: {
-                    static constexpr float kRatios[8] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 3.5f, 4.0f, 7.0f};
-                    int r_idx = std::clamp(static_cast<int>(tp.p[2] * 7.99f), 0, 7);
-                    v.phase2 += dt * kRatios[r_idx];
-                    if (v.phase2 >= 1.0f) v.phase2 -= 1.0f;
-                    float mod_idx = std::clamp(tp.p[1] + fm_macro, 0.0f, 1.0f) * 6.5f * f_env;
-                    float fb = tp.p[4] * v.last_out * 1.2f;
-                    float mod = std::sin((v.phase2 + fb) * 6.2831853f) * mod_idx;
-                    raw = std::sin(v.phase1 * 6.2831853f + mod);
-                    v.last_out = raw;
-                    break;
-                }
-                case EngineType::kAcid303: {
-                    float saw = (2.0f * v.phase1 - 1.0f) - polyBlep(v.phase1, dt);
-                    float sq = (v.phase1 < 0.5f ? 0.9f : -0.9f)
-                               + polyBlep(v.phase1, dt)
-                               - polyBlep(std::fmod(v.phase1 + 0.5f, 1.0f), dt);
-                    raw = saw * (1.0f - tp.p[5]) + sq * tp.p[5];
-                    break;
-                }
-                case EngineType::kChordPad: {
-                    static constexpr float kChords[4][2] = {
-                        {1.189207f, 1.498307f}, // m7 (+3, +7)
-                        {1.259921f, 1.498307f}, // Maj7 (+4, +7)
-                        {1.334840f, 1.498307f}, // Sus4 (+5, +7)
-                        {1.498307f, 2.000000f}  // Power (+7, +12)
-                    };
-                    int c_idx = std::clamp(static_cast<int>(tp.p[2] * 3.99f), 0, 3);
-                    float det = 1.0f + (tp.p[4] + std::fabs(fm_macro)) * 0.012f;
-                    v.phase2 += dt * kChords[c_idx][0] * det;
-                    if (v.phase2 >= 1.0f) v.phase2 -= 1.0f;
-                    v.phase3 += dt * kChords[c_idx][1];
-                    if (v.phase3 >= 1.0f) v.phase3 -= 1.0f;
-                    float s1 = (2.0f * v.phase1 - 1.0f) - polyBlep(v.phase1, dt);
-                    float s2 = (2.0f * v.phase2 - 1.0f) - polyBlep(v.phase2, dt);
-                    float s3 = (2.0f * v.phase3 - 1.0f) - polyBlep(v.phase3, dt);
-                    raw = (s1 + s2 + s3) * 0.38f;
-                    break;
-                }
-                case EngineType::kDrumSyn:
-                default: {
-                    rng_state_ ^= rng_state_ << 13;
-                    rng_state_ ^= rng_state_ >> 17;
-                    rng_state_ ^= rng_state_ << 5;
-                    float noise = static_cast<float>(static_cast<int32_t>(rng_state_)) * (1.0f / 2147483648.0f);
-                    if (v_idx == 0) {
-                        // Kick
-                        raw = std::sin(v.phase1 * 6.2831853f) * 1.2f;
-                        raw = std::tanh(raw);
-                    } else if (v_idx == 1) {
-                        // Snare (Body + Noise)
-                        raw = std::sin(v.phase1 * 6.2831853f) * 0.45f + noise * 0.65f;
-                    } else if (v_idx == 2) {
-                        // Closed Hat (Highpass Noise)
-                        raw = noise * 0.85f;
+
+            if (tp.engine == EngineType::kDrumRack) {
+                const auto& sb = sampler().drumSlot(v.drum_slot);
+                if (sb.loaded && sb.lengthFrames() > 0) {
+                    float pitch_ratio = std::pow(2.0f, (tp.p[1] - 0.5f) * 2.0f);
+                    float step = pitch_ratio * (static_cast<float>(sb.sample_rate) * inv_sr);
+                    uint32_t f0 = static_cast<uint32_t>(v.phase1);
+                    if (f0 + 1 < sb.lengthFrames()) {
+                        float frac = v.phase1 - static_cast<float>(f0);
+                        raw = sb.data_l[f0] + frac * (sb.data_l[f0 + 1] - sb.data_l[f0]);
+                        v.phase1 += step;
                     } else {
-                        // Open Hat / Tom
-                        raw = std::sin(v.phase1 * 6.2831853f) * 0.55f + noise * 0.45f;
+                        raw = 0.0f;
+                        v.active = false;
                     }
-                    break;
+                } else {
+                    raw = 0.0f;
+                }
+            } else if (tp.engine == EngineType::kSampleOneShot) {
+                const auto& sb = sampler().recordedSample();
+                if (sb.loaded && sb.lengthFrames() > 0) {
+                    float note_pitch = static_cast<float>(v.note_num) - 60.0f + (tp.p[1] - 0.5f) * 24.0f;
+                    float pitch_ratio = std::pow(2.0f, note_pitch / 12.0f);
+                    float step = pitch_ratio * (static_cast<float>(sb.sample_rate) * inv_sr);
+                    uint32_t f0 = static_cast<uint32_t>(v.phase1);
+                    if (f0 + 1 < sb.lengthFrames()) {
+                        float frac = v.phase1 - static_cast<float>(f0);
+                        raw = sb.data_l[f0] + frac * (sb.data_l[f0 + 1] - sb.data_l[f0]);
+                        v.phase1 += step;
+                    } else {
+                        raw = 0.0f;
+                        v.active = false;
+                    }
+                } else {
+                    raw = 0.0f;
+                }
+            } else if (tp.engine == EngineType::kSliceSampler) {
+                const auto& sb = sampler().recordedSample();
+                int s_idx = std::clamp(static_cast<int>(tp.p[1] * (sampler().sliceCount() - 1) + 0.5f), 0, sampler().sliceCount() - 1);
+                SlicePoint pt = sampler().getSlice(s_idx);
+                if (sb.loaded && pt.length_frames > 0) {
+                    float pitch_ratio = std::pow(2.0f, (tp.p[2] - 0.5f) * 2.0f);
+                    float step = pitch_ratio * (static_cast<float>(sb.sample_rate) * inv_sr);
+                    uint32_t cur_f = pt.start_frame + static_cast<uint32_t>(v.phase1);
+                    if (v.phase1 < static_cast<float>(pt.length_frames) && cur_f + 1 < sb.lengthFrames()) {
+                        float frac = v.phase1 - static_cast<float>(static_cast<uint32_t>(v.phase1));
+                        raw = sb.data_l[cur_f] + frac * (sb.data_l[cur_f + 1] - sb.data_l[cur_f]);
+                        v.phase1 += step;
+                    } else {
+                        raw = 0.0f;
+                        v.active = false;
+                    }
+                } else {
+                    raw = 0.0f;
+                }
+            } else if (tp.engine == EngineType::kDx7) {
+                int p_idx = std::clamp(static_cast<int>(tp.p[0] * (dx7_engine_.patchCount() - 1) + 0.5f), 0, dx7_engine_.patchCount() - 1);
+                const auto& patch = dx7_engine_.getPatch(p_idx);
+                float bright = std::clamp(tp.p[2] * 2.0f, 0.0f, 3.0f);
+                float dec = std::clamp(tp.p[3] * 2.0f + 0.1f, 0.1f, 4.0f);
+                raw = v.dx7_voice.process(patch, bright, dec, static_cast<float>(sample_rate));
+                if (!v.dx7_voice.isActive()) {
+                    v.active = false;
+                }
+            } else {
+                float cur_freq = v.freq;
+                if (tp.engine == EngineType::kAcid303 && v.is_legato) {
+                    v.current_pitch = (1.0f - v.glide_coef) * v.target_pitch + v.glide_coef * v.current_pitch;
+                    cur_freq = 440.0f * std::pow(2.0f, (v.current_pitch - 69.0f) / 12.0f);
+                }
+
+                const float dt = std::clamp(cur_freq * inv_sr, 0.0001f, 0.45f);
+                v.phase1 += dt;
+                if (v.phase1 >= 1.0f) v.phase1 -= 1.0f;
+
+                switch (tp.engine) {
+                    case EngineType::kVaMono: {
+                        v.phase2 += dt * 0.5f;
+                        if (v.phase2 >= 1.0f) v.phase2 -= 1.0f;
+                        float pw = std::clamp(0.15f + tp.p[5] * 0.70f, 0.1f, 0.9f);
+                        float saw = (2.0f * v.phase1 - 1.0f) - polyBlep(v.phase1, dt);
+                        float pulse = (v.phase1 < pw ? 1.0f : -1.0f)
+                                      + polyBlep(v.phase1, dt)
+                                      - polyBlep(std::fmod(v.phase1 - pw + 1.0f, 1.0f), dt);
+                        float sub = (v.phase2 < 0.5f) ? 0.65f : -0.65f;
+                        raw = (saw * 0.50f + pulse * 0.35f) + sub * tp.p[4];
+                        break;
+                    }
+                    case EngineType::kFm2Op: {
+                        static constexpr float kRatios[8] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 3.5f, 4.0f, 7.0f};
+                        int r_idx = std::clamp(static_cast<int>(tp.p[2] * 7.99f), 0, 7);
+                        v.phase2 += dt * kRatios[r_idx];
+                        if (v.phase2 >= 1.0f) v.phase2 -= 1.0f;
+                        float mod_idx = std::clamp(tp.p[1] + fm_macro, 0.0f, 1.0f) * 6.5f * f_env;
+                        float fb = tp.p[4] * v.last_out * 1.2f;
+                        float mod = std::sin((v.phase2 + fb) * 6.2831853f) * mod_idx;
+                        raw = std::sin(v.phase1 * 6.2831853f + mod);
+                        v.last_out = raw;
+                        break;
+                    }
+                    case EngineType::kAcid303: {
+                        float saw = (2.0f * v.phase1 - 1.0f) - polyBlep(v.phase1, dt);
+                        float sq = (v.phase1 < 0.5f ? 0.9f : -0.9f)
+                                   + polyBlep(v.phase1, dt)
+                                   - polyBlep(std::fmod(v.phase1 + 0.5f, 1.0f), dt);
+                        raw = saw * (1.0f - tp.p[5]) + sq * tp.p[5];
+                        break;
+                    }
+                    case EngineType::kChordPad: {
+                        static constexpr float kChords[4][2] = {
+                            {1.189207f, 1.498307f}, // m7 (+3, +7)
+                            {1.259921f, 1.498307f}, // Maj7 (+4, +7)
+                            {1.334840f, 1.498307f}, // Sus4 (+5, +7)
+                            {1.498307f, 2.000000f}  // Power (+7, +12)
+                        };
+                        int c_idx = std::clamp(static_cast<int>(tp.p[2] * 3.99f), 0, 3);
+                        float det = 1.0f + (tp.p[4] + std::fabs(fm_macro)) * 0.012f;
+                        v.phase2 += dt * kChords[c_idx][0] * det;
+                        if (v.phase2 >= 1.0f) v.phase2 -= 1.0f;
+                        v.phase3 += dt * kChords[c_idx][1];
+                        if (v.phase3 >= 1.0f) v.phase3 -= 1.0f;
+                        float s1 = (2.0f * v.phase1 - 1.0f) - polyBlep(v.phase1, dt);
+                        float s2 = (2.0f * v.phase2 - 1.0f) - polyBlep(v.phase2, dt);
+                        float s3 = (2.0f * v.phase3 - 1.0f) - polyBlep(v.phase3, dt);
+                        raw = (s1 + s2 + s3) * 0.38f;
+                        break;
+                    }
+                    default:
+                        raw = 0.0f;
+                        break;
                 }
             }
 
@@ -1012,7 +1066,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             v.svf_band = std::clamp(v.svf_band, -1.85f, 1.85f);
 
             float trk_level = std::clamp(tp.level + getTrackMod(t, StickDest::kLevel), 0.0f, 1.0f);
-            float out_s = ((tp.engine == EngineType::kDrumSyn && v_idx == 2) ? high : v.svf_low) * amp * v.velocity * trk_level;
+            float out_s = v.svf_low * amp * v.velocity * trk_level;
 
             float abs_s = std::fabs(out_s);
             if (abs_s > trk_peak[t]) trk_peak[t] = abs_s;

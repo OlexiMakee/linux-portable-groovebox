@@ -38,6 +38,7 @@ int main() {
 
     AudioEngine audio_engine;
     AppModel app;
+    audio_engine.setSampler(&app.sampler);
     HardwareSnapshot hw;
     hw.cpu_load_percent = 7.1f;
     hw.cpu_temp_c = 42;
@@ -142,10 +143,24 @@ int main() {
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_11_arp.bmp");
 
+    // 12. DX7 FM Engine View (Track 3)
+    app.active_view = ViewId::kSynth;
+    app.selected_track = 2; // T3 DX7
+    input = InputState{};
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
+    capture("/tmp/xu10_tour/tour_12_dx7.bmp");
+
+    // 13. Engine Selection Modal Dropdown
+    app.engine_menu_open = true;
+    app.engine_menu_sel = 8; // DX7
+    input = InputState{};
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
+    capture("/tmp/xu10_tour/tour_13_engine_menu.bmp");
+
     SDL_DestroyRenderer(sw_renderer);
     SDL_FreeSurface(surf);
     SDL_Quit();
 
-    std::printf("All 11 tour screenshots generated successfully!\n");
+    std::printf("All 13 tour screenshots generated successfully!\n");
     return 0;
 }

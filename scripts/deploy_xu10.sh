@@ -19,8 +19,8 @@ ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null 
 cat "${PROJECT_DIR}/build-xu10/xu10_groovebox" | ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${TARGET_HOST}" \
   "cat > ${REMOTE_DIR}/xu10_groovebox && chmod +x ${REMOTE_DIR}/xu10_groovebox"
 
-tar -C "${PROJECT_DIR}" -cf - profiles | ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${TARGET_HOST}" \
-  "tar -C ${REMOTE_DIR} -xf -"
+tar -C "${PROJECT_DIR}" -cf - profiles res | ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${TARGET_HOST}" \
+  "tar -C ${REMOTE_DIR} -xf - && mkdir -p /storage/roms/groovebox && cp -rn ${REMOTE_DIR}/res/* /storage/roms/groovebox/ 2>/dev/null || true"
 
 ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${TARGET_HOST}" "
 cat << 'EOF' > ${REMOTE_DIR}/launch_groovebox.sh
