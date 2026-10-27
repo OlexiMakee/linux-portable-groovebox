@@ -288,13 +288,14 @@ inline constexpr const char* getConditionName(TrigCondition cond) {
     }
 }
 
-// Крок 64/128-крокового секвенсора з підтримкою Elektron Trig моделі (Note Trig vs Yellow Param Trig, Slide, Gate, Probability & Conditions)
+// Крок 64/128-крокового секвенсора з підтримкою Elektron Trig моделі та поліфонії акордів
 struct SequencerStep {
     bool enabled = false;        // Чи активний крок
     bool is_param_trig = false;  // Жовтий крок Elektron: НЕ тригерить ноту/MIDI, тільки змінює параметри звуку!
     bool slide = false;          // TB-303 / Elektron Legato Slide (65ms constant-time RC glide)
-    uint8_t note = 48;           // MIDI нота (0..127)
-    float velocity = 0.90f;      // 0.0 .. 1.0
+    uint8_t note = 48;           // MIDI нота 1 (базова нота акорду 0..127)
+    std::array<uint8_t, 4> chord_notes = {48, 255, 255, 255}; // До 4 нот у акорді (255 = вимкнено)
+    float velocity = 0.90f;      // 0.0 .. 1.0 (єдине velocity для всіх нот акорду)
     float gate_len = 0.60f;      // 0.1 .. 1.0+ (довжина кроку, усуває нескінченний сустейн)
     uint8_t probability = 100;   // Elektron Probability: 0% .. 100%
     TrigCondition condition = TrigCondition::kNone; // Elektron Trig Condition

@@ -122,7 +122,7 @@ void AudioEngine::initDefaultPattern() {
             else if (r == 1) def_note = 36; // 303 C1
             else if (r == 2) def_note = 60; // DX7 C3
             else def_note = 48;
-            pattern_[r][s] = {false, false, false, def_note, 0.90f, 0.60f, 100, TrigCondition::kNone, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
+            pattern_[r][s] = {false, false, false, def_note, {def_note, 255, 255, 255}, 0.90f, 0.60f, 100, TrigCondition::kNone, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
         }
     }
 }
@@ -314,8 +314,27 @@ void AudioEngine::adjustStepNote(int row, int step_idx, int semitones) {
     auto& st = pattern_[r][s];
     int n = std::clamp(static_cast<int>(st.note) + semitones, 24, 96);
     st.note = static_cast<uint8_t>(n);
+    st.chord_notes[0] = st.note;
     st.enabled = true;
     st.is_param_trig = false;
+}
+
+void AudioEngine::setStepChordNote(int row, int step_idx, int slot, uint8_t note) {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    int r = std::clamp(row, 0, kTotalRows - 1);
+    int s = std::clamp(step_idx, 0, static_cast<int>(kMaxSteps - 1));
+    int sl = std::clamp(slot, 0, 3);
+    auto& st = pattern_[r][s];
+    st.chord_notes[sl] = note;
+    if (sl == 0 && note != 255) st.note = note;
+}
+
+uint8_t AudioEngine::getStepChordNote(int row, int step_idx, int slot) const {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    int r = std::clamp(row, 0, kTotalRows - 1);
+    int s = std::clamp(step_idx, 0, static_cast<int>(kMaxSteps - 1));
+    int sl = std::clamp(slot, 0, 3);
+    return pattern_[r][s].chord_notes[sl];
 }
 
 void AudioEngine::lockStepCutoff(int row, int step_idx, float cutoff_val) {
@@ -615,7 +634,7 @@ void AudioEngine::triggerSequencerStep(uint32_t master_tick) {
             std::lock_guard<std::mutex> lock(state_mutex_);
             voices_[r].plock_cutoff = steps[r].has_plock ? steps[r].plock_cutoff : -1.0f;
         } else {
-            // Звичайний Note Trig
+            // Звичайний Note Trig (головна нота)
             triggerVoice(
                 r,
                 steps[r].note,
@@ -624,6 +643,22 @@ void AudioEngine::triggerSequencerStep(uint32_t master_tick) {
                 steps[r].slide,
                 steps[r].gate_len
             );
+
+            // Поліфонічні ноти акорду (слоти 1..3 для Poly-треків)
+            int t = getRowTrack(r);
+            for (int cn = 1; cn < 4; ++cn) {
+                uint8_t extra_n = steps[r].chord_notes[cn];
+                if (extra_n != 255 && extra_n != steps[r].note) {
+                    triggerNote(
+                        t,
+                        extra_n,
+                        steps[r].velocity,
+                        steps[r].has_plock ? steps[r].plock_cutoff : -1.0f,
+                        steps[r].slide,
+                        steps[r].gate_len
+                    );
+                }
+            }
         }
     }
 }

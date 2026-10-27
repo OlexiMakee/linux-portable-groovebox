@@ -85,6 +85,8 @@ public:
     void previewStep(int row, int step_idx);
     void toggleParamTrig(int row, int step_idx); // Жовтий Elektron Trig (Parameter Lock без Note-On)
     void adjustStepNote(int row, int step_idx, int semitones);
+    void setStepChordNote(int row, int step_idx, int slot, uint8_t note);
+    uint8_t getStepChordNote(int row, int step_idx, int slot) const;
     void lockStepCutoff(int row, int step_idx, float cutoff_val);
 
     // Кількість активних рядків секвенсора (за замовчуванням 8: 4 drums + 4 VA)
