@@ -377,123 +377,109 @@ ParamRegistry::ParamRegistry() {
     add(trackFloat("TRK.SUS", "SUSTAIN", S, [](TrackParameters& t) -> float& { return t.sustain; }, 0.0f, 1.0f, 0.02f, fmtPct));
     add(trackFloat("TRK.REL", "RELEASE", S, [](TrackParameters& t) -> float& { return t.release; }, 0.01f, 1.8f, 0.02f, fmtMs));
 
-    add(trackEnum<LfoWave>("LFO1.WAVE", "L1 WAVE", S, [](TrackParameters& t) -> LfoWave& { return t.lfo1.wave; }, lfoWaveName));
-    {
-        Param p;
-        p.id = "LFO1.RATE";
-        p.label = "L1 RATE";
-        p.value = [=](const UiContext& c) {
-            const auto& l = c.audio.getTrackParams(trk(c, S)).lfo1;
-            int s = 1 + static_cast<int>(l.rate * 127.0f + 0.5f);
-            uint8_t m = l.multiplier > 0 ? l.multiplier : 1;
-            float hz = (0.05f + l.rate * 19.95f) * static_cast<float>(m);
-            char b[24];
-            if (hz >= 10.0f) std::snprintf(b, sizeof(b), "%d (%.0fHz)", s, hz);
-            else std::snprintf(b, sizeof(b), "%d (%.1fHz)", s, hz);
-            return std::string(b);
-        };
-        p.norm = [=](const UiContext& c) { return c.audio.getTrackParams(trk(c, S)).lfo1.rate; };
-        p.step = [=](UiContext& c, int dir, bool coarse) {
-            int t = trk(c, S);
-            auto tp = c.audio.getTrackParams(t);
-            tp.lfo1.rate = std::clamp(tp.lfo1.rate + dir * (coarse ? 0.08f : 0.01f), 0.0f, 1.0f);
-            c.audio.setTrackParams(t, tp);
-        };
-        add(std::move(p));
-    }
-    {
-        Param p;
-        p.id = "LFO1.MULT";
-        p.label = "L1 MULT";
-        p.value = [=](const UiContext& c) {
-            uint8_t m = c.audio.getTrackParams(trk(c, S)).lfo1.multiplier;
-            switch (m) {
-                case 2:  return "x2";
-                case 4:  return "x4";
-                case 8:  return "x8";
-                case 16: return "x16";
-                case 32: return "x32";
-                case 64: return "x64";
-                default: return "x1";
-            }
-        };
-        p.norm = [=](const UiContext& c) { return static_cast<float>(c.audio.getTrackParams(trk(c, S)).lfo1.multiplier) / 64.0f; };
-        p.step = [=](UiContext& c, int dir, bool) {
-            int t = trk(c, S);
-            auto tp = c.audio.getTrackParams(t);
-            static constexpr uint8_t kM[] = {1, 2, 4, 8, 16, 32, 64};
-            int idx = 0;
-            for (int i = 0; i < 7; ++i) if (kM[i] == tp.lfo1.multiplier) { idx = i; break; }
-            idx = std::clamp(idx + dir, 0, 6);
-            tp.lfo1.multiplier = kM[idx];
-            c.audio.setTrackParams(t, tp);
-        };
-        add(std::move(p));
-    }
-    add(trackFloat("LFO1.DEPTH", "L1 DEPTH", S, [](TrackParameters& t) -> float& { return t.lfo1.depth; }, 0.0f, 1.0f, 0.02f, fmtPct));
-    add(trackEnum<StickDest>("LFO1.DEST", "L1 DEST", S, [](TrackParameters& t) -> StickDest& { return t.lfo1.dest; }, destName));
-    add(trackEnum<LfoMode>("LFO1.MODE", "L1 MODE", S, [](TrackParameters& t) -> LfoMode& { return t.lfo1.mode; }, lfoModeName));
-    add(trackEnum<LfoWave>("LFO2.WAVE", "L2 WAVE", S, [](TrackParameters& t) -> LfoWave& { return t.lfo2.wave; }, lfoWaveName));
-    {
-        Param p;
-        p.id = "LFO2.RATE";
-        p.label = "L2 RATE";
-        p.value = [=](const UiContext& c) {
-            const auto& l = c.audio.getTrackParams(trk(c, S)).lfo2;
-            int s = 1 + static_cast<int>(l.rate * 127.0f + 0.5f);
-            uint8_t m = l.multiplier > 0 ? l.multiplier : 1;
-            float hz = (0.05f + l.rate * 19.95f) * static_cast<float>(m);
-            char b[24];
-            if (hz >= 10.0f) std::snprintf(b, sizeof(b), "%d (%.0fHz)", s, hz);
-            else std::snprintf(b, sizeof(b), "%d (%.1fHz)", s, hz);
-            return std::string(b);
-        };
-        p.norm = [=](const UiContext& c) { return c.audio.getTrackParams(trk(c, S)).lfo2.rate; };
-        p.step = [=](UiContext& c, int dir, bool coarse) {
-            int t = trk(c, S);
-            auto tp = c.audio.getTrackParams(t);
-            tp.lfo2.rate = std::clamp(tp.lfo2.rate + dir * (coarse ? 0.08f : 0.01f), 0.0f, 1.0f);
-            c.audio.setTrackParams(t, tp);
-        };
-        add(std::move(p));
-    }
-    {
-        Param p;
-        p.id = "LFO2.MULT";
-        p.label = "L2 MULT";
-        p.value = [=](const UiContext& c) {
-            uint8_t m = c.audio.getTrackParams(trk(c, S)).lfo2.multiplier;
-            switch (m) {
-                case 2:  return "x2";
-                case 4:  return "x4";
-                case 8:  return "x8";
-                case 16: return "x16";
-                case 32: return "x32";
-                case 64: return "x64";
-                default: return "x1";
-            }
-        };
-        p.norm = [=](const UiContext& c) { return static_cast<float>(c.audio.getTrackParams(trk(c, S)).lfo2.multiplier) / 64.0f; };
-        p.step = [=](UiContext& c, int dir, bool) {
-            int t = trk(c, S);
-            auto tp = c.audio.getTrackParams(t);
-            static constexpr uint8_t kM[] = {1, 2, 4, 8, 16, 32, 64};
-            int idx = 0;
-            for (int i = 0; i < 7; ++i) if (kM[i] == tp.lfo2.multiplier) { idx = i; break; }
-            idx = std::clamp(idx + dir, 0, 6);
-            tp.lfo2.multiplier = kM[idx];
-            c.audio.setTrackParams(t, tp);
-        };
-        add(std::move(p));
-    }
-    add(trackFloat("LFO2.DEPTH", "L2 DEPTH", S, [](TrackParameters& t) -> float& { return t.lfo2.depth; }, 0.0f, 1.0f, 0.02f, fmtPct));
-    add(trackEnum<StickDest>("LFO2.DEST", "L2 DEST", S, [](TrackParameters& t) -> StickDest& { return t.lfo2.dest; }, destName));
-    add(trackEnum<LfoMode>("LFO2.MODE", "L2 MODE", S, [](TrackParameters& t) -> LfoMode& { return t.lfo2.mode; }, lfoModeName));
+#define DEFINE_LFO_PARAMS(N, lfo_member) \
+    add(trackEnum<LfoWave>("LFO" #N ".WAVE", "L" #N " WAVE", S, [](TrackParameters& t) -> LfoWave& { return t.lfo_member.wave; }, lfoWaveName)); \
+    { \
+        Param p; \
+        p.id = "LFO" #N ".RATE"; \
+        p.label = "L" #N " RATE"; \
+        p.value = [=](const UiContext& c) { \
+            auto tp = c.audio.getTrackParams(trk(c, S)); \
+            const auto& l = tp.lfo_member; \
+            int s = 1 + static_cast<int>(l.rate * 127.0f + 0.5f); \
+            uint8_t m = l.multiplier > 0 ? l.multiplier : 1; \
+            float hz = (0.05f + l.rate * 19.95f) * static_cast<float>(m); \
+            char b[24]; \
+            if (hz >= 10.0f) std::snprintf(b, sizeof(b), "%d (%.0fHz)", s, hz); \
+            else std::snprintf(b, sizeof(b), "%d (%.1fHz)", s, hz); \
+            return std::string(b); \
+        }; \
+        p.norm = [=](const UiContext& c) { return c.audio.getTrackParams(trk(c, S)).lfo_member.rate; }; \
+        p.step = [=](UiContext& c, int dir, bool coarse) { \
+            int t = trk(c, S); \
+            auto tp = c.audio.getTrackParams(t); \
+            tp.lfo_member.rate = std::clamp(tp.lfo_member.rate + dir * (coarse ? 0.08f : 0.01f), 0.0f, 1.0f); \
+            c.audio.setTrackParams(t, tp); \
+        }; \
+        add(std::move(p)); \
+    } \
+    { \
+        Param p; \
+        p.id = "LFO" #N ".MULT"; \
+        p.label = "L" #N " MULT"; \
+        p.value = [=](const UiContext& c) { \
+            uint8_t m = c.audio.getTrackParams(trk(c, S)).lfo_member.multiplier; \
+            switch (m) { \
+                case 2:  return "x2"; \
+                case 4:  return "x4"; \
+                case 8:  return "x8"; \
+                case 16: return "x16"; \
+                case 32: return "x32"; \
+                case 64: return "x64"; \
+                default: return "x1"; \
+            } \
+        }; \
+        p.norm = [=](const UiContext& c) { return static_cast<float>(c.audio.getTrackParams(trk(c, S)).lfo_member.multiplier) / 64.0f; }; \
+        p.step = [=](UiContext& c, int dir, bool) { \
+            int t = trk(c, S); \
+            auto tp = c.audio.getTrackParams(t); \
+            static constexpr uint8_t kM[] = {1, 2, 4, 8, 16, 32, 64}; \
+            int idx = 0; \
+            for (int i = 0; i < 7; ++i) if (kM[i] == tp.lfo_member.multiplier) { idx = i; break; } \
+            idx = std::clamp(idx + dir, 0, 6); \
+            tp.lfo_member.multiplier = kM[idx]; \
+            c.audio.setTrackParams(t, tp); \
+        }; \
+        add(std::move(p)); \
+    } \
+    add(trackFloat("LFO" #N ".DEPTH", "L" #N " DEPTH", S, [](TrackParameters& t) -> float& { return t.lfo_member.depth; }, 0.0f, 1.0f, 0.02f, fmtPct)); \
+    add(trackEnum<ModTarget>("LFO" #N ".DEST", "L" #N " DEST", S, [](TrackParameters& t) -> ModTarget& { return t.lfo_member.dest; }, destName)); \
+    add(trackEnum<LfoMode>("LFO" #N ".MODE", "L" #N " MODE", S, [](TrackParameters& t) -> LfoMode& { return t.lfo_member.mode; }, lfoModeName));
 
-    add(trackEnum<StickDest>("STICK.LX", "L-STK X", S, [](TrackParameters& t) -> StickDest& { return t.stick_left_x; }, destName));
-    add(trackEnum<StickDest>("STICK.LY", "L-STK Y", S, [](TrackParameters& t) -> StickDest& { return t.stick_left_y; }, destName));
-    add(trackEnum<StickDest>("STICK.RX", "R-STK X", S, [](TrackParameters& t) -> StickDest& { return t.stick_right_x; }, destName));
-    add(trackEnum<StickDest>("STICK.RY", "R-STK Y", S, [](TrackParameters& t) -> StickDest& { return t.stick_right_y; }, destName));
+    DEFINE_LFO_PARAMS(1, lfo1);
+    DEFINE_LFO_PARAMS(2, lfo2);
+    DEFINE_LFO_PARAMS(3, lfo3);
+    DEFINE_LFO_PARAMS(4, lfo4);
+#undef DEFINE_LFO_PARAMS
+
+#define DEFINE_ENV_PARAMS(N, env_member) \
+    add(trackFloat("ENV" #N ".ATK", "E" #N " ATK", S, [](TrackParameters& t) -> float& { return t.env_member.attack; }, 0.001f, 0.8f, 0.01f, fmtMs)); \
+    add(trackFloat("ENV" #N ".DEC", "E" #N " DEC", S, [](TrackParameters& t) -> float& { return t.env_member.decay; }, 0.01f, 2.5f, 0.02f, fmtMs)); \
+    add(trackFloat("ENV" #N ".SUS", "E" #N " SUS", S, [](TrackParameters& t) -> float& { return t.env_member.sustain; }, 0.0f, 1.0f, 0.02f, fmtPct)); \
+    add(trackFloat("ENV" #N ".REL", "E" #N " REL", S, [](TrackParameters& t) -> float& { return t.env_member.release; }, 0.01f, 2.5f, 0.02f, fmtMs)); \
+    add(trackFloat("ENV" #N ".AMT", "E" #N " AMT", S, [](TrackParameters& t) -> float& { return t.env_member.amount; }, -1.0f, 1.0f, 0.05f, fmtBipolarPct)); \
+    add(trackEnum<ModTarget>("ENV" #N ".DEST", "E" #N " DEST", S, [](TrackParameters& t) -> ModTarget& { return t.env_member.dest; }, destName));
+
+    DEFINE_ENV_PARAMS(1, env1);
+    DEFINE_ENV_PARAMS(2, env2);
+#undef DEFINE_ENV_PARAMS
+
+    // Аналогові стіки (Mode 1 & Mode 2 для лівого та правого стіків)
+    add(trackEnum<ModTarget>("STK.L1_X", "L1 X-TGT", S, [](TrackParameters& t) -> ModTarget& { return t.stick_l_m1.dest_x; }, destName));
+    add(trackFloat("STK.L1_XAMT", "L1 X-AMT", S, [](TrackParameters& t) -> float& { return t.stick_l_m1.amount_x; }, 0.0f, 1.0f, 0.05f, fmtPct));
+    add(trackEnum<ModTarget>("STK.L1_Y", "L1 Y-TGT", S, [](TrackParameters& t) -> ModTarget& { return t.stick_l_m1.dest_y; }, destName));
+    add(trackFloat("STK.L1_YAMT", "L1 Y-AMT", S, [](TrackParameters& t) -> float& { return t.stick_l_m1.amount_y; }, 0.0f, 1.0f, 0.05f, fmtPct));
+
+    add(trackEnum<ModTarget>("STK.L2_X", "L2 X-TGT", S, [](TrackParameters& t) -> ModTarget& { return t.stick_l_m2.dest_x; }, destName));
+    add(trackFloat("STK.L2_XAMT", "L2 X-AMT", S, [](TrackParameters& t) -> float& { return t.stick_l_m2.amount_x; }, 0.0f, 1.0f, 0.05f, fmtPct));
+    add(trackEnum<ModTarget>("STK.L2_Y", "L2 Y-TGT", S, [](TrackParameters& t) -> ModTarget& { return t.stick_l_m2.dest_y; }, destName));
+    add(trackFloat("STK.L2_YAMT", "L2 Y-AMT", S, [](TrackParameters& t) -> float& { return t.stick_l_m2.amount_y; }, 0.0f, 1.0f, 0.05f, fmtPct));
+
+    add(trackEnum<ModTarget>("STK.R1_X", "R1 X-TGT", S, [](TrackParameters& t) -> ModTarget& { return t.stick_r_m1.dest_x; }, destName));
+    add(trackFloat("STK.R1_XAMT", "R1 X-AMT", S, [](TrackParameters& t) -> float& { return t.stick_r_m1.amount_x; }, 0.0f, 1.0f, 0.05f, fmtPct));
+    add(trackEnum<ModTarget>("STK.R1_Y", "R1 Y-TGT", S, [](TrackParameters& t) -> ModTarget& { return t.stick_r_m1.dest_y; }, destName));
+    add(trackFloat("STK.R1_YAMT", "R1 Y-AMT", S, [](TrackParameters& t) -> float& { return t.stick_r_m1.amount_y; }, 0.0f, 1.0f, 0.05f, fmtPct));
+
+    add(trackEnum<ModTarget>("STK.R2_X", "R2 X-TGT", S, [](TrackParameters& t) -> ModTarget& { return t.stick_r_m2.dest_x; }, destName));
+    add(trackFloat("STK.R2_XAMT", "R2 X-AMT", S, [](TrackParameters& t) -> float& { return t.stick_r_m2.amount_x; }, 0.0f, 1.0f, 0.05f, fmtPct));
+    add(trackEnum<ModTarget>("STK.R2_Y", "R2 Y-TGT", S, [](TrackParameters& t) -> ModTarget& { return t.stick_r_m2.dest_y; }, destName));
+    add(trackFloat("STK.R2_YAMT", "R2 Y-AMT", S, [](TrackParameters& t) -> float& { return t.stick_r_m2.amount_y; }, 0.0f, 1.0f, 0.05f, fmtPct));
+
+    // Сумісність для існуючих шорткатів
+    add(trackEnum<ModTarget>("STICK.LX", "L-STK X", S, [](TrackParameters& t) -> ModTarget& { return t.stick_left_x; }, destName));
+    add(trackEnum<ModTarget>("STICK.LY", "L-STK Y", S, [](TrackParameters& t) -> ModTarget& { return t.stick_left_y; }, destName));
+    add(trackEnum<ModTarget>("STICK.RX", "R-STK X", S, [](TrackParameters& t) -> ModTarget& { return t.stick_right_x; }, destName));
+    add(trackEnum<ModTarget>("STICK.RY", "R-STK Y", S, [](TrackParameters& t) -> ModTarget& { return t.stick_right_y; }, destName));
 
     // ===== TRK.* (обраний трек) та T1..T4.* (фіксований трек для MIX) — фільтри, рівні та посили =====
     for (int t = -1; t < kTracksCount; ++t) {

@@ -48,6 +48,10 @@ std::vector<std::string> ActionRegistry::ids() const {
 ActionRegistry::ActionRegistry() {
     // ---------------- Навігація ----------------
     add(Action{"NAV.UP", "UP", [](UiContext& c) {
+        if (c.app.mod_picker_open) {
+            ActionRegistry::instance().run("MOD_PICKER.PREV", c);
+            return;
+        }
         if (c.app.project_modal_open) {
             ActionRegistry::instance().run("PROJECT.MODAL_UP", c);
             return;
@@ -63,6 +67,10 @@ ActionRegistry::ActionRegistry() {
         if (c.shell) c.shell->currentView(c).navigate(c, 0, -1, false);
     }});
     add(Action{"NAV.DOWN", "DOWN", [](UiContext& c) {
+        if (c.app.mod_picker_open) {
+            ActionRegistry::instance().run("MOD_PICKER.NEXT", c);
+            return;
+        }
         if (c.app.project_modal_open) {
             ActionRegistry::instance().run("PROJECT.MODAL_DOWN", c);
             return;
@@ -78,11 +86,11 @@ ActionRegistry::ActionRegistry() {
         if (c.shell) c.shell->currentView(c).navigate(c, 0, 1, false);
     }});
     add(Action{"NAV.LEFT", "LEFT", [](UiContext& c) {
-        if (c.app.project_modal_open || c.app.sample_browser_open || c.app.engine_menu_open) return;
+        if (c.app.mod_picker_open || c.app.project_modal_open || c.app.sample_browser_open || c.app.engine_menu_open) return;
         if (c.shell) c.shell->currentView(c).navigate(c, -1, 0, false);
     }});
     add(Action{"NAV.RIGHT", "RIGHT", [](UiContext& c) {
-        if (c.app.project_modal_open || c.app.sample_browser_open || c.app.engine_menu_open) return;
+        if (c.app.mod_picker_open || c.app.project_modal_open || c.app.sample_browser_open || c.app.engine_menu_open) return;
         if (c.shell) c.shell->currentView(c).navigate(c, 1, 0, false);
     }});
     add(Action{"NAV.PAGE_UP", "PG.UP", [](UiContext& c) {
@@ -107,7 +115,18 @@ ActionRegistry::ActionRegistry() {
     }});
 
     // ---------------- Редагування параметра у фокусі ----------------
-    add(Action{"PARAM.INC", "VAL+", [](UiContext& c) {
+    auto isModTargetParam = [](const std::string& id) -> bool {
+        if (id.size() >= 5 && id.substr(id.size() - 5) == ".DEST") return true;
+        if (id.rfind("STK.", 0) == 0 && (id.find("_X") != std::string::npos || id.find("_Y") != std::string::npos) && id.find("AMT") == std::string::npos) return true;
+        if (id.rfind("STICK.", 0) == 0) return true;
+        return false;
+    };
+
+    add(Action{"PARAM.INC", "VAL+", [=](UiContext& c) {
+        if (c.app.mod_picker_open) {
+            ActionRegistry::instance().run("MOD_PICKER.CLOSE", c);
+            return;
+        }
         if (c.app.project_modal_open) {
             ActionRegistry::instance().run("PROJECT.MODAL_CANCEL", c);
             return;
@@ -121,11 +140,20 @@ ActionRegistry::ActionRegistry() {
             return;
         }
         if (c.shell) {
+            std::string fid = c.shell->currentView(c).focusId(c);
+            if (isModTargetParam(fid)) {
+                ActionRegistry::instance().run("MOD_PICKER.OPEN", c);
+                return;
+            }
             const Param* p = c.shell->currentView(c).focusedParam(c);
             if (p && p->step) p->step(c, 1, false);
         }
     }});
-    add(Action{"PARAM.DEC", "VAL-", [](UiContext& c) {
+    add(Action{"PARAM.DEC", "VAL-", [=](UiContext& c) {
+        if (c.app.mod_picker_open) {
+            ActionRegistry::instance().run("MOD_PICKER.CONFIRM", c);
+            return;
+        }
         if (c.app.project_modal_open) {
             ActionRegistry::instance().run("PROJECT.MODAL_CONFIRM", c);
             return;
@@ -139,6 +167,11 @@ ActionRegistry::ActionRegistry() {
             return;
         }
         if (c.shell) {
+            std::string fid = c.shell->currentView(c).focusId(c);
+            if (isModTargetParam(fid)) {
+                ActionRegistry::instance().run("MOD_PICKER.OPEN", c);
+                return;
+            }
             const Param* p = c.shell->currentView(c).focusedParam(c);
             if (p && p->step) p->step(c, -1, false);
         }
@@ -666,8 +699,8 @@ ActionRegistry::ActionRegistry() {
     }});
 
     add(Action{"VIEW.BACK", "BACK", [](UiContext& c) {
-        if (c.app.project_modal_open || c.app.sample_browser_open || c.app.engine_menu_open ||
-            c.app.step_inspector_open || c.app.arp_modal_open) {
+        if (c.app.mod_picker_open || c.app.project_modal_open || c.app.sample_browser_open ||
+            c.app.engine_menu_open || c.app.step_inspector_open || c.app.arp_modal_open) {
             closeAllModals(c.app);
             c.app.last_action = "MODAL CLOSED";
             return;
@@ -817,6 +850,94 @@ ActionRegistry::ActionRegistry() {
         if (eng == EngineType::kSampleOneShot || eng == EngineType::kSliceSampler) {
             ActionRegistry::instance().run("SAMPLE_BROWSER.OPEN", c);
         }
+    }});
+
+    // ---------------- Модальне контекстне меню вибору таргету модуляції (MOD TARGET PICKER) ----------------
+    auto isValidTargetForParam = [](const std::string& param_id, ModTarget tgt) -> bool {
+        if (param_id == "ENV1.DEST") {
+            if (tgt == ModTarget::kEnv1Attack || tgt == ModTarget::kEnv1Decay ||
+                tgt == ModTarget::kEnv1Sustain || tgt == ModTarget::kEnv1Release) return false;
+        } else if (param_id == "ENV2.DEST") {
+            if (tgt == ModTarget::kEnv2Attack || tgt == ModTarget::kEnv2Decay ||
+                tgt == ModTarget::kEnv2Sustain || tgt == ModTarget::kEnv2Release) return false;
+        }
+        return true;
+    };
+
+    add(Action{"MOD_PICKER.OPEN", "OPEN TGT", [=](UiContext& c) {
+        if (!c.shell) return;
+        std::string focus_id = c.shell->currentView(c).focusId(c);
+        c.app.mod_picker_param_id = focus_id;
+        auto tp = c.audio.getTrackParams(c.app.selected_track);
+        ModTarget current = ModTarget::kNone;
+        if (focus_id == "LFO1.DEST") current = tp.lfo1.dest;
+        else if (focus_id == "LFO2.DEST") current = tp.lfo2.dest;
+        else if (focus_id == "LFO3.DEST") current = tp.lfo3.dest;
+        else if (focus_id == "LFO4.DEST") current = tp.lfo4.dest;
+        else if (focus_id == "ENV1.DEST") current = tp.env1.dest;
+        else if (focus_id == "ENV2.DEST") current = tp.env2.dest;
+        else if (focus_id == "STK.L1_X" || focus_id == "STICK.LX") current = tp.stick_l_m1.dest_x;
+        else if (focus_id == "STK.L1_Y" || focus_id == "STICK.LY") current = tp.stick_l_m1.dest_y;
+        else if (focus_id == "STK.L2_X") current = tp.stick_l_m2.dest_x;
+        else if (focus_id == "STK.L2_Y") current = tp.stick_l_m2.dest_y;
+        else if (focus_id == "STK.R1_X" || focus_id == "STICK.RX") current = tp.stick_r_m1.dest_x;
+        else if (focus_id == "STK.R1_Y" || focus_id == "STICK.RY") current = tp.stick_r_m1.dest_y;
+        else if (focus_id == "STK.R2_X") current = tp.stick_r_m2.dest_x;
+        else if (focus_id == "STK.R2_Y") current = tp.stick_r_m2.dest_y;
+        c.app.mod_picker_sel = static_cast<int>(current);
+        c.app.mod_picker_open = true;
+        c.app.last_action = "TARGET MENU OPEN";
+    }});
+    add(Action{"MOD_PICKER.PREV", "UP", [=](UiContext& c) {
+        const int count = static_cast<int>(ModTarget::kCount);
+        int sel = c.app.mod_picker_sel;
+        for (int i = 0; i < count; ++i) {
+            sel = (sel - 1 + count) % count;
+            if (isValidTargetForParam(c.app.mod_picker_param_id, static_cast<ModTarget>(sel))) {
+                c.app.mod_picker_sel = sel;
+                break;
+            }
+        }
+    }});
+    add(Action{"MOD_PICKER.NEXT", "DOWN", [=](UiContext& c) {
+        const int count = static_cast<int>(ModTarget::kCount);
+        int sel = c.app.mod_picker_sel;
+        for (int i = 0; i < count; ++i) {
+            sel = (sel + 1) % count;
+            if (isValidTargetForParam(c.app.mod_picker_param_id, static_cast<ModTarget>(sel))) {
+                c.app.mod_picker_sel = sel;
+                break;
+            }
+        }
+    }});
+    add(Action{"MOD_PICKER.CLOSE", "CANCEL", [](UiContext& c) {
+        c.app.mod_picker_open = false;
+        c.app.modal_cooldown_until_ms = c.now_ms + 250;
+        c.app.last_action = "PICKER CLOSED";
+    }});
+    add(Action{"MOD_PICKER.CONFIRM", "SELECT", [](UiContext& c) {
+        auto tgt = static_cast<ModTarget>(std::clamp(c.app.mod_picker_sel, 0, static_cast<int>(ModTarget::kCount) - 1));
+        int t = c.app.selected_track;
+        auto tp = c.audio.getTrackParams(t);
+        const std::string& id = c.app.mod_picker_param_id;
+        if (id == "LFO1.DEST") tp.lfo1.dest = tgt;
+        else if (id == "LFO2.DEST") tp.lfo2.dest = tgt;
+        else if (id == "LFO3.DEST") tp.lfo3.dest = tgt;
+        else if (id == "LFO4.DEST") tp.lfo4.dest = tgt;
+        else if (id == "ENV1.DEST") tp.env1.dest = tgt;
+        else if (id == "ENV2.DEST") tp.env2.dest = tgt;
+        else if (id == "STK.L1_X" || id == "STICK.LX") { tp.stick_l_m1.dest_x = tgt; tp.stick_left_x = tgt; }
+        else if (id == "STK.L1_Y" || id == "STICK.LY") { tp.stick_l_m1.dest_y = tgt; tp.stick_left_y = tgt; }
+        else if (id == "STK.L2_X") tp.stick_l_m2.dest_x = tgt;
+        else if (id == "STK.L2_Y") tp.stick_l_m2.dest_y = tgt;
+        else if (id == "STK.R1_X" || id == "STICK.RX") { tp.stick_r_m1.dest_x = tgt; tp.stick_right_x = tgt; }
+        else if (id == "STK.R1_Y" || id == "STICK.RY") { tp.stick_r_m1.dest_y = tgt; tp.stick_right_y = tgt; }
+        else if (id == "STK.R2_X") tp.stick_r_m2.dest_x = tgt;
+        else if (id == "STK.R2_Y") tp.stick_r_m2.dest_y = tgt;
+        c.audio.setTrackParams(t, tp);
+        c.app.mod_picker_open = false;
+        c.app.modal_cooldown_until_ms = c.now_ms + 250;
+        c.app.last_action = "TARGET: " + std::string(getModTargetShortName(tgt));
     }});
 
     // ---------------- Семпл-браузер (пул семплів та доступ до ФС) ----------------

@@ -30,6 +30,7 @@ enum class ViewId : uint8_t {
     kProjectModal,  // PROJECT — модальне вікно Save As / Load Project
     kSampleBrowser, // BROWSER — пул семплів та файлова система
     kEngineMenu,    // ENGINE  — меню вибору типу звукового рушія
+    kModPicker,     // MOD TARGET — контекстне меню вибору таргету модуляції
     kCount
 };
 
@@ -38,7 +39,7 @@ inline constexpr ViewId kScope = ViewId::kSample;
 inline constexpr int kViewCount = static_cast<int>(ViewId::kCount);
 
 inline constexpr const char* kViewNames[kViewCount] = {
-    "SEQ", "SYNTH", "PERF", "FX", "MIX", "SAMPLE", "SYS", "ARP", "INSPECT", "PROJECT", "BROWSER", "ENGINE"
+    "SEQ", "SYNTH", "PERF", "FX", "MIX", "SAMPLE", "SYS", "ARP", "INSPECT", "PROJECT", "BROWSER", "ENGINE", "MOD_TGT"
 };
 
 enum class SeqSubmode : uint8_t {
@@ -168,14 +169,21 @@ struct AppModel {
     bool project_modal_is_save = false; // true = Save As, false = Load
     std::vector<std::string> project_files;
     int project_modal_sel = 0;
+
+    // Контекстне меню вибору таргету модуляції (Button A на DEST / STK)
+    bool mod_picker_open = false;
+    int mod_picker_sel = 0;
+    std::string mod_picker_param_id;
 };
 
 inline bool isModalView(ViewId v) {
     return v == ViewId::kProjectModal || v == ViewId::kSampleBrowser ||
-           v == ViewId::kEngineMenu || v == ViewId::kInspect || v == ViewId::kArp;
+           v == ViewId::kEngineMenu || v == ViewId::kInspect || v == ViewId::kArp ||
+           v == ViewId::kModPicker;
 }
 
 inline ViewId activeViewId(const AppModel& app) {
+    if (app.mod_picker_open) return ViewId::kModPicker;
     if (app.project_modal_open) return ViewId::kProjectModal;
     if (app.sample_browser_open) return ViewId::kSampleBrowser;
     if (app.engine_menu_open) return ViewId::kEngineMenu;
@@ -185,6 +193,7 @@ inline ViewId activeViewId(const AppModel& app) {
 }
 
 inline void closeAllModals(AppModel& app) {
+    app.mod_picker_open = false;
     app.project_modal_open = false;
     app.sample_browser_open = false;
     app.engine_menu_open = false;
