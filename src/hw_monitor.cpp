@@ -45,6 +45,7 @@ HardwareMonitor::~HardwareMonitor() {
 
 void HardwareMonitor::start() {
     if (running_.exchange(true)) return;
+    requestUsbRoleSwitch("device_ssh");
     worker_ = std::thread(&HardwareMonitor::pollLoop, this);
 }
 
@@ -86,8 +87,10 @@ bool HardwareMonitor::requestUsbRoleSwitch(const std::string& target_role) {
         if (!prof.gadget_conf_path.empty()) cmd += "echo 'USB_MODE=cdc' > " + prof.gadget_conf_path + " 2>/dev/null; ";
         cmd += "echo device > " + prof.role_switch_path + " 2>/dev/null; ";
         // Safe gadget init for ROCKNIX without blocking on systemctl
-        cmd += "which usbgadget >/dev/null 2>&1 && usbgadget start cdc 2>/dev/null; ";
-        cmd += "which /etc/init.d/S50sshd >/dev/null 2>&1 && /etc/init.d/S50sshd restart 2>/dev/null; ";
+        cmd += "which usbgadget >/dev/null 2>&1 && usbgadget restart cdc 2>/dev/null; ";
+        cmd += "systemctl start sshd.service 2>/dev/null; ";
+        cmd += "ip addr add 10.1.1.2/24 dev gadget 2>/dev/null; ";
+        cmd += "ip link set gadget up 2>/dev/null; ";
     }
     // Launch in detached thread to guarantee zero UI frame drops or blocking
     std::thread([cmd]() {
