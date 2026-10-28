@@ -1033,7 +1033,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                 if (tp.engine == EngineType::kSampleOneShot) {
                     const auto& sb = sampler().trackSample(t);
                     if (sb.loaded && sb.lengthFrames() > 0) {
-                        float note_pitch = static_cast<float>(v.note_num) - 48.0f + (tp.p[1] - 0.5f) * 24.0f;
+                        float note_pitch = static_cast<float>(v.note_num) - 48.0f + (tp.p[1] - 0.5f) * 48.0f;
                         float pitch_ratio = std::pow(2.0f, note_pitch / 12.0f);
                         float step = pitch_ratio * (static_cast<float>(sb.sample_rate) * inv_sr);
                         uint32_t f0 = static_cast<uint32_t>(v.phase1);
@@ -1053,7 +1053,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                     int s_idx = std::clamp(static_cast<int>(tp.p[1] * (sampler().sliceCount() - 1) + 0.5f), 0, sampler().sliceCount() - 1);
                     SlicePoint pt = sampler().getSlice(s_idx);
                     if (sb.loaded && pt.length_frames > 0) {
-                        float pitch_ratio = std::pow(2.0f, (tp.p[2] - 0.5f) * 2.0f);
+                        float pitch_ratio = std::pow(2.0f, (tp.p[2] - 0.5f) * 4.0f);
                         float step = pitch_ratio * (static_cast<float>(sb.sample_rate) * inv_sr);
                         uint32_t cur_f = pt.start_frame + static_cast<uint32_t>(v.phase1);
                         if (v.phase1 < static_cast<float>(pt.length_frames) && cur_f + 1 < sb.lengthFrames()) {
@@ -1072,7 +1072,10 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                     const auto& patch = dx7_engine_.getPatch(p_idx);
                     float bright = std::clamp(tp.p[2] * 2.0f, 0.0f, 3.0f);
                     float dec = std::clamp(tp.p[3] * 2.0f + 0.1f, 0.1f, 4.0f);
-                    raw = v.dx7_voice.process(patch, bright, dec, static_cast<float>(sample_rate));
+                    int algo_idx = std::clamp(static_cast<int>(tp.p[4] * 31.99f), 0, 31);
+                    int fb_amt = std::clamp(static_cast<int>(tp.p[5] * 7.99f), 0, 7);
+                    float detune = std::clamp(tp.p[1] * 4.0f, 0.0f, 6.0f);
+                    raw = v.dx7_voice.process(patch, bright, dec, static_cast<float>(sample_rate), algo_idx, fb_amt, detune);
                     if (!v.dx7_voice.isActive()) {
                         v.active = false;
                     }

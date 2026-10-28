@@ -50,12 +50,13 @@ public:
     void reset();
 
     // Renders one sample of DX7 audio
-    float process(const Dx7Patch& patch, float brightness, float decay_scale, float sample_rate);
+    float process(const Dx7Patch& patch, float brightness, float decay_scale, float sample_rate,
+                  int override_algo = -1, int override_feedback = -1, float detune_scale = 1.0f);
 
     bool isActive() const { return active_; }
 
 private:
-    float calcOpFreq(const Dx7OpParams& op, float base_freq) const;
+    float calcOpFreq(const Dx7OpParams& op, float base_freq, float detune_scale = 1.0f) const;
     void advanceEg(int op_idx, const Dx7OpParams& op, float decay_scale, float inv_sr);
 
     std::array<Dx7OpState, kDx7Operators> ops_{};

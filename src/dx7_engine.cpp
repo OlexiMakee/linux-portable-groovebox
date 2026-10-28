@@ -148,7 +148,7 @@ void Dx7Voice::reset() {
     active_ = false;
 }
 
-float Dx7Voice::calcOpFreq(const Dx7OpParams& op, float base_freq) const {
+float Dx7Voice::calcOpFreq(const Dx7OpParams& op, float base_freq, float detune_scale) const {
     if (op.osc_mode == 1) {
         // Fixed frequency mode
         float coarse = static_cast<float>(op.freq_coarse);
@@ -159,7 +159,7 @@ float Dx7Voice::calcOpFreq(const Dx7OpParams& op, float base_freq) const {
     float coarse = (op.freq_coarse == 0) ? 0.5f : static_cast<float>(op.freq_coarse);
     float fine = static_cast<float>(op.freq_fine) * 0.01f;
     float ratio = coarse + fine;
-    float detune_factor = 1.0f + static_cast<float>(op.detune) * 0.0015f;
+    float detune_factor = 1.0f + static_cast<float>(op.detune) * 0.0015f * detune_scale;
     return base_freq * ratio * detune_factor;
 }
 
@@ -234,12 +234,18 @@ void Dx7Voice::advanceEg(int op_idx, const Dx7OpParams& op, float decay_scale, f
     }
 }
 
-float Dx7Voice::process(const Dx7Patch& patch, float brightness, float decay_scale, float sample_rate) {
+float Dx7Voice::process(const Dx7Patch& patch, float brightness, float decay_scale, float sample_rate,
+                         int override_algo, int override_feedback, float detune_scale) {
     if (!active_) return 0.0f;
 
     const float inv_sr = 1.0f / sample_rate;
-    int algo_idx = std::clamp(static_cast<int>(patch.algorithm), 0, 31);
+    int algo_idx = (override_algo >= 0)
+        ? std::clamp(override_algo, 0, 31)
+        : std::clamp(static_cast<int>(patch.algorithm), 0, 31);
     const auto& algo = kAlgorithms[algo_idx];
+    uint8_t effective_feedback = (override_feedback >= 0)
+        ? static_cast<uint8_t>(std::clamp(override_feedback, 0, 7))
+        : patch.feedback;
 
     // Check if all carriers are finished
     bool any_carrier_active = false;
@@ -262,7 +268,7 @@ float Dx7Voice::process(const Dx7Patch& patch, float brightness, float decay_sca
         const auto& op_params = patch.ops[i];
         advanceEg(i, op_params, decay_scale, inv_sr);
 
-        float op_freq = calcOpFreq(op_params, base_freq_);
+        float op_freq = calcOpFreq(op_params, base_freq_, detune_scale);
         float phase_inc = op_freq * inv_sr;
         ops_[i].phase += phase_inc;
         if (ops_[i].phase >= 1.0f) ops_[i].phase -= std::floor(ops_[i].phase);
@@ -277,8 +283,8 @@ float Dx7Voice::process(const Dx7Patch& patch, float brightness, float decay_sca
         }
 
         // Apply feedback if this operator has self-feedback
-        if (algo.feedback_op == i && patch.feedback > 0) {
-            float fb_amt = static_cast<float>(1 << (patch.feedback - 1)) * 0.12f;
+        if (algo.feedback_op == i && effective_feedback > 0) {
+            float fb_amt = static_cast<float>(1 << (effective_feedback - 1)) * 0.12f;
             phase_mod += fb_out * fb_amt;
         }
 
