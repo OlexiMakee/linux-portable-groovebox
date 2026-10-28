@@ -814,3 +814,32 @@
   * Для максимальної швидкодії компіляції та виконання рекомендовано:
     1. Винести логіку секвенсора з `audio_engine.cpp` в окремий модуль `src/sequencer.hpp/.cpp`.
     2. Синтезаторні ядра (VA, FM2, Acid, Chord) винести у легкі заголовкові структури `src/dsp/` без використання віртуальних функцій (Virtual Method Tables створюють пенальті на ARM Cortex-A35 через скидання кешу гілок конвеєра).
+
+## [2026-10-28] Milestone 26: First-Class Modal View Architecture, Scoped Routing, Dynamic HUD Button Hints & Master Volume Display
+* **Уніфікація архітектури модальних вікон (src/ui/ui_context.hpp):**
+  * Модальні вікна виведено в статус першокласних екранів перегляду (`ViewId::kProjectModal`, `ViewId::kSampleBrowser`, `ViewId::kEngineMenu`).
+  * Реалізовано чисті допоміжні функції:
+    * `activeViewId(const AppModel&)`: повертає активний модальний екран (якщо відкритий) або базову вкладку робочого простору.
+    * `isModalView(ViewId)`: визначає, чи є екран модальним (для блокування автоповтору значень A/B та фокусування).
+    * `closeAllModals(AppModel&)`: гарантовано закриває всі модальні вікна без залишкових станів.
+* **Суворі рамки відкриття модальних вікон (src/ui/actions.cpp):**
+  * Арпеджиатор (`ARP.OPEN`, `ARP.TOGGLE`) дозволено відкривати виключно з вкладки секвенсора (`kSeq`). При спробі виклику з інших вкладок статус показує `ARP: SEQ ONLY`.
+  * Меню збереження/завантаження проектів (`PROJECT.SAVE_AS_OPEN`, `PROJECT.LOAD_OPEN`) дозволено відкривати виключно з вкладки системи (`kSys`).
+  * Селектор звукового рушія (`ENGINE.MENU_OPEN`) дозволено викликати лише з екранів `kSeq` та `kSynth`.
+  * Автозакриття при перемиканні вкладок: будь-яке перемикання табів (`TAB.L1`, `TAB.L2`, `TAB.R1`, `TAB.R2`, `TAB.G`, `TAB.SEL_*`) викликає `closeAllModals(c.app)`, усуваючи зависання вікон при переході.
+* **Модульний кеймап для кожного вікна (src/ui/keymap.cpp, src/ui/actions.cpp):**
+  * Для кожного модального вікна зареєстровано індивідуальні прив'язки кнопок:
+    * `ViewId::kProjectModal`: D-Pad Up/Down (`PROJECT.MODAL_UP`/`DOWN`), Button A (`PROJECT.MODAL_CONFIRM`), Button B / SELECT+B (`PROJECT.MODAL_CANCEL`).
+    * `ViewId::kSampleBrowser`: D-Pad Up/Down/Left/Right, Button A (`SAMPLE_BROWSER.CONFIRM`), Button B / SELECT+B (`SAMPLE_BROWSER.CLOSE`).
+    * `ViewId::kEngineMenu`: D-Pad Up/Down (`ENGINE.MENU_UP`/`DOWN`), Button A (`ENGINE.MENU_CONFIRM`), Button B / SELECT+B (`ENGINE.MENU_CLOSE`).
+  * В `InputRouter::processInput()` прибрано жорсткі блоки перехоплення: маршрутизація здійснюється уніфіковано через `activeViewId(ctx.app)`.
+  * Додано захисний таймер `modal_cooldown_until_ms = c.now_ms + 300` при підтвердженні та скасуванні модалок для запобігання витоку натискань кнопок A/B у фоновий екран.
+* **Оновлення нижнього оверлея (HUD) та ліквідація конфліктів підказок (src/ui/ui_shell.cpp, src/audio_engine.hpp):**
+  * Поряд із показником BPM у першому рядку виведено поточну гучність у відсотках (наприклад, `120 BPM  80%`), що зчитується атомарно через `AudioEngine::getMasterVolume()`.
+  * У другому рядку виводиться точний заголовок модального вікна (`PROJECT: SAVE AS`, `PROJECT: LOAD`, `SAMPLE BROWSER`, `SELECT SYNTH ENGINE`).
+  * У шостому блоці HUD підказки кнопок ABXY формуються динамічно через `keymap.actionLabel(active_v_id, ...)`: для відкритого модального вікна HUD показує `A:CONF B:CANC  X:--  Y:--` без жодного конфлікту.
+  * Видалено дублюючі текстові підказки кнопок всередині самих діалогових вікон проектів та семплів — нижній оверлей консолі є єдиним достовірним джерелом підказок дій.
+* **Автоматизоване тестування та деплой на консоль:**
+  * Додано нові тести перевірки суворих меж відкриття вікон, активного ViewId, динамічних підказок HUD, скасування по кнопці B та автозакриття при перемиканні вкладок.
+  * Тестовий набір розширено до **144 тестів**: 100% проходження (**144/144 PASSED [OK]**) як на робочій станції, так і на фізичному пристрої MagicX XU10.
+  * Додаток зібрано та перезапущено на залізі MagicX XU10 (`10.1.1.2`, PID 112897).
