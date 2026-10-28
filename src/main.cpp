@@ -107,10 +107,11 @@ int main(int argc, char* argv[]) {
             app.song_play_repeat++;
             if (app.song_play_repeat >= app.song_chain[app.song_play_step].repeats) {
                 app.song_play_repeat = 0;
-                int next_step = (app.song_play_step + 1) % 16;
-                for (int attempts = 0; attempts < 16; ++attempts) {
+                const int total_rows = std::clamp(app.song_rows_count, 1, 16);
+                int next_step = (app.song_play_step + 1) % total_rows;
+                for (int attempts = 0; attempts < total_rows; ++attempts) {
                     if (app.song_chain[next_step].enabled) break;
-                    next_step = (next_step + 1) % 16;
+                    next_step = (next_step + 1) % total_rows;
                 }
                 app.song_play_step = next_step;
                 app.song_cursor_row = next_step;
@@ -140,9 +141,11 @@ int main(int argc, char* argv[]) {
             if (playing && reset_to_start) {
                 app.current_step = 0;
                 if (app.seq_submode == groovebox::SeqSubmode::kSong) {
-                    app.song_play_step = 0;
+                    const int total_rows = std::clamp(app.song_rows_count, 1, 16);
+                    int start_step = std::clamp(app.song_cursor_row, 0, total_rows - 1);
+                    app.song_play_step = start_step;
                     app.song_play_repeat = 0;
-                    auto& s = app.song_chain[0];
+                    auto& s = app.song_chain[start_step];
                     float play_bpm = (s.bpm > 0) ? static_cast<float>(s.bpm) : app.bpm;
                     app.pattern_mgr.switchPatternNow(s.bank, s.pattern, audio_engine, play_bpm);
                     for (int t = 0; t < 16; ++t) {

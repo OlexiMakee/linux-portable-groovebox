@@ -578,6 +578,20 @@ ActionRegistry::ActionRegistry() {
         if (c.app.transport_playing) {
             c.app.current_step = 0;
             c.app.last_step_ms = c.now_ms;
+            if (c.app.seq_submode == SeqSubmode::kSong) {
+                const int total_rows = std::clamp(c.app.song_rows_count, 1, 16);
+                int start_step = std::clamp(c.app.song_cursor_row, 0, total_rows - 1);
+                c.app.song_play_step = start_step;
+                c.app.song_play_repeat = 0;
+                auto& s = c.app.song_chain[start_step];
+                float play_bpm = (s.bpm > 0) ? static_cast<float>(s.bpm) : c.app.bpm;
+                c.app.pattern_mgr.switchPatternNow(s.bank, s.pattern, c.audio, play_bpm);
+                for (int t = 0; t < 16; ++t) {
+                    auto tp = c.audio.getTrackParams(t);
+                    tp.muted = ((s.mute_mask & (1 << t)) != 0);
+                    c.audio.setTrackParams(t, tp);
+                }
+            }
             c.audio.triggerSequencerStep(0);
         } else {
             c.audio.panic();

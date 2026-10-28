@@ -861,6 +861,43 @@ static void testInputRouterAndStepEditor() {
     TEST_ASSERT(app.mod_picker_sel != static_cast<int>(ModTarget::kEnv1Attack), "MOD_PICKER filters out self-envelope targets for ENV1");
     ActionRegistry::instance().run("MOD_PICKER.CLOSE", ctx);
     TEST_ASSERT(app.mod_picker_open == false, "MOD_PICKER.CLOSE cancels and closes modal");
+
+    // Перевірка категорій цілей модуляції
+    TEST_ASSERT(std::string(getModTargetCategory(ModTarget::kCutoff)) == "FLT", "Cutoff category is FLT");
+    TEST_ASSERT(std::string(getModTargetCategory(ModTarget::kPitch)) == "SYN", "Pitch category is SYN");
+    TEST_ASSERT(std::string(getModTargetCategory(ModTarget::kAmpAttack)) == "AMP", "AmpAttack category is AMP");
+    TEST_ASSERT(std::string(getModTargetCategory(ModTarget::kDelaySend)) == "FX", "DelaySend category is FX");
+    TEST_ASSERT(std::string(getModTargetCategory(ModTarget::kLfo1Rate)) == "MOD", "LFO1Rate category is MOD");
+
+    // Прямий виклик step на ModTarget параметрі відкриває модальне вікно
+    app.mod_picker_open = false;
+    const Param* p_dest = shell.currentView(ctx).focusedParam(ctx);
+    if (p_dest && p_dest->step) {
+        p_dest->step(ctx, 1, false);
+        TEST_ASSERT(app.mod_picker_open == true, "Calling step on ModTarget parameter opens MOD TARGET PICKER");
+        app.mod_picker_open = false;
+    }
+
+    // Тестування ініціалізації Song Mode Playback
+    app.seq_submode = SeqSubmode::kSong;
+    app.song_rows_count = 2;
+    app.song_chain[0].pattern = 0;
+    app.song_chain[0].repeats = 2;
+    app.song_chain[0].mute_mask = 0b00000010;
+    app.song_chain[1].pattern = 1;
+    app.song_chain[1].repeats = 1;
+    app.song_chain[1].mute_mask = 0b00000001;
+    app.song_cursor_row = 1;
+    app.transport_playing = false;
+
+    ActionRegistry::instance().run("PLAY.TOGGLE", ctx);
+    TEST_ASSERT(app.transport_playing == true, "PLAY.TOGGLE starts playback");
+    TEST_ASSERT(app.song_play_step == 1, "Song mode playback initializes from active cursor row");
+    TEST_ASSERT(app.song_play_repeat == 0, "Song repeat counter resets to 0 on play");
+    TEST_ASSERT(audio.getTrackParams(0).muted == true, "Track 0 muted as per row 1 mute_mask");
+    TEST_ASSERT(audio.getTrackParams(1).muted == false, "Track 1 unmuted as per row 1 mute_mask");
+    ActionRegistry::instance().run("PLAY.TOGGLE", ctx);
+    TEST_ASSERT(app.transport_playing == false, "PLAY.TOGGLE stops playback");
 }
 
 static void testViewsRendering() {
