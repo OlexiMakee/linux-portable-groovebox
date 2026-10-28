@@ -900,7 +900,9 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
 
     auto computeLfo = [](LfoParameters& lfo, float& phase, float dt) -> float {
         if (lfo.depth <= 0.001f) return 0.0f;
-        phase += lfo.rate * dt;
+        float mult = (lfo.multiplier > 0) ? static_cast<float>(lfo.multiplier) : 1.0f;
+        float rate_hz = (0.05f + lfo.rate * 19.95f) * mult;
+        phase += rate_hz * dt;
         if (phase >= 1.0f) phase -= std::floor(phase);
         float p = phase;
         float raw = 0.0f;
@@ -974,6 +976,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             float cut_offset = cut_macro + getTrackMod(t, StickDest::kCutoff);
             float env_offset = env_macro + getTrackMod(t, StickDest::kEnvMod);
             float res_offset = res_macro + getTrackMod(t, StickDest::kResonance);
+            float hpf_offset = getTrackMod(t, StickDest::kHpfCutoff);
             float reso = std::clamp(tp.p[1] + res_offset, 0.0f, 0.90f);
             float q_damp = std::clamp(1.0f - reso * 0.88f, 0.10f, 1.0f);
             float trk_level = std::clamp(tp.level + getTrackMod(t, StickDest::kLevel), 0.0f, 1.0f);
@@ -1133,7 +1136,16 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                     }
                 }
 
-                // SVF filter per voice
+                // Dual filter 1: High Pass Filter (Low cut)
+                float eff_hpf = std::clamp(tp.hpf_cutoff + hpf_offset, 0.0f, 0.98f);
+                if (eff_hpf > 0.005f) {
+                    float hpf_hz = 20.0f * std::pow(800.0f, eff_hpf);
+                    float alpha = std::clamp(hpf_hz * 6.2831853f * inv_sr, 0.001f, 0.95f);
+                    v.hpf_state += alpha * (raw - v.hpf_state);
+                    raw = raw - v.hpf_state;
+                }
+
+                // Dual filter 2: Low Pass SVF Filter per voice
                 float base_cut = (v.plock_cutoff >= 0.0f) ? v.plock_cutoff : trk_cut_base;
                 float f_cut = std::clamp(
                     base_cut + cut_offset + f_env * std::clamp(tp.p[2] + env_offset, 0.0f, 1.0f) * 0.58f,

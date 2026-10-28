@@ -196,6 +196,7 @@ private:
         float velocity = 1.0f;
         float svf_low = 0.0f;
         float svf_band = 0.0f;
+        float hpf_state = 0.0f;
         float last_out = 0.0f;
         float plock_cutoff = -1.0f;
         uint8_t drum_slot = 0;
