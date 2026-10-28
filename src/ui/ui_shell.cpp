@@ -405,7 +405,7 @@ void UiShell::render(
             }
             auto tgt = static_cast<ModTarget>(t_idx);
             char row_str[64];
-            std::snprintf(row_str, sizeof(row_str), "[%-5s] %s", getModTargetShortName(tgt), getModTargetLongName(tgt));
+            std::snprintf(row_str, sizeof(row_str), "[%-3s] %-5s %s", getModTargetCategory(tgt), getModTargetShortName(tgt), getModTargetLongName(tgt));
             cv.textClip(mx + 6, ey + 2, row_str, (mw - 18) / Canvas::kCharW, sel ? palette::kAccentPurple : palette::kTextMain);
         }
 

@@ -83,15 +83,25 @@ template <typename E>
 Param trackEnum(std::string id, std::string label, int t, E& (*acc)(TrackParameters&),
                 const char* (*name)(E)) {
     Param p;
+    std::string pid = id;
     p.id = std::move(id);
     p.label = std::move(label);
     p.value = [=](const UiContext& c) { auto tp = c.audio.getTrackParams(trk(c, t)); return std::string(name(acc(tp))); };
     p.step = [=](UiContext& c, int dir, bool) {
-        const int ti = trk(c, t);
-        auto tp = c.audio.getTrackParams(ti);
-        const int n = static_cast<int>(E::kCount);
-        acc(tp) = static_cast<E>((static_cast<int>(acc(tp)) + dir + n) % n);
-        c.audio.setTrackParams(ti, tp);
+        if constexpr (std::is_same_v<E, ModTarget>) {
+            c.app.mod_picker_param_id = pid;
+            const int ti = trk(c, t);
+            auto tp = c.audio.getTrackParams(ti);
+            c.app.mod_picker_sel = static_cast<int>(acc(tp));
+            c.app.mod_picker_open = true;
+            c.app.last_action = "TARGET MENU OPEN";
+        } else {
+            const int ti = trk(c, t);
+            auto tp = c.audio.getTrackParams(ti);
+            const int n = static_cast<int>(E::kCount);
+            acc(tp) = static_cast<E>((static_cast<int>(acc(tp)) + dir + n) % n);
+            c.audio.setTrackParams(ti, tp);
+        }
     };
     return p;
 }

@@ -282,6 +282,59 @@ inline constexpr const char* getStickDestShortName(ModTarget dest) {
     return getModTargetShortName(dest);
 }
 
+inline constexpr const char* getModTargetCategory(ModTarget target) {
+    switch (target) {
+        case ModTarget::kCutoff:
+        case ModTarget::kResonance:
+        case ModTarget::kEnvMod:
+        case ModTarget::kLpfDecay:
+        case ModTarget::kHpfCutoff:
+        case ModTarget::kHpfResonance:
+        case ModTarget::kHpfEnv:
+        case ModTarget::kHpfDecay:
+            return "FLT";
+        case ModTarget::kGainOver:
+        case ModTarget::kPitch:
+        case ModTarget::kGlide:
+        case ModTarget::kParam1:
+        case ModTarget::kParam2:
+        case ModTarget::kParam3:
+        case ModTarget::kParam4:
+        case ModTarget::kParam5:
+        case ModTarget::kParam6:
+            return "SYN";
+        case ModTarget::kAmpAttack:
+        case ModTarget::kAmpDecay:
+        case ModTarget::kAmpSustain:
+        case ModTarget::kAmpRelease:
+        case ModTarget::kLevel:
+        case ModTarget::kPan:
+            return "AMP";
+        case ModTarget::kDelaySend:
+        case ModTarget::kReverbSend:
+            return "FX";
+        case ModTarget::kLfo1Rate:
+        case ModTarget::kLfo1Depth:
+        case ModTarget::kLfo2Rate:
+        case ModTarget::kLfo2Depth:
+        case ModTarget::kLfo3Rate:
+        case ModTarget::kLfo3Depth:
+        case ModTarget::kLfo4Rate:
+        case ModTarget::kLfo4Depth:
+        case ModTarget::kEnv1Attack:
+        case ModTarget::kEnv1Decay:
+        case ModTarget::kEnv1Sustain:
+        case ModTarget::kEnv1Release:
+        case ModTarget::kEnv2Attack:
+        case ModTarget::kEnv2Decay:
+        case ModTarget::kEnv2Sustain:
+        case ModTarget::kEnv2Release:
+            return "MOD";
+        default:
+            return "OFF";
+    }
+}
+
 enum class LfoWave : uint8_t {
     kTriangle = 0,
     kSine,
