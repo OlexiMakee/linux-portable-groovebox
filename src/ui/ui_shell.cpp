@@ -383,6 +383,52 @@ void UiShell::render(
         cv.text(bx + 6, by + bh - 10, "[A] SELECT  [B] CLOSE  [<] PARENT", palette::kTextDim);
     }
 
+    // Модальне вікно збереження / завантаження проектів (Save As / Load Project)
+    if (app.project_modal_open) {
+        const int bw = 260;
+        const int bh = 144;
+        const int bx = (logical_w_ - bw) / 2;
+        const int by = (logical_h_ - bh) / 2;
+
+        cv.fill(bx, by, bw, bh, palette::kPanelBg);
+        cv.rect(bx, by, bw, bh, palette::kAccentCyan);
+        cv.fill(bx + 1, by + 1, bw - 2, 11, palette::kHeaderSel);
+
+        char hdr[80];
+        std::snprintf(hdr, sizeof(hdr), "PROJECT: %s", app.project_modal_is_save ? "SAVE AS" : "LOAD PROJECT");
+        cv.text(bx + 4, by + 3, hdr, palette::kAccentCyan);
+
+        const int max_vis = 8;
+        const int total_items = static_cast<int>(app.project_files.size());
+        int scroll = 0;
+        if (app.project_modal_sel >= max_vis) {
+            scroll = app.project_modal_sel - max_vis + 1;
+        }
+        scroll = std::clamp(scroll, 0, std::max(0, total_items - max_vis));
+
+        if (total_items == 0) {
+            cv.text(bx + 12, by + 40, "(No existing projects found)", palette::kTextDim);
+            if (app.project_modal_is_save) {
+                cv.text(bx + 12, by + 56, "[A] Create 'project_01.xgproj'", palette::kLevelOk);
+            }
+        } else {
+            for (int i = 0; i < max_vis && scroll + i < total_items; ++i) {
+                const int idx = scroll + i;
+                const int iy = by + 16 + i * 13;
+                const bool sel = (idx == app.project_modal_sel);
+                if (sel) {
+                    cv.fill(bx + 3, iy, bw - 6, 12, palette::kHeaderSel);
+                    cv.rect(bx + 3, iy, bw - 6, 12, palette::kAccentCyan);
+                }
+                const std::string& item = app.project_files[idx];
+                cv.text(bx + 8, iy + 3, item, sel ? palette::kAccentCyan : palette::kTextMain);
+            }
+        }
+
+        cv.line(bx + 2, by + bh - 14, bx + bw - 3, by + bh - 14, palette::kGridDim);
+        cv.text(bx + 6, by + bh - 10, "[A] CONFIRM  [B] CANCEL  [UP/DN] SELECT", palette::kTextDim);
+    }
+
     // 4. Нижній інформаційний рядок (HUD)
     renderHud(cv, ctx);
 

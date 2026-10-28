@@ -413,12 +413,15 @@ static void testInputRouterAndStepEditor() {
     TEST_ASSERT(app.cursor_step == 0, "Cursor returns to step 0");
     TEST_ASSERT(app.seq_scroll_step == 0, "seq_scroll_step smoothly returns to step 0");
 
-    // 4. Тестування тогла REC mode по L1
+    // 4. Тестування 3-режимного циклу L1 (SEQ -> Piano Roll -> Song Mode -> SEQ)
     app.rec_mode = false;
+    app.seq_submode = groovebox::SeqSubmode::kMatrix;
     ActionRegistry::instance().run("SEQ.REC_TOGGLE", ctx);
-    TEST_ASSERT(app.rec_mode == true, "SEQ.REC_TOGGLE enables rec_mode");
+    TEST_ASSERT(app.rec_mode == true && app.seq_submode == groovebox::SeqSubmode::kPianoRoll, "SEQ.REC_TOGGLE enables rec_mode (Piano Roll)");
     ActionRegistry::instance().run("SEQ.REC_TOGGLE", ctx);
-    TEST_ASSERT(app.rec_mode == false, "SEQ.REC_TOGGLE disables rec_mode back to SEQ");
+    TEST_ASSERT(app.rec_mode == false && app.seq_submode == groovebox::SeqSubmode::kSong, "SEQ.REC_TOGGLE cycles to Song Mode");
+    ActionRegistry::instance().run("SEQ.REC_TOGGLE", ctx);
+    TEST_ASSERT(app.rec_mode == false && app.seq_submode == groovebox::SeqSubmode::kMatrix, "SEQ.REC_TOGGLE cycles back to Matrix SEQ");
 
     // 4b. Тестування поліфонії 4 нот у Piano Roll та попередження про ліміт
     app.rec_mode = true;
