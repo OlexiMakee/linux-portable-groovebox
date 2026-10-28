@@ -41,7 +41,7 @@ static void testAudioDspEngines() {
     std::printf("\n=== [1/4] AUDIO DSP & SYNTH ENGINES TEST ===\n");
 
     AudioEngine audio;
-    audio.start(0, false, false);
+    audio.start(-1, false, false);
 
     // 1. Початкові доріжки
     TEST_ASSERT(audio.getActiveRowCount() == 3, "Default active track count must be 3 (Kick, 303, DX7)");
@@ -315,7 +315,7 @@ static void testSequencerOperations() {
     std::printf("\n=== [2/4] SEQUENCER OPERATIONS & POLYMETRY TEST ===\n");
 
     AudioEngine audio;
-    audio.start(0, false, false);
+    audio.start(-1, false, false);
 
     // 1. Тригер кроку (Elektron 3-стадійний перемикач: Note Trig -> Param Trig -> Off)
     audio.toggleStep(0, 0);
@@ -788,7 +788,7 @@ static void testViewsRendering() {
 
     AppModel app;
     AudioEngine audio;
-    audio.start(0, false, false);
+    audio.start(-1, false, false);
 
     InputState in{};
     HardwareSnapshot hw{};

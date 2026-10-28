@@ -792,10 +792,17 @@ bool AudioEngine::start(int card_index, bool is_usb_48k, bool headphones_plugged
     active_sample_rate_.store(target_rate);
     active_period_frames_.store(target_period_frames_.load(std::memory_order_relaxed));
 
-    applyRk817HardwareMux(headphones_plugged);
-    applyRk817HardwareVolume(params_.master_volume.load());
+    if (card_index >= 0) {
+        applyRk817HardwareMux(headphones_plugged);
+        applyRk817HardwareVolume(params_.master_volume.load());
+    }
 
     running_.store(true);
+
+    if (card_index < 0) {
+        // Офлайн режим тестування без запуску фонових апаратних потоків
+        return true;
+    }
 
 #if defined(__linux__)
     alsa_thread_ = std::thread(&AudioEngine::alsaThreadLoop, this);
@@ -1050,6 +1057,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             float env_offset = env_macro + getTrackMod(t, StickDest::kEnvMod);
             float res_offset = res_macro + getTrackMod(t, StickDest::kResonance);
             float hpf_offset = getTrackMod(t, StickDest::kHpfCutoff);
+            float hpf_env_offset = getTrackMod(t, StickDest::kHpfEnv);
             float lpf_reso = std::clamp(tp.lpf_resonance + res_offset, 0.0f, 0.95f);
             float lpf_q = std::clamp(2.0f - 1.85f * lpf_reso, 0.15f, 2.0f);
             float hpf_reso = std::clamp(tp.hpf_resonance, 0.0f, 0.95f);
@@ -1221,7 +1229,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                 v.hpf_env_val *= v.hpf_decay_coef;
 
                 // Dual filter 1: 2-pole High Pass Filter (SVF) with Bipolar Decay Envelope
-                float eff_hpf = std::clamp(tp.hpf_cutoff + hpf_offset + (tp.hpf_env + env_offset) * v.hpf_env_val, 0.0f, 0.98f);
+                float eff_hpf = std::clamp(tp.hpf_cutoff + hpf_offset + (tp.hpf_env + hpf_env_offset) * v.hpf_env_val, 0.0f, 0.98f);
                 if (eff_hpf > 0.005f) {
                     float f_hpf = std::clamp(2.0f * std::sin(3.14159265f * (20.0f * std::pow(800.0f, eff_hpf)) * inv_sr), 0.005f, 0.88f);
                     v.hpf_low += f_hpf * v.hpf_band;

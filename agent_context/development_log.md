@@ -889,3 +889,35 @@
 * **Автоматизоване тестування та деплой на консоль:**
   * Тестовий набір [auto_test.cpp](file:///Users/oleksii/Documents/XU10%20Groovebox/tools/auto_test.cpp) розширено до **162 тестів** (**162/162 PASSED [OK]** на macOS та на консолі Rockchip RK3326S ARM64).
   * Процес `xu10_groovebox` перезапущено як Dedicated Appliance на MagicX XU10 (`10.1.1.2`, PID 162207).
+
+## [2026-10-28] Milestone 29: Dedicated MOD Tab Architecture, 4 LFOs, 2 ADSRs, Dual Stick Modes & Real-Time Live Slider Visualization
+* **DSP архітектура модуляцій та шина ModTarget (src/synth_engines.hpp, src/audio_engine.hpp, src/audio_engine.cpp):**
+  * Створено єдиний перелік цілей модуляції `ModTarget` (LPF Cutoff/Reso/Env/Decay, HPF Cutoff/Reso/Env/Decay, Gain/Overdrive, Pitch, Glide, P1..P6, Amp Attack/Decay/Sustain/Release, Pan, Level, Delay/Reverb Sends, LFO1..4 Rates/Depths, Env1..2 Attack/Decay/Sustain/Release).
+  * Розширено параметри треку:
+    * 4 повнофункціональних LFO на трек (`lfo1`, `lfo2`, `lfo3`, `lfo4`) з формами TRI, SIN, SAW, SQR, S&H, мультплікаторами 1..64, режимами TRIG/FREE та підтримкою взаємної крос-модуляції.
+    * 2 призначувані ADSR огинаючі (`env1`, `env2`) з біполярною глибиною модуляції (`amount` -100%..+100%).
+    * Повна конфігурація обох аналогових стіків з підтримкою Mode 1 та Mode 2: незалежні таргети та проценти відхилення (0..100%, дефолт 50%) для кожної осі (Left Stick X/Y Mode 1 & 2, Right Stick X/Y Mode 1 & 2).
+  * Реалізовано обчислення модуляцій блоками в `renderBlock` та збереження відносних зміщень у `live_mod_offsets_` для відображення в інтерфейсі.
+* **Виділена вкладка MOD `[L2]syn<MOD>fx` (src/ui/layout.cpp, src/ui/params.cpp):**
+  * У підвкладці `MOD` (фіолетовий брендовий колір `kAccentPurple`) розгорнуто 10 рядків матриці модуляцій:
+    * `LFO1` .. `LFO4`: `WAVE`, `RATE`, `MULT`, `DEPTH`, `DEST`, `MODE`.
+    * `ENV1`, `ENV2`: `ATK`, `DEC`, `SUS`, `REL`, `AMT`, `DEST`.
+    * `L-STK1`, `L-STK2`: `X-TGT`, `X-AMT`, `Y-TGT`, `Y-AMT`.
+    * `R-STK1`, `R-STK2`: `X-TGT`, `X-AMT`, `Y-TGT`, `Y-AMT`.
+  * У підвкладці `SYN` знято старі дублюючі рядки LFO1/2, звільнивши простір під чистий синтез.
+* **Модальне контекстне меню вибору таргету модуляції (src/ui/actions.cpp, src/ui/keymap.cpp, src/ui/ui_shell.cpp):**
+  * Натискання кнопки `A` на будь-якому полі вибору цілі (`*.DEST`, `STK.*_X`, `STK.*_Y`) викликає повноцінне модальне вікно вибору зі списку (замість незручного перемикання валу по одиниці).
+  * Меню містить скрольований список доступних цілей формату `[SHORT] Long Name`, підтримку Dpad Up/Down, підтвердження по Button A, закриття по Button B.
+  * Реалізовано фільтрацію цілей: огинаючі `ENV1` та `ENV2` автоматично пропускають призначення на власні параметри ("окрім самих себе").
+  * Нижній HUD динамічно змінює підказки на шорткати модального меню (`A:SELECT | B:CANCEL`).
+* **Живий візуалізатор модуляцій у повзунках параметрів (src/ui/widgets.hpp, src/ui/widgets.cpp, src/ui/views.cpp):**
+  * Віджет `paramCell` доповнено відображенням міток модуляції:
+    * Жовта 1px відмітка (`palette::kParamTrig`) показує базове статичне значення, виставлене користувачем.
+    * Плаваюча 2px блакитна відмітка (`palette::kAccentCyan`) у реальному часі відображає поточний модульований показник, що рухається зі швидкістю LFO/огинаючих.
+* **Автоматизоване тестування:**
+  * Тестовий набір розширено до **179 тестів** (**179/179 PASSED [OK]**).
+* **Ізоляція офлайн-режиму AudioEngine та розв'язка HPF Envelope Mod:**
+  * У `AudioEngine::start`: якщо `card_index < 0`, запобігається запуск фонового апаратного потоку ALSA (`alsa_thread_`) та зміна апаратних мікшерів RK817, завдяки чому офлайн-тести виконуються повністю детерміновано без гонок потоків.
+  * У `AudioEngine::renderBlock`: розділено зміщення `hpf_env_offset = getTrackMod(t, ModTarget::kHpfEnv)` від `env_offset` (`kEnvMod`), що усунуло паразитний вплив огинаючої LPF на фільтр високих частот (HPF).
+  * Усі 179 тестів підтверджено на MagicX XU10 ARM64 (`179/179 PASSED [OK]`).
+
