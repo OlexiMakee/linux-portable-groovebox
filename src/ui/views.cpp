@@ -335,13 +335,11 @@ void SeqView::navigate(UiContext& c, int dx, int dy, bool coarse) {
             c.app.pattern_mgr.switchPatternNow(cur_s.bank, cur_s.pattern, c.audio, c.app.bpm);
         }
         if (dx != 0) {
-            auto& cur_s = c.app.song_chain[c.app.song_cursor_row];
-            int pat_total = cur_s.bank * 16 + cur_s.pattern;
-            pat_total = (pat_total + dx * (coarse ? 16 : 1) + 128) % 128;
-            cur_s.bank = static_cast<uint8_t>(pat_total / 16);
-            cur_s.pattern = static_cast<uint8_t>(pat_total % 16);
-            c.app.pattern_mgr.switchPatternNow(cur_s.bank, cur_s.pattern, c.audio, c.app.bpm);
-            c.app.last_action = "PAT CHANGED";
+            if (c.app.song_col == 4) {
+                c.app.song_mute_cursor_track = (c.app.song_mute_cursor_track + dx + 16) % 16;
+            } else {
+                c.app.song_col = (c.app.song_col + dx + 5) % 5;
+            }
         }
         return;
     }
@@ -443,44 +441,99 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
     if (c.app.seq_submode == SeqSubmode::kSong) {
         char hdr[96];
         const auto& cur_step = c.app.song_chain[c.app.song_cursor_row];
-        std::snprintf(hdr, sizeof(hdr), "SONG MODE | STEP %02d/16: %c%02d x%d | L1: EXIT TO SEQ",
-                      c.app.song_cursor_row + 1, 'A' + cur_step.bank, cur_step.pattern + 1, cur_step.repeats);
-        cv.text(area.x + 4, area.y + 3, hdr, palette::kAccentCyan);
+        std::snprintf(hdr, sizeof(hdr), "SONG MODE | R%02d: %c%02d x%d LEN:%s BPM:%s | L1: SEQ",
+                      c.app.song_cursor_row + 1, 'A' + cur_step.bank, cur_step.pattern + 1, cur_step.repeats,
+                      (cur_step.length == 0 ? "PAT" : std::to_string(cur_step.length).c_str()),
+                      (cur_step.bpm == 0 ? "PAT" : std::to_string(cur_step.bpm).c_str()));
+        cv.text(area.x + 4, area.y + 2, hdr, palette::kLevelWarnClip);
 
-        // Render 16 song steps in two columns of 8
-        const int col_w = (area.w - 24) / 2;
-        const int row_h = 18;
-        const int start_y = area.y + kHeaderH + 4;
+        // Subheader columns
+        cv.fill(area.x + 2, area.y + 12, area.w - 4, 9, palette::kHeaderSel);
+        cv.text(area.x + 4,   area.y + 13, "ROW", palette::kTextDim);
+        cv.text(area.x + 24,  area.y + 13, "PAT", (c.app.song_col == 0) ? palette::kAccentCyan : palette::kTextDim);
+        cv.text(area.x + 50,  area.y + 13, "REP", (c.app.song_col == 1) ? palette::kAccentCyan : palette::kTextDim);
+        cv.text(area.x + 72,  area.y + 13, "LEN", (c.app.song_col == 2) ? palette::kAccentCyan : palette::kTextDim);
+        cv.text(area.x + 98,  area.y + 13, "BPM", (c.app.song_col == 3) ? palette::kAccentCyan : palette::kTextDim);
+        cv.text(area.x + 124, area.y + 13, "TRACK MUTES (1..16)", (c.app.song_col == 4) ? palette::kAccentCyan : palette::kTextDim);
+        cv.text(area.x + 280, area.y + 13, "STATUS", palette::kTextDim);
+
+        const int start_y = area.y + 23;
+        const int row_h = 10;
 
         for (int i = 0; i < 16; ++i) {
-            const int col = i / 8;
-            const int row = i % 8;
-            const int x = area.x + 8 + col * (col_w + 8);
-            const int y = start_y + row * (row_h + 3);
+            const int y = start_y + i * row_h;
             const bool is_cursor = (i == c.app.song_cursor_row);
             const bool is_playing = (c.app.transport_playing && i == c.app.song_play_step);
             const auto& step = c.app.song_chain[i];
 
             if (is_cursor) {
-                cv.fill(x, y, col_w, row_h, palette::kHeaderSel);
-                cv.rect(x, y, col_w, row_h, palette::kAccentCyan);
-            } else {
-                cv.fill(x, y, col_w, row_h, ColorRGB{16, 16, 22});
-                cv.rect(x, y, col_w, row_h, ColorRGB{32, 32, 44});
+                cv.fill(area.x + 2, y, area.w - 4, row_h - 1, palette::kHeaderSel);
+                cv.rect(area.x + 2, y, area.w - 4, row_h - 1, palette::kLevelWarnClip);
+            } else if (i % 2 == 1) {
+                cv.fill(area.x + 2, y, area.w - 4, row_h - 1, ColorRGB{14, 14, 18});
             }
 
-            char step_lbl[48];
-            std::snprintf(step_lbl, sizeof(step_lbl), "%s%02d: %c%02d x%-2d [%s]",
-                          is_playing ? ">" : " ", i + 1, 'A' + step.bank, step.pattern + 1, step.repeats,
-                          step.enabled ? "PLAY" : "SKIP");
-            ColorRGB txt_col = is_cursor ? palette::kAccentCyan : (step.enabled ? (is_playing ? palette::kLevelOk : palette::kTextMain) : palette::kTextDim);
-            cv.text(x + 4, y + 4, step_lbl, txt_col);
+            // Playback pointer
+            if (is_playing) {
+                cv.text(area.x + 3, y + 1, ">", palette::kLevelOk);
+            }
+
+            // ROW
+            char row_str[8];
+            std::snprintf(row_str, sizeof(row_str), "%02d", i + 1);
+            cv.text(area.x + 8, y + 1, row_str, is_cursor ? palette::kLevelWarnClip : palette::kTextDim);
+
+            // PAT
+            char pat_str[8];
+            std::snprintf(pat_str, sizeof(pat_str), "%c%02d", 'A' + step.bank, step.pattern + 1);
+            cv.text(area.x + 24, y + 1, pat_str, (is_cursor && c.app.song_col == 0) ? palette::kAccentCyan : palette::kTextMain);
+
+            // REP
+            char rep_str[8];
+            std::snprintf(rep_str, sizeof(rep_str), "x%-2d", step.repeats);
+            cv.text(area.x + 50, y + 1, rep_str, (is_cursor && c.app.song_col == 1) ? palette::kAccentCyan : palette::kTextMain);
+
+            // LEN
+            char len_str[8];
+            if (step.length == 0) std::snprintf(len_str, sizeof(len_str), "PAT ");
+            else std::snprintf(len_str, sizeof(len_str), "L%-3d", step.length);
+            cv.text(area.x + 72, y + 1, len_str, (is_cursor && c.app.song_col == 2) ? palette::kAccentCyan : palette::kTextMain);
+
+            // BPM
+            char bpm_str[8];
+            if (step.bpm == 0) std::snprintf(bpm_str, sizeof(bpm_str), "PAT ");
+            else std::snprintf(bpm_str, sizeof(bpm_str), "%3d ", step.bpm);
+            cv.text(area.x + 98, y + 1, bpm_str, (is_cursor && c.app.song_col == 3) ? palette::kAccentCyan : palette::kTextMain);
+
+            // 16 MUTES
+            for (int t = 0; t < 16; ++t) {
+                const int mx = area.x + 126 + t * 9;
+                const bool is_muted = (step.mute_mask & (1 << t)) != 0;
+                const bool is_mute_cur = (is_cursor && c.app.song_col == 4 && t == c.app.song_mute_cursor_track);
+
+                if (is_mute_cur) {
+                    cv.rect(mx - 1, y, 8, row_h - 1, palette::kAccentCyan);
+                }
+
+                char mc = (t < 9) ? ('1' + t) : ('a' + t - 9);
+                char mstr[2] = {mc, '\0'};
+                if (is_muted) {
+                    cv.text(mx, y + 1, ".", palette::kLevelWarnClip);
+                } else {
+                    cv.text(mx, y + 1, mstr, palette::kLevelOk);
+                }
+            }
+
+            // STATUS
+            const char* st_txt = step.enabled ? "[PLAY]" : "[SKIP]";
+            ColorRGB st_col = step.enabled ? (is_playing ? palette::kLevelOk : palette::kTextMain) : palette::kTextDim;
+            cv.text(area.x + 280, y + 1, st_txt, st_col);
         }
 
         // Help bar at bottom of Song Mode
-        const int help_y = area.y + area.h - 14;
-        cv.line(area.x + 4, help_y - 2, area.x + area.w - 4, help_y - 2, palette::kGridDim);
-        cv.text(area.x + 8, help_y, "D-PAD: STEP/PAT | X/B: REPEATS | A: ON/OFF | L1: SEQ", palette::kTextDim);
+        const int help_y = area.y + area.h - 11;
+        cv.line(area.x + 2, help_y - 2, area.x + area.w - 2, help_y - 2, palette::kGridDim);
+        cv.text(area.x + 4, help_y, "D-PAD: NAV/TRK | A: TOGGLE/MUTE | X/B: VAL+/- | SEL+L/R: COL", palette::kTextDim);
         return;
     }
 

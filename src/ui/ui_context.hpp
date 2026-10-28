@@ -63,6 +63,9 @@ struct SongStep {
     uint8_t bank = 0;       // 0..7 (A..H)
     uint8_t pattern = 0;    // 0..15 (01..16)
     uint8_t repeats = 1;    // 1..16 (x1..x16)
+    uint16_t length = 0;    // 0 = PAT (native pattern length), 1..256 steps override
+    uint16_t bpm = 0;       // 0 = PAT (project BPM), 30..300 BPM override
+    uint16_t mute_mask = 0; // Bitmask: bit t set = Track t muted on this row
     bool enabled = true;
 };
 
@@ -90,6 +93,8 @@ struct AppModel {
     SynthSubmode synth_submode = SynthSubmode::kSynth; // Цикл L2: SYN -> MOD -> FX
     MixSubmode mix_submode = MixSubmode::kMix; // Цикл R2: MIX -> SND -> MSTR
     int song_cursor_row = 0;
+    int song_col = 0; // 0 = PAT, 1 = REP, 2 = LEN, 3 = BPM, 4 = MUTES
+    int song_mute_cursor_track = 0; // 0..15 для вибору треку в колонці MUTES
     int song_play_step = 0;
     int song_play_repeat = 0;
     std::array<SongStep, 16> song_chain = []() {

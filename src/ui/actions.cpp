@@ -92,9 +92,17 @@ ActionRegistry::ActionRegistry() {
         if (c.shell) c.shell->currentView(c).navigate(c, 0, 1, true);
     }});
     add(Action{"NAV.BAR_LEFT", "BAR.L", [](UiContext& c) {
+        if (c.app.seq_submode == SeqSubmode::kSong) {
+            c.app.song_col = (c.app.song_col - 1 + 5) % 5;
+            return;
+        }
         if (c.shell) c.shell->currentView(c).navigate(c, -1, 0, true);
     }});
     add(Action{"NAV.BAR_RIGHT", "BAR.R", [](UiContext& c) {
+        if (c.app.seq_submode == SeqSubmode::kSong) {
+            c.app.song_col = (c.app.song_col + 1) % 5;
+            return;
+        }
         if (c.shell) c.shell->currentView(c).navigate(c, 1, 0, true);
     }});
 
@@ -230,8 +238,23 @@ ActionRegistry::ActionRegistry() {
 
         if (c.app.seq_submode == SeqSubmode::kSong) {
             auto& cur_s = c.app.song_chain[c.app.song_cursor_row];
-            cur_s.enabled = !cur_s.enabled;
-            c.app.last_action = cur_s.enabled ? "STEP PLAY" : "STEP SKIP";
+            if (c.app.song_col == 4) {
+                cur_s.mute_mask ^= (1 << c.app.song_mute_cursor_track);
+                bool is_m = (cur_s.mute_mask & (1 << c.app.song_mute_cursor_track)) != 0;
+                c.app.last_action = is_m ? "TRK MUTED IN ROW" : "TRK ACTIVE IN ROW";
+            } else if (c.app.song_col == 0) {
+                cur_s.enabled = !cur_s.enabled;
+                c.app.last_action = cur_s.enabled ? "STEP PLAY" : "STEP SKIP";
+            } else if (c.app.song_col == 1) {
+                cur_s.repeats = (cur_s.repeats % 16) + 1;
+                c.app.last_action = "REPEATS: x" + std::to_string(cur_s.repeats);
+            } else if (c.app.song_col == 2) {
+                cur_s.length = (cur_s.length == 0) ? 16 : ((cur_s.length >= 128) ? 0 : cur_s.length * 2);
+                c.app.last_action = (cur_s.length == 0) ? "LEN: PAT DEFAULT" : ("LEN: " + std::to_string(cur_s.length));
+            } else if (c.app.song_col == 3) {
+                cur_s.bpm = (cur_s.bpm == 0) ? static_cast<uint16_t>(c.app.bpm) : 0;
+                c.app.last_action = (cur_s.bpm == 0) ? "BPM: PAT DEFAULT" : ("BPM: " + std::to_string(cur_s.bpm));
+            }
             return;
         }
 
@@ -290,8 +313,26 @@ ActionRegistry::ActionRegistry() {
     add(Action{"SEQ.CLEAR_STEP", "DEL", [](UiContext& c) {
         if (c.app.seq_submode == SeqSubmode::kSong) {
             auto& cur_s = c.app.song_chain[c.app.song_cursor_row];
-            cur_s.repeats = (cur_s.repeats <= 1) ? 16 : (cur_s.repeats - 1);
-            c.app.last_action = "REPEAT DEC";
+            if (c.app.song_col == 0) {
+                int pat_total = cur_s.bank * 16 + cur_s.pattern;
+                pat_total = (pat_total - 1 + 128) % 128;
+                cur_s.bank = static_cast<uint8_t>(pat_total / 16);
+                cur_s.pattern = static_cast<uint8_t>(pat_total % 16);
+                c.app.pattern_mgr.switchPatternNow(cur_s.bank, cur_s.pattern, c.audio, c.app.bpm);
+                c.app.last_action = "PAT DEC";
+            } else if (c.app.song_col == 1) {
+                cur_s.repeats = (cur_s.repeats <= 1) ? 16 : (cur_s.repeats - 1);
+                c.app.last_action = "REPEAT DEC";
+            } else if (c.app.song_col == 2) {
+                cur_s.length = (cur_s.length <= 4) ? 0 : (cur_s.length - 4);
+                c.app.last_action = (cur_s.length == 0) ? "LEN: PAT DEFAULT" : ("LEN: " + std::to_string(cur_s.length));
+            } else if (c.app.song_col == 3) {
+                if (cur_s.bpm > 30) cur_s.bpm--;
+                else cur_s.bpm = 0;
+                c.app.last_action = (cur_s.bpm == 0) ? "BPM: PAT DEFAULT" : ("BPM: " + std::to_string(cur_s.bpm));
+            } else if (c.app.song_col == 4) {
+                c.app.song_mute_cursor_track = (c.app.song_mute_cursor_track - 1 + 16) % 16;
+            }
             return;
         }
         if (c.app.rec_mode) {
@@ -641,8 +682,25 @@ ActionRegistry::ActionRegistry() {
         if (c.app.active_view == ViewId::kSeq) {
             if (c.app.seq_submode == SeqSubmode::kSong) {
                 auto& cur_s = c.app.song_chain[c.app.song_cursor_row];
-                cur_s.repeats = (cur_s.repeats >= 16) ? 1 : (cur_s.repeats + 1);
-                c.app.last_action = "REPEAT INC";
+                if (c.app.song_col == 0) {
+                    int pat_total = cur_s.bank * 16 + cur_s.pattern;
+                    pat_total = (pat_total + 1) % 128;
+                    cur_s.bank = static_cast<uint8_t>(pat_total / 16);
+                    cur_s.pattern = static_cast<uint8_t>(pat_total % 16);
+                    c.app.pattern_mgr.switchPatternNow(cur_s.bank, cur_s.pattern, c.audio, c.app.bpm);
+                    c.app.last_action = "PAT INC";
+                } else if (c.app.song_col == 1) {
+                    cur_s.repeats = (cur_s.repeats >= 16) ? 1 : (cur_s.repeats + 1);
+                    c.app.last_action = "REPEAT INC";
+                } else if (c.app.song_col == 2) {
+                    cur_s.length = (cur_s.length >= 256) ? 0 : (cur_s.length + 4);
+                    c.app.last_action = (cur_s.length == 0) ? "LEN: PAT DEFAULT" : ("LEN: " + std::to_string(cur_s.length));
+                } else if (c.app.song_col == 3) {
+                    cur_s.bpm = (cur_s.bpm == 0) ? static_cast<uint16_t>(c.app.bpm) : std::min(300, cur_s.bpm + 1);
+                    c.app.last_action = "BPM: " + std::to_string(cur_s.bpm);
+                } else if (c.app.song_col == 4) {
+                    c.app.song_mute_cursor_track = (c.app.song_mute_cursor_track + 1) % 16;
+                }
                 return;
             }
             if (c.app.cursor_row < c.audio.getActiveRowCount()) {
