@@ -20,14 +20,36 @@ void setupAppLayout(UiShell& shell) {
         synth_spec.accent = palette::kAccentCyan;
         synth_spec.tab_title = [](const UiContext&) { return "SYNTH"; };
         synth_spec.header = [](const UiContext& c) {
-            char b[80];
+            char b[96];
             const auto tp = c.audio.getTrackParams(c.app.selected_track);
             std::string nm = c.audio.getTrackName(c.app.selected_track);
-            std::snprintf(b, sizeof(b), "SYNTH [T%02d/%02d: %s - %s] | < SEL+X/Y >",
-                          c.app.selected_track + 1, c.audio.getActiveRowCount(), nm.c_str(), getEngineTypeName(tp.engine));
+            if (c.app.synth_submode == SynthSubmode::kMod) {
+                std::snprintf(b, sizeof(b), "MOD MATRIX [T%02d/%02d: %s] | 4 LFOs * 2 ENVs * STICKS",
+                              c.app.selected_track + 1, c.audio.getActiveRowCount(), nm.c_str());
+            } else if (c.app.synth_submode == SynthSubmode::kFx) {
+                std::snprintf(b, sizeof(b), "TRACK FX [T%02d/%02d: %s] | INSERT CHAIN",
+                              c.app.selected_track + 1, c.audio.getActiveRowCount(), nm.c_str());
+            } else {
+                std::snprintf(b, sizeof(b), "SYNTH [T%02d/%02d: %s - %s] | < SEL+X/Y >",
+                              c.app.selected_track + 1, c.audio.getActiveRowCount(), nm.c_str(), getEngineTypeName(tp.engine));
+            }
             return std::string(b);
         };
         synth_spec.dynamic_rows = [](const UiContext& c) -> std::vector<GridRow> {
+            if (c.app.synth_submode == SynthSubmode::kMod) {
+                return {
+                    {"LFO1",   {"LFO1.WAVE", "LFO1.RATE", "LFO1.MULT", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
+                    {"LFO2",   {"LFO2.WAVE", "LFO2.RATE", "LFO2.MULT", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
+                    {"LFO3",   {"LFO3.WAVE", "LFO3.RATE", "LFO3.MULT", "LFO3.DEPTH", "LFO3.DEST", "LFO3.MODE"}},
+                    {"LFO4",   {"LFO4.WAVE", "LFO4.RATE", "LFO4.MULT", "LFO4.DEPTH", "LFO4.DEST", "LFO4.MODE"}},
+                    {"ENV1",   {"ENV1.ATK", "ENV1.DEC", "ENV1.SUS", "ENV1.REL", "ENV1.AMT", "ENV1.DEST"}},
+                    {"ENV2",   {"ENV2.ATK", "ENV2.DEC", "ENV2.SUS", "ENV2.REL", "ENV2.AMT", "ENV2.DEST"}},
+                    {"L-STK1", {"STK.L1_X", "STK.L1_XAMT", "STK.L1_Y", "STK.L1_YAMT"}},
+                    {"L-STK2", {"STK.L2_X", "STK.L2_XAMT", "STK.L2_Y", "STK.L2_YAMT"}},
+                    {"R-STK1", {"STK.R1_X", "STK.R1_XAMT", "STK.R1_Y", "STK.R1_YAMT"}},
+                    {"R-STK2", {"STK.R2_X", "STK.R2_XAMT", "STK.R2_Y", "STK.R2_YAMT"}}
+                };
+            }
             const auto tp = c.audio.getTrackParams(c.app.selected_track);
             switch (tp.engine) {
                 case EngineType::kDx7:

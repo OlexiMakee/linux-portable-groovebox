@@ -5,7 +5,8 @@
 namespace groovebox::widgets {
 
 void paramCell(Canvas& cv, Rect r, const std::string& label, const std::string& value,
-               float norm, bool selected, bool editable, ColorRGB accent) {
+               float norm, bool selected, bool editable, ColorRGB accent,
+               float live_norm, bool is_mod_target) {
     cv.fill(r.x + 1, r.y + 1, r.w - 2, r.h - 2, selected ? palette::kHeaderSel : palette::kPanelBg);
     cv.rect(r.x, r.y, r.w, r.h, selected ? accent : palette::kGridDim);
     const int max_chars = (r.w - 5) / Canvas::kCharW;
@@ -17,6 +18,18 @@ void paramCell(Canvas& cv, Rect r, const std::string& label, const std::string& 
         const int fill = static_cast<int>(std::clamp(norm, 0.0f, 1.0f) * bw);
         cv.fill(r.x + 3, r.y + r.h - 4, bw, 2, palette::kGridDim);
         cv.fill(r.x + 3, r.y + r.h - 4, fill, 2, selected ? accent : palette::kLevelOk);
+
+        if (is_mod_target) {
+            // Жовта статична відмітка користувача (1 піксель завтовшки)
+            int user_tick_x = r.x + 3 + std::clamp(static_cast<int>(norm * bw), 0, bw - 1);
+            cv.fill(user_tick_x, r.y + r.h - 5, 1, 4, palette::kParamTrig);
+
+            // Блакитна плаваюча відмітка реального часу (live modulated value)
+            if (live_norm >= 0.0f) {
+                int live_tick_x = r.x + 3 + std::clamp(static_cast<int>(live_norm * bw), 0, bw - 2);
+                cv.fill(live_tick_x, r.y + r.h - 5, 2, 4, palette::kAccentCyan);
+            }
+        }
     }
 }
 

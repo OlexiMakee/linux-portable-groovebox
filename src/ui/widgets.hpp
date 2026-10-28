@@ -12,8 +12,10 @@ namespace groovebox {
 namespace widgets {
 
 // Клітинка параметра: назва, значення, опційна смужка (norm < 0 => без смужки)
+// Підтримує живий візуалізатор модуляцій (жовта статична відмітка + плаваюча блакитна відмітка)
 void paramCell(Canvas& cv, Rect r, const std::string& label, const std::string& value,
-               float norm, bool selected, bool editable, ColorRGB accent);
+               float norm, bool selected, bool editable, ColorRGB accent,
+               float live_norm = -1.0f, bool is_mod_target = false);
 
 // Рядок списку: назва ліворуч, значення праворуч (value_x — зміщення колонки значень)
 void listRow(Canvas& cv, Rect r, const std::string& label, const std::string& value,
