@@ -232,7 +232,14 @@ struct TrackParameters {
     float pan = 0.0f;       // -1.0 (L) .. +1.0 (R)
     float delay_send = 0.0f;
     float reverb_send = 0.0f;
-    float hpf_cutoff = 0.0f; // 0.0f = повністю відкритий (low-cut вимкнено), 1.0f = зріз до 16kHz
+    float lpf_cutoff = 1.0f;     // 0.0 .. 1.0 (20 Hz .. 20 kHz, дефолт 1.0 = відкритий)
+    float lpf_resonance = 0.15f; // 0.0 .. 0.95 (Q)
+    float lpf_env = 0.0f;        // -1.0 .. +1.0 (біполярна огинаюча, дефолт 0.0)
+    float lpf_decay = 0.35f;     // 0.01 .. 4.0s (час спаду огинаючої фільтра)
+    float hpf_cutoff = 0.0f;     // 0.0 .. 1.0 (20 Hz .. 16 kHz, дефолт 0.0 = low-cut OFF)
+    float hpf_resonance = 0.0f;  // 0.0 .. 0.95
+    float hpf_env = 0.0f;        // -1.0 .. +1.0 (біполярна огинаюча, дефолт 0.0)
+    float hpf_decay = 0.35f;     // 0.01 .. 4.0s (час спаду огинаючої фільтра)
     bool muted = false;
     int transpose = 0;      // -24 .. +24 півтонів (транспозиція треку)
     float glide = 0.065f;   // 5..500 мс час легато-слайду (TB-303 класика = 65 мс)

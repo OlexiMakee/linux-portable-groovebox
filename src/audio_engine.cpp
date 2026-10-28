@@ -427,6 +427,8 @@ void AudioEngine::panic() {
         v.phase1 = v.phase2 = v.phase3 = v.phase4 = 0.0f;
         v.last_out = 0.0f;
         v.svf_low = v.svf_band = 0.0f;
+        v.hpf_low = v.hpf_band = 0.0f;
+        v.lpf_env_val = v.hpf_env_val = 0.0f;
         v.gate_samples_left = -1;
         v.is_legato = false;
     }
@@ -511,6 +513,12 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
     // Тривалість кроку секвенсора з урахуванням дискретної довжини (1..128 кроків, 1 крок = ~125мс)
     float step_sec = 0.125f;
     v.gate_samples_left = static_cast<int32_t>(step_sec * std::clamp(gate_len, 0.1f, 128.0f) * sr);
+
+    // Ініціалізація огинаючих фільтрів LPF та HPF
+    v.lpf_env_val = 1.0f;
+    v.lpf_decay_coef = std::exp(-1.0f / (std::clamp(tracks_[t].lpf_decay, 0.01f, 4.0f) * sr));
+    v.hpf_env_val = 1.0f;
+    v.hpf_decay_coef = std::exp(-1.0f / (std::clamp(tracks_[t].hpf_decay, 0.01f, 4.0f) * sr));
 
     if (tracks_[t].engine == EngineType::kAcid303 && slide && v.amp_adsr.isActive()) {
         // Roland TB-303 Legato Slide: нова цільова нота, без скидання фази чи огинаючої!
@@ -972,13 +980,14 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             const auto& tp = local_tracks[t];
             if (tp.muted) continue;
 
-            float trk_cut_base = tp.p[0];
             float cut_offset = cut_macro + getTrackMod(t, StickDest::kCutoff);
             float env_offset = env_macro + getTrackMod(t, StickDest::kEnvMod);
             float res_offset = res_macro + getTrackMod(t, StickDest::kResonance);
             float hpf_offset = getTrackMod(t, StickDest::kHpfCutoff);
-            float reso = std::clamp(tp.p[1] + res_offset, 0.0f, 0.90f);
-            float q_damp = std::clamp(1.0f - reso * 0.88f, 0.10f, 1.0f);
+            float lpf_reso = std::clamp(tp.lpf_resonance + res_offset, 0.0f, 0.95f);
+            float lpf_q = std::clamp(2.0f - 1.85f * lpf_reso, 0.15f, 2.0f);
+            float hpf_reso = std::clamp(tp.hpf_resonance, 0.0f, 0.95f);
+            float hpf_q = std::clamp(2.0f - 1.85f * hpf_reso, 0.15f, 2.0f);
             float trk_level = std::clamp(tp.level + getTrackMod(t, StickDest::kLevel), 0.0f, 1.0f);
             float trk_pan = std::clamp(tp.pan + getTrackMod(t, StickDest::kPan), -1.0f, 1.0f);
             float pan_l = std::clamp(1.0f - trk_pan, 0.0f, 1.0f) * 0.5f;
@@ -1136,25 +1145,28 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                     }
                 }
 
-                // Dual filter 1: High Pass Filter (Low cut)
-                float eff_hpf = std::clamp(tp.hpf_cutoff + hpf_offset, 0.0f, 0.98f);
+                // Оновлюємо огинаючі фільтрів для поточного семплу
+                v.lpf_env_val *= v.lpf_decay_coef;
+                v.hpf_env_val *= v.hpf_decay_coef;
+
+                // Dual filter 1: 2-pole High Pass Filter (SVF) with Bipolar Decay Envelope
+                float eff_hpf = std::clamp(tp.hpf_cutoff + hpf_offset + (tp.hpf_env + env_offset) * v.hpf_env_val, 0.0f, 0.98f);
                 if (eff_hpf > 0.005f) {
-                    float hpf_hz = 20.0f * std::pow(800.0f, eff_hpf);
-                    float alpha = std::clamp(hpf_hz * 6.2831853f * inv_sr, 0.001f, 0.95f);
-                    v.hpf_state += alpha * (raw - v.hpf_state);
-                    raw = raw - v.hpf_state;
+                    float f_hpf = std::clamp(2.0f * std::sin(3.14159265f * (20.0f * std::pow(800.0f, eff_hpf)) * inv_sr), 0.005f, 0.88f);
+                    v.hpf_low += f_hpf * v.hpf_band;
+                    float hpf_high = raw - v.hpf_low - hpf_q * v.hpf_band;
+                    v.hpf_band += f_hpf * hpf_high;
+                    v.hpf_band = std::clamp(v.hpf_band, -1.85f, 1.85f);
+                    raw = hpf_high;
                 }
 
-                // Dual filter 2: Low Pass SVF Filter per voice
-                float base_cut = (v.plock_cutoff >= 0.0f) ? v.plock_cutoff : trk_cut_base;
-                float f_cut = std::clamp(
-                    base_cut + cut_offset + f_env * std::clamp(tp.p[2] + env_offset, 0.0f, 1.0f) * 0.58f,
-                    0.04f,
-                    0.88f
-                );
-                v.svf_low += f_cut * v.svf_band;
-                float high = raw - v.svf_low - q_damp * v.svf_band;
-                v.svf_band += f_cut * high;
+                // Dual filter 2: 2-pole Low Pass Filter (SVF) with Bipolar Decay Envelope
+                float base_cut = (v.plock_cutoff >= 0.0f) ? v.plock_cutoff : tp.lpf_cutoff;
+                float eff_lpf = std::clamp(base_cut + cut_offset + (tp.lpf_env + env_offset) * v.lpf_env_val, 0.02f, 0.98f);
+                float f_lpf = std::clamp(2.0f * std::sin(3.14159265f * (20.0f * std::pow(1000.0f, eff_lpf)) * inv_sr), 0.02f, 0.88f);
+                v.svf_low += f_lpf * v.svf_band;
+                float high = raw - v.svf_low - lpf_q * v.svf_band;
+                v.svf_band += f_lpf * high;
                 v.svf_band = std::clamp(v.svf_band, -1.85f, 1.85f);
 
                 trk_sum += v.svf_low * amp * v.velocity;
