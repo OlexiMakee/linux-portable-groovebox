@@ -321,7 +321,26 @@ void SeqView::navigate(UiContext& c, int dx, int dy, bool coarse) {
         const int t = c.app.selected_track;
         const int max_lanes = 12;
         if (dy != 0) {
-            c.app.rec_cursor_lane = ((c.app.rec_cursor_lane + dy) % max_lanes + max_lanes) % max_lanes;
+            int new_lane = c.app.rec_cursor_lane + dy;
+            if (new_lane < 0) {
+                // Вгору за межі октави (назва B знаходиться вгорі, lane 0)
+                if (c.app.rec_octave < 8) {
+                    c.app.rec_octave++;
+                    c.app.rec_cursor_lane = 11;
+                } else {
+                    c.app.rec_cursor_lane = 0;
+                }
+            } else if (new_lane >= max_lanes) {
+                // Вниз за межі октави (назва C знаходиться внизу, lane 11)
+                if (c.app.rec_octave > 1) {
+                    c.app.rec_octave--;
+                    c.app.rec_cursor_lane = 0;
+                } else {
+                    c.app.rec_cursor_lane = 11;
+                }
+            } else {
+                c.app.rec_cursor_lane = new_lane;
+            }
         }
         const int len = static_cast<int>(c.audio.getRowLength(t));
         if (dx != 0 && len > 0) {
@@ -431,6 +450,7 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
 
                     const auto sd = c.audio.getStep(t, static_cast<int>(idx));
                     bool active_note = sd.enabled && (sd.note == row_pitch ||
+                                                      sd.chord_notes[0] == row_pitch ||
                                                       sd.chord_notes[1] == row_pitch ||
                                                       sd.chord_notes[2] == row_pitch ||
                                                       sd.chord_notes[3] == row_pitch);
@@ -454,6 +474,17 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
             char ltxt[8];
             std::snprintf(ltxt, sizeof(ltxt), "%u", len);
             cv.text(len_x, y + (row_h - 5) / 2, ltxt, is_lane ? palette::kAccentCyan : palette::kGridDim);
+        }
+
+        // Червоне повідомлення про вичерпання голосів (макс 4 ноти на крок)
+        if (c.now_ms < c.app.voice_limit_alert_until_ms) {
+            const int banner_w = 200;
+            const int banner_h = 16;
+            const int bx = area.x + (area.w - banner_w) / 2;
+            const int by = area.y + 24;
+            cv.fill(bx, by, banner_w, banner_h, ColorRGB{120, 15, 20});
+            cv.rect(bx, by, banner_w, banner_h, palette::kLevelWarnClip);
+            cv.text(bx + 10, by + 4, "VOICE LIMIT: MAX 4 VOICES / STEP", palette::kTextMain);
         }
         return;
     }
@@ -509,6 +540,21 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
 
         const uint32_t play = c.app.transport_playing ? (c.app.current_step % len) : UINT32_MAX;
         const int th = row_h - 3;
+
+        // Визначаємо залишкову тривалість gate length ноти, яка могла початися до поточної сторінки
+        int gate_tail_remaining = 0;
+        const int scan_start = std::max(0, static_cast<int>(scroll_off) - 128);
+        for (int k = scan_start; k < static_cast<int>(scroll_off); ++k) {
+            const auto sk = c.audio.getStep(r, k);
+            if (sk.enabled) {
+                int span = static_cast<int>(sk.gate_len + 0.5f);
+                int rem = span - 1 - (static_cast<int>(scroll_off) - 1 - k);
+                gate_tail_remaining = std::max(0, rem);
+            } else if (gate_tail_remaining > 0) {
+                gate_tail_remaining--;
+            }
+        }
+
         for (uint32_t s = 0; s < kStepsPerPage; ++s) {
             const uint32_t idx = scroll_off + s;
             const int x = grid_x + static_cast<int>(s) * step_w;
@@ -524,6 +570,12 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
                                        : (trk.muted ? palette::kGridDim
                                        : (t % 2 == 0 ? palette::kLevelOk : palette::kAccentCyan));
                     cv.fill(x + 1, y + 2, step_w - 3, th - 2, col);
+                    gate_tail_remaining = std::max(0, static_cast<int>(sd.gate_len + 0.5f) - 1);
+                } else if (gate_tail_remaining > 0) {
+                    // Ніжний блакитний хвіст тривалості ноти (Gate Length)
+                    cv.fill(x + 1, y + 2, step_w - 3, th - 2, ColorRGB{18, 52, 72});
+                    cv.fill(x, y + (th / 2), step_w, 2, ColorRGB{45, 115, 150});
+                    gate_tail_remaining--;
                 } else {
                     if (s % 4 == 0) {
                         // Контрастний маркер початку долі (чверті)

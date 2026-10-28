@@ -208,10 +208,6 @@ void setupAppLayout(UiShell& shell) {
             {"", {"STEP.VEL"}},
             {"", {"STEP.GATE"}},
             {"", {"STEP.SLIDE"}},
-            {"", {"STEP.ATK"}},
-            {"", {"STEP.DEC"}},
-            {"", {"STEP.SUS"}},
-            {"", {"STEP.REL"}},
             {"", {"STEP.CUT"}},
             {"", {"STEP.PROB"}},
             {"", {"STEP.COND"}}
