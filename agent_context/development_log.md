@@ -921,3 +921,26 @@
   * У `AudioEngine::renderBlock`: розділено зміщення `hpf_env_offset = getTrackMod(t, ModTarget::kHpfEnv)` від `env_offset` (`kEnvMod`), що усунуло паразитний вплив огинаючої LPF на фільтр високих частот (HPF).
   * Усі 179 тестів підтверджено на MagicX XU10 ARM64 (`179/179 PASSED [OK]`).
 
+## [2026-10-28] Milestone 30: Dedicated Per-Track FX Insert Chain Architecture, Metal Zone Distortion, Parallel Delay/Reverb & Dynamic Sidechain Table
+* **Архітектура індивідуального ланцюжка обробки (src/synth_engines.hpp, src/audio_engine.hpp, src/audio_engine.cpp):**
+  * Створено структуру `TrackFxParameters` та стан `TrackFxState` для кожного з 16 треків:
+    * **Bitcrusher (Elektron style):** Зниження розрядності квантування від 16 біт до 1 біта (`BC_BITS`).
+    * **SRR (Sample Rate Reduction):** Децимація частоти дискретизації від 1x до 64x (`SRR`).
+    * **Distortion (Boss MT-2 Metal Zone style):** Пре-емфазис середніх частот (~1.2 кГц) з подальшим жорстким квадратним кліпуванням (`hard-clip square waveshaping`) та кабінетним пост-фільтром.
+    * **Per-Track Stereo Chorus:** Незалежний стерео-хорус для кожної доріжки (`CHR_MIX`, `CHR_RATE`, `CHR_DEP`).
+    * **Паралельні Delay та Reverb:**
+      * **Delay:** Пропорційні розміри часу за стандартом Elektron (`1/64`, `1/32`, `1/16`, `1/8`, `3/16`, `1/4`, `1/2`, `1/1`), зворотний зв'язок `FBK` та мікс.
+      * **Reverb:** 4 алгоритмічні ядра (`PLATE`, `HALL`, `ROOM`, `DARK`), Decay, High-cut (демпфування), Low-cut, Pre-delay (0..150 мс) та паралельне мікшування.
+    * **Sidechain Compressor:**
+      * Вибір доріжки-джерела (`SC_SRC`: OFF, TRK 01..16), поріг `THR`, співвідношення `RAT`, `ATK`, `REL`.
+      * Перемикач позиції `SC_POS`: `PRE` (до Delay/Reverb) або `POST` (після Delay/Reverb).
+    * **Send FX:** Підмішування сигналу в майстер-шину (`TRK.DLY`, `TRK.REV`, `TRK.CHR`).
+* **Динамічна таблиця та інтерфейс підвкладки TRACK FX `[L2]mod<FX>syn` (src/ui/layout.cpp, src/ui/params.cpp):**
+  * Зареєстровано всі параметри трекових ефектів: `FX.BC_BITS`, `FX.SRR`, `FX.DST_*`, `FX.CHR_*`, `FX.DLY_*`, `FX.REV_*`, `FX.SC_*`, `TRK.CHR`.
+  * Реалізовано динамічне переміщення рядка компресора:
+    * При `SC_POS = PRE`: рядок `S-COMP` розташовується перед `DELAY` та `REVERB`.
+    * При `SC_POS = POST`: рядок `S-COMP` переміщується після `DELAY` та `REVERB`.
+* **Автоматизоване тестування та деплой на консоль:**
+  * Тестовий набір [auto_test.cpp](file:///Users/oleksii/Documents/XU10%20Groovebox/tools/auto_test.cpp) розширено до **187 тестів** (**187/187 PASSED [OK]** на macOS та на Rockchip RK3326S ARM64).
+  * Додаток успішно задеплоєно на MagicX XU10 як Dedicated Appliance (PID 183460, KMSDRM, ALSA 32k stereo).
+
