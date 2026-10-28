@@ -88,29 +88,51 @@ else()
     )
     target_link_directories(render_tour PRIVATE "/opt/homebrew/lib")
     target_link_libraries(render_tour PRIVATE SDL2)
+endif()
 
-    add_executable(auto_test
-        tools/auto_test.cpp
-        src/arpeggiator.cpp
-        src/audio_engine.cpp
-        src/dx7_engine.cpp
-        src/pattern_manager.cpp
-        src/sampler_engine.cpp
-        src/device_profile.cpp
-        src/hw_monitor.cpp
-        src/input_manager.cpp
-        src/midi_engine.cpp
-        src/net_audio_streamer.cpp
-        src/ui/canvas.cpp
-        src/ui/params.cpp
-        src/ui/widgets.cpp
-        src/ui/views.cpp
-        src/ui/actions.cpp
-        src/ui/keymap.cpp
-        src/ui/layout.cpp
-        src/ui/ui_shell.cpp
+add_executable(auto_test
+    tools/auto_test.cpp
+    src/arpeggiator.cpp
+    src/audio_engine.cpp
+    src/dx7_engine.cpp
+    src/pattern_manager.cpp
+    src/sampler_engine.cpp
+    src/device_profile.cpp
+    src/hw_monitor.cpp
+    src/input_manager.cpp
+    src/midi_engine.cpp
+    src/net_audio_streamer.cpp
+    src/ui/canvas.cpp
+    src/ui/params.cpp
+    src/ui/widgets.cpp
+    src/ui/views.cpp
+    src/ui/actions.cpp
+    src/ui/keymap.cpp
+    src/ui/layout.cpp
+    src/ui/ui_shell.cpp
+)
+target_include_directories(auto_test PRIVATE src)
+
+if(CMAKE_CROSSCOMPILING)
+    target_include_directories(auto_test SYSTEM PRIVATE
+        "${SYSROOT_DIR}/usr/include"
+        "${SYSROOT_DIR}/usr/include/SDL2"
     )
-    target_include_directories(auto_test PRIVATE src)
+    target_link_directories(auto_test PRIVATE
+        "${SYSROOT_DIR}/usr/lib"
+    )
+    target_link_options(auto_test PRIVATE
+        "-Wl,--allow-shlib-undefined"
+        "-Wl,-rpath,/usr/lib"
+    )
+    target_link_libraries(auto_test PRIVATE
+        SDL2
+        asound
+        pthread
+        m
+        dl
+    )
+else()
     target_include_directories(auto_test SYSTEM PRIVATE
         ${SDL2_INCLUDE_DIRS}
         "/opt/homebrew/include"
