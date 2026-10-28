@@ -176,6 +176,7 @@ float lockedOr(float v, float dflt) { return v >= 0.0f ? v : dflt; }
 float stepNorm(int dir, bool coarse) { return dir * (coarse ? 8.0f : 1.0f) / 127.0f; }
 
 const char* lfoWaveName(LfoWave w) { return getLfoWaveName(w); }
+const char* lfoModeName(LfoMode m) { return getLfoModeName(m); }
 const char* destName(StickDest d) { return getStickDestShortName(d); }
 
 } // namespace
@@ -228,58 +229,28 @@ ParamRegistry::ParamRegistry() {
     {
         Param p;
         p.id = "TRK.WAVE_SAMPLE";
-        p.dyn_label = [](const UiContext& c) {
-            const auto tp = c.audio.getTrackParams(trk(c, -1));
-            if (tp.engine == EngineType::kDx7) return std::string("PATCH");
-            if (tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler) {
-                return std::string("SAMPLE");
-            }
-            return std::string("WAVE");
-        };
-        p.label = "WAVE";
+        p.label = "SAMPLE";
         p.value = [](const UiContext& c) -> std::string {
             const auto tp = c.audio.getTrackParams(trk(c, -1));
-            if (tp.engine == EngineType::kDx7) {
-                int p_idx = std::clamp(static_cast<int>(tp.p[0] * (c.audio.dx7().patchCount() - 1) + 0.5f), 0, c.audio.dx7().patchCount() - 1);
-                return c.audio.dx7().getPatch(p_idx).name;
-            }
             if (tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler) {
                 int t = trk(c, -1);
                 const auto& buf = c.audio.sampler().trackSample(t);
                 if (buf.loaded && !buf.name.empty() && buf.name != "EMPTY") return buf.name;
                 return c.audio.getTrackName(t);
             }
-            static const char* kWaveNames[5] = {"SAW", "SQUARE", "TRI", "SINE", "NOISE"};
-            int wave_idx = std::clamp(static_cast<int>(tp.p[5] * 4.99f), 0, 4);
-            return std::string(kWaveNames[wave_idx]);
+            return "---";
         };
         p.norm = [](const UiContext& c) {
             const auto tp = c.audio.getTrackParams(trk(c, -1));
-            return (tp.engine == EngineType::kDx7 ||
-                    tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler) ? tp.p[0] : tp.p[5];
+            return (tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler) ? tp.p[0] : 0.0f;
         };
-        p.step = [](UiContext& c, int dir, bool) {
+        p.step = [](UiContext& c, int, bool) {
             const int t = trk(c, -1);
             auto tp = c.audio.getTrackParams(t);
             if (tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler) {
                 c.app.sample_browser_target_track = t;
                 ActionRegistry::instance().run("SAMPLE_BROWSER.OPEN", c);
-                return;
             }
-            if (tp.engine == EngineType::kDx7) {
-                int total = c.audio.dx7().patchCount();
-                if (total > 0) {
-                    int cur = std::clamp(static_cast<int>(tp.p[0] * (total - 1) + 0.5f), 0, total - 1);
-                    int next = std::clamp(cur + dir, 0, total - 1);
-                    tp.p[0] = static_cast<float>(next) / static_cast<float>(total - 1);
-                    c.audio.setTrackParams(t, tp);
-                }
-                return;
-            }
-            int cur = std::clamp(static_cast<int>(tp.p[5] * 4.99f), 0, 4);
-            int next = (cur + dir + 5) % 5;
-            tp.p[5] = static_cast<float>(next) / 4.0f;
-            c.audio.setTrackParams(t, tp);
         };
         add(std::move(p));
     }
@@ -327,10 +298,12 @@ ParamRegistry::ParamRegistry() {
     add(trackFloat("LFO1.RATE", "L1 RATE", S, [](TrackParameters& t) -> float& { return t.lfo1.rate; }, 0.05f, 2.0f, 0.01f, fmtHz));
     add(trackFloat("LFO1.DEPTH", "L1 DEPTH", S, [](TrackParameters& t) -> float& { return t.lfo1.depth; }, 0.0f, 1.0f, 0.02f, fmtPct));
     add(trackEnum<StickDest>("LFO1.DEST", "L1 DEST", S, [](TrackParameters& t) -> StickDest& { return t.lfo1.dest; }, destName));
+    add(trackEnum<LfoMode>("LFO1.MODE", "L1 MODE", S, [](TrackParameters& t) -> LfoMode& { return t.lfo1.mode; }, lfoModeName));
     add(trackEnum<LfoWave>("LFO2.WAVE", "L2 WAVE", S, [](TrackParameters& t) -> LfoWave& { return t.lfo2.wave; }, lfoWaveName));
     add(trackFloat("LFO2.RATE", "L2 RATE", S, [](TrackParameters& t) -> float& { return t.lfo2.rate; }, 0.05f, 2.0f, 0.01f, fmtHz));
     add(trackFloat("LFO2.DEPTH", "L2 DEPTH", S, [](TrackParameters& t) -> float& { return t.lfo2.depth; }, 0.0f, 1.0f, 0.02f, fmtPct));
     add(trackEnum<StickDest>("LFO2.DEST", "L2 DEST", S, [](TrackParameters& t) -> StickDest& { return t.lfo2.dest; }, destName));
+    add(trackEnum<LfoMode>("LFO2.MODE", "L2 MODE", S, [](TrackParameters& t) -> LfoMode& { return t.lfo2.mode; }, lfoModeName));
 
     add(trackEnum<StickDest>("STICK.LX", "L-STK X", S, [](TrackParameters& t) -> StickDest& { return t.stick_left_x; }, destName));
     add(trackEnum<StickDest>("STICK.LY", "L-STK Y", S, [](TrackParameters& t) -> StickDest& { return t.stick_left_y; }, destName));

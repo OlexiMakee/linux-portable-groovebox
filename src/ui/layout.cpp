@@ -32,37 +32,41 @@ void setupAppLayout(UiShell& shell) {
             switch (tp.engine) {
                 case EngineType::kDx7:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.RND"}},
-                        {"DX7",   {"TRK.P1", "TRK.P5", "TRK.P6", "TRK.P3"}},
-                        {"TIMBRE",{"TRK.P2", "TRK.P4", "FX.CHR_MIX", "FX.DRIVE"}},
+                        {"INST",  {"TRK.ENGINE", "TRK.P1", "TRK.RND"}},
+                        {"DX7",   {"TRK.P5", "TRK.P6", "TRK.P3", "TRK.P4"}},
+                        {"TIMBRE",{"TRK.P2", "TRK.GLIDE", "FX.CHR_MIX", "FX.DRIVE"}},
                         {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST"}},
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
+                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
                         {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
                     };
                 case EngineType::kAcid303:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.RND"}},
+                        {"INST",  {"TRK.ENGINE", "TRK.P6", "TRK.RND"}},
                         {"303",   {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4"}},
                         {"ACID",  {"TRK.P5", "TRK.GLIDE", "FX.DRIVE", "FX.DRV_TONE"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST"}},
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
+                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
                         {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
                     };
                 case EngineType::kFm2Op:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.RND"}},
+                        {"INST",  {"TRK.ENGINE", "TRK.GLIDE", "TRK.RND"}},
                         {"2-OP",  {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P5"}},
                         {"MOD",   {"TRK.P4", "TRK.P6", "FX.CHR_MIX", "FX.DRIVE"}},
                         {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST"}},
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
+                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
                         {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
                     };
                 case EngineType::kChordPad:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.RND"}},
+                        {"INST",  {"TRK.ENGINE", "TRK.GLIDE", "TRK.RND"}},
                         {"CHORD", {"TRK.P3", "TRK.P5", "TRK.P1", "TRK.P2"}},
                         {"COLOR", {"FX.CHR_MIX", "FX.CHR_RATE", "FX.DRIVE", "TRK.P6"}},
                         {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST"}},
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
+                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
                         {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
                     };
                 case EngineType::kSampleOneShot:
@@ -72,7 +76,8 @@ void setupAppLayout(UiShell& shell) {
                         {"SMPL",  {"TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5"}},
                         {"COLOR", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.P6"}},
                         {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST"}},
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
+                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
                         {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
                     };
                 case EngineType::kMidiOut:
@@ -85,11 +90,12 @@ void setupAppLayout(UiShell& shell) {
                 case EngineType::kVaMono:
                 default:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.RND"}},
+                        {"INST",  {"TRK.ENGINE", "TRK.GLIDE", "TRK.RND"}},
                         {"OSC",   {"TRK.P5", "TRK.P6", "TRK.P1", "TRK.P2"}},
                         {"COLOR", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.P3"}},
                         {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST"}},
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
+                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
                         {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
                     };
             }
