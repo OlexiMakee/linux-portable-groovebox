@@ -90,6 +90,7 @@ public:
     void bind(ViewId v, Layer l, Button b, Gesture g, std::string action_id);
 
     const std::string* lookup(ViewId view, Layer layer, Button button, Gesture gesture) const;
+    bool hasTapOrHold(ViewId view, Layer layer, Button button) const;
     std::string actionLabel(ViewId view, Layer layer, Button button) const;
 
 private:

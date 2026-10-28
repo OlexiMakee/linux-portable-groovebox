@@ -32,8 +32,8 @@ bool ActionRegistry::run(std::string_view id, UiContext& ctx) const {
         std::fprintf(stderr, "[ACTION] unknown action '%s'\n", std::string(id).c_str());
         return false;
     }
-    a->execute(ctx);
     ctx.app.last_action = a->label;
+    a->execute(ctx);
     return true;
 }
 

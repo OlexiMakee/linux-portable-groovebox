@@ -133,7 +133,7 @@ Keymap::Keymap() {
     bind(ViewId::kInspect, Layer::kBase, Button::kDpadDown,  Gesture::kPress, "NAV.DOWN");
     bind(ViewId::kInspect, Layer::kBase, Button::kDpadLeft,  Gesture::kPress, "PARAM.DEC");
     bind(ViewId::kInspect, Layer::kBase, Button::kDpadRight, Gesture::kPress, "PARAM.INC");
-    bind(ViewId::kInspect, Layer::kBase, Button::kX,         Gesture::kPress, "PARAM.DEC_FAST");
+    bind(ViewId::kInspect, Layer::kBase, Button::kX,         Gesture::kPress, "INSPECT.CLOSE");
     bind(ViewId::kInspect, Layer::kBase, Button::kY,         Gesture::kPress, "PARAM.INC_FAST");
     bind(ViewId::kInspect, Layer::kBase, Button::kA,         Gesture::kPress, "SEQ.TRIG");
     bind(ViewId::kInspect, Layer::kBase, Button::kB,         Gesture::kPress, "INSPECT.CLOSE");
@@ -204,6 +204,17 @@ const std::string* Keymap::lookup(ViewId view, Layer layer, Button button, Gestu
         }
     }
     return nullptr;
+}
+
+bool Keymap::hasTapOrHold(ViewId view, Layer layer, Button button) const {
+    for (const auto& b : bindings_) {
+        if ((b.view == view || b.view == ViewId::kCount) &&
+            b.layer == layer && b.button == button &&
+            (b.gesture == Gesture::kTap || b.gesture == Gesture::kHold)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::string Keymap::actionLabel(ViewId view, Layer layer, Button button) const {
@@ -337,8 +348,7 @@ void InputRouter::processInput(UiContext& ctx) {
             }
 
             // Якщо для кнопки є жест Tap або Hold — чекаємо, інакше викликаємо Press одразу!
-            bool has_tap_or_hold = (keymap_.lookup(view, layer, ev.id, Gesture::kTap) != nullptr) ||
-                                   (keymap_.lookup(view, layer, ev.id, Gesture::kHold) != nullptr);
+            bool has_tap_or_hold = keymap_.hasTapOrHold(view, layer, ev.id);
 
             if (!has_tap_or_hold) {
                 dispatch(ctx, view, layer, ev.id, Gesture::kPress);
@@ -395,10 +405,6 @@ void InputRouter::processInput(UiContext& ctx) {
             }
             if (ev.id == Button::kL3 && hold_fired_[idx]) {
                 ActionRegistry::instance().run("FILL.OFF", ctx);
-            }
-            if (ev.id == Button::kA && ctx.app.step_inspector_open) {
-                // Закриваємо інспектор при відпусканні кнопки A
-                ActionRegistry::instance().run("INSPECT.CLOSE", ctx);
             }
         }
 
