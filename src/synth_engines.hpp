@@ -45,7 +45,8 @@ inline constexpr int kParamsPerTrack = 6;
 inline constexpr int kTotalRows = 16;
 inline constexpr int kMaxTracks = 16;
 inline constexpr int kTracksCount = 16;
-inline constexpr int kVoicesPerTrack = 1;
+inline constexpr int kVoicesPerTrack = 4;
+inline constexpr int kTotalVoices = kMaxTracks * kVoicesPerTrack;
 inline constexpr uint32_t kMaxSteps = 128;
 inline constexpr uint32_t kStepsPerPage = 32; // 32 видимих кроки на сторінку (велика читабельна сітка 7px)
 inline constexpr uint32_t kMaxPages = 4;      // До 4 сторінок: P1 (0..31), P2 (32..63), P3 (64..95), P4 (96..127)
@@ -193,11 +194,25 @@ inline constexpr const char* getLfoWaveName(LfoWave wave) {
     }
 }
 
+enum class LfoMode : uint8_t {
+    kTrig = 0,
+    kFree = 1,
+    kCount
+};
+
+inline constexpr const char* getLfoModeName(LfoMode mode) {
+    switch (mode) {
+        case LfoMode::kFree: return "FREE";
+        default:             return "TRIG";
+    }
+}
+
 struct LfoParameters {
     LfoWave wave = LfoWave::kTriangle;
     float rate = 0.25f;        // 0.05 Hz .. 20.0 Hz
     float depth = 0.0f;       // 0.0 .. 1.0
     StickDest dest = StickDest::kCutoff;
+    LfoMode mode = LfoMode::kTrig;
     float phase = 0.0f;
     float value = 0.0f;
 };
@@ -212,8 +227,8 @@ struct TrackParameters {
     float release = 0.05f;  // 50ms minimal release
     float level = 0.85f;
     float pan = 0.0f;       // -1.0 (L) .. +1.0 (R)
-    float delay_send = 0.2f;
-    float reverb_send = 0.15f;
+    float delay_send = 0.0f;
+    float reverb_send = 0.0f;
     bool muted = false;
     int transpose = 0;      // -24 .. +24 півтонів (транспозиція треку)
     float glide = 0.065f;   // 5..500 мс час легато-слайду (TB-303 класика = 65 мс)
@@ -221,8 +236,8 @@ struct TrackParameters {
     StickDest stick_left_y = StickDest::kResonance;
     StickDest stick_right_x = StickDest::kLfo1Rate;
     StickDest stick_right_y = StickDest::kLfo2Rate;
-    LfoParameters lfo1{.wave = LfoWave::kTriangle, .rate = 0.25f, .depth = 0.0f, .dest = StickDest::kCutoff};
-    LfoParameters lfo2{.wave = LfoWave::kSine, .rate = 0.40f, .depth = 0.0f, .dest = StickDest::kResonance};
+    LfoParameters lfo1{.wave = LfoWave::kTriangle, .rate = 0.25f, .depth = 0.0f, .dest = StickDest::kCutoff, .mode = LfoMode::kTrig};
+    LfoParameters lfo2{.wave = LfoWave::kSine, .rate = 0.40f, .depth = 0.0f, .dest = StickDest::kResonance, .mode = LfoMode::kFree};
 };
 
 inline constexpr const char* kParamNames[static_cast<int>(EngineType::kCount)][kParamsPerTrack] = {

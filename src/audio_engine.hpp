@@ -202,18 +202,77 @@ private:
         Dx7Voice dx7_voice{};
     };
 
-    std::array<VoiceState, kMaxTracks> voices_{};
+    std::array<VoiceState, kTotalVoices> voices_{};
     uint32_t rng_state_ = 0x12345678u;
+
+    std::array<float, kMaxTracks> track_lfo1_phase_{};
+    std::array<float, kMaxTracks> track_lfo2_phase_{};
 
     // Стерео пінг-понг ділей буфер (до 0.5 сек на 48k)
     std::vector<float> delay_buf_l_;
     std::vector<float> delay_buf_r_;
     uint32_t delay_idx_ = 0;
 
-    // Стерео ревербератор
-    std::vector<float> reverb_buf_l_;
-    std::vector<float> reverb_buf_r_;
-    uint32_t reverb_idx_ = 0;
+    // Справжня алгоритмічна стерео реверберація Freeverb (8 Comb + 4 Allpass)
+    struct CombFilter {
+        std::vector<float> buffer;
+        size_t buf_idx = 0;
+        float filter_store = 0.0f;
+
+        void init(size_t size) {
+            buffer.assign(size, 0.0f);
+            buf_idx = 0;
+            filter_store = 0.0f;
+        }
+
+        inline float process(float input, float feedback, float damp) {
+            if (buffer.empty()) return 0.0f;
+            float output = buffer[buf_idx];
+            filter_store = (output * (1.0f - damp)) + (filter_store * damp);
+            buffer[buf_idx] = input + (filter_store * feedback);
+            buf_idx = (buf_idx + 1 >= buffer.size()) ? 0 : (buf_idx + 1);
+            return output;
+        }
+
+        void clear() {
+            std::fill(buffer.begin(), buffer.end(), 0.0f);
+            buf_idx = 0;
+            filter_store = 0.0f;
+        }
+    };
+
+    struct AllpassFilter {
+        std::vector<float> buffer;
+        size_t buf_idx = 0;
+
+        void init(size_t size) {
+            buffer.assign(size, 0.0f);
+            buf_idx = 0;
+        }
+
+        inline float process(float input) {
+            if (buffer.empty()) return input;
+            float bufout = buffer[buf_idx];
+            float output = -input + bufout;
+            buffer[buf_idx] = input + (bufout * 0.5f);
+            buf_idx = (buf_idx + 1 >= buffer.size()) ? 0 : (buf_idx + 1);
+            return output;
+        }
+
+        void clear() {
+            std::fill(buffer.begin(), buffer.end(), 0.0f);
+            buf_idx = 0;
+        }
+    };
+
+    static constexpr int kNumCombs = 8;
+    static constexpr int kNumAllpasses = 4;
+    std::array<CombFilter, kNumCombs> comb_l_{};
+    std::array<CombFilter, kNumCombs> comb_r_{};
+    std::array<AllpassFilter, kNumAllpasses> allpass_l_{};
+    std::array<AllpassFilter, kNumAllpasses> allpass_r_{};
+    uint32_t reverb_sample_rate_ = 0;
+    void initReverb(uint32_t sample_rate);
 
     // Стерео хорус та сатуратор
     std::vector<float> chorus_buf_l_;
