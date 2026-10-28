@@ -804,6 +804,65 @@ ActionRegistry::ActionRegistry() {
         c.app.last_action = buf;
     }});
 
+    add(Action{"PROJECT.SAVE", "SAVE PROJ", [](UiContext& c) {
+        std::string path = c.app.pattern_mgr.currentProjectPath();
+        if (path.empty()) path = PatternManager::defaultProjectPath();
+        bool ok = c.app.pattern_mgr.saveProject(path, c.audio, c.app.bpm);
+        c.app.last_action = ok ? "PROJECT SAVED" : "ERR: SAVE FAILED";
+    }});
+    add(Action{"PROJECT.SAVE_AS_OPEN", "SAVE AS", [](UiContext& c) {
+        c.app.project_modal_open = true;
+        c.app.project_modal_is_save = true;
+        c.app.project_files = PatternManager::listProjectFiles();
+        c.app.project_files.insert(c.app.project_files.begin(), "[+] NEW PROJECT");
+        c.app.project_modal_sel = 0;
+        c.app.last_action = "SAVE AS MODAL";
+    }});
+    add(Action{"PROJECT.LOAD_OPEN", "LOAD PROJ", [](UiContext& c) {
+        c.app.project_modal_open = true;
+        c.app.project_modal_is_save = false;
+        c.app.project_files = PatternManager::listProjectFiles();
+        c.app.project_modal_sel = 0;
+        c.app.last_action = "LOAD PROJECT MODAL";
+    }});
+    add(Action{"PROJECT.MODAL_CONFIRM", "CONFIRM", [](UiContext& c) {
+        if (!c.app.project_modal_open) return;
+        if (c.app.project_modal_is_save) {
+            std::string fname;
+            if (c.app.project_modal_sel == 0 || c.app.project_files.empty()) {
+                int num = std::max(1, static_cast<int>(c.app.project_files.size()));
+                char b[32]; std::snprintf(b, sizeof(b), "project_%02d.xgproj", num);
+                fname = b;
+            } else {
+                fname = c.app.project_files[c.app.project_modal_sel];
+            }
+            std::string full_path = PatternManager::projectsDirectory() + "/" + fname;
+            bool ok = c.app.pattern_mgr.saveProject(full_path, c.audio, c.app.bpm);
+            c.app.project_modal_open = false;
+            c.app.last_action = ok ? ("SAVED: " + fname) : "ERR: SAVE FAILED";
+        } else {
+            if (!c.app.project_files.empty() && c.app.project_modal_sel < static_cast<int>(c.app.project_files.size())) {
+                std::string fname = c.app.project_files[c.app.project_modal_sel];
+                std::string full_path = PatternManager::projectsDirectory() + "/" + fname;
+                bool ok = c.app.pattern_mgr.loadProject(full_path, c.audio, c.app.bpm);
+                c.app.project_modal_open = false;
+                c.app.last_action = ok ? ("LOADED: " + fname) : "ERR: LOAD FAILED";
+            }
+        }
+    }});
+    add(Action{"PROJECT.MODAL_CLOSE", "CANCEL", [](UiContext& c) {
+        c.app.project_modal_open = false;
+        c.app.last_action = "MODAL CLOSED";
+    }});
+    add(Action{"PROJECT.MODAL_UP", "UP", [](UiContext& c) {
+        if (c.app.project_modal_sel > 0) c.app.project_modal_sel--;
+    }});
+    add(Action{"PROJECT.MODAL_DOWN", "DOWN", [](UiContext& c) {
+        if (c.app.project_modal_sel + 1 < static_cast<int>(c.app.project_files.size())) {
+            c.app.project_modal_sel++;
+        }
+    }});
+
     // Музично-зважений рандомайзер синтезатора (Smart Musical Synth Randomizer)
     add(Action{"SYNTH.RANDOMIZE", "RND SNT", [](UiContext& c) {
         const int t = c.app.selected_track;

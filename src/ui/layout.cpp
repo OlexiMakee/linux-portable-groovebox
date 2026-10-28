@@ -201,8 +201,8 @@ void setupAppLayout(UiShell& shell) {
             return std::string(b);
         };
         sys_spec.rows = {
-            {"PROJ", {"SYS.BANK", "SYS.PAT", "SYS.SAVE", "SYS.LOAD"}},
-            {"AUD",  {"SYS.BUF", "SYS.USB", "SYS.OUT", "SYS.PANIC"}}
+            {"PROJ", {"SYS.BANK", "SYS.PAT", "SYS.SAVE", "SYS.SAVE_AS"}},
+            {"AUD",  {"SYS.LOAD", "SYS.BUF", "SYS.OUT", "SYS.PANIC"}}
         };
         shell.registerView(std::make_unique<GridView>(std::move(sys_spec)));
     }

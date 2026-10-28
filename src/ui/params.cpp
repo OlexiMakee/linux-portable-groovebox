@@ -590,8 +590,7 @@ ParamRegistry::ParamRegistry() {
         };
         p.step = [](UiContext& c, int dir, bool) {
             int b = (c.app.pattern_mgr.currentBank() + dir + kNumBanks) % kNumBanks;
-            c.app.pattern_mgr.selectPattern(b, c.app.pattern_mgr.currentPattern(), false);
-            c.app.pattern_mgr.applyCurrent(c.audio, c.app.bpm);
+            c.app.pattern_mgr.switchPatternNow(b, c.app.pattern_mgr.currentPattern(), c.audio, c.app.bpm);
         };
         add(std::move(p));
     }
@@ -602,8 +601,7 @@ ParamRegistry::ParamRegistry() {
         p.value = [](const UiContext& c) { return c.app.pattern_mgr.activePatternName(); };
         p.step = [](UiContext& c, int dir, bool) {
             int p_idx = (c.app.pattern_mgr.currentPattern() + dir + kPatternsPerBank) % kPatternsPerBank;
-            c.app.pattern_mgr.selectPattern(c.app.pattern_mgr.currentBank(), p_idx, false);
-            c.app.pattern_mgr.applyCurrent(c.audio, c.app.bpm);
+            c.app.pattern_mgr.switchPatternNow(c.app.pattern_mgr.currentBank(), p_idx, c.audio, c.app.bpm);
         };
         add(std::move(p));
     }
@@ -611,10 +609,19 @@ ParamRegistry::ParamRegistry() {
         Param p;
         p.id = "SYS.SAVE";
         p.label = "SAVE PROJ";
-        p.value = [](const UiContext&) { return "PRESS [A]"; };
+        p.value = [](const UiContext&) { return "QUICK [A]"; };
         p.step = [](UiContext& c, int, bool) {
-            c.app.pattern_mgr.saveProject(PatternManager::defaultProjectPath(), c.audio, c.app.bpm);
-            c.app.last_action = "PROJECT SAVED";
+            ActionRegistry::instance().run("PROJECT.SAVE", c);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SYS.SAVE_AS";
+        p.label = "SAVE AS";
+        p.value = [](const UiContext&) { return "BROWSE [A]"; };
+        p.step = [](UiContext& c, int, bool) {
+            ActionRegistry::instance().run("PROJECT.SAVE_AS_OPEN", c);
         };
         add(std::move(p));
     }
@@ -622,10 +629,9 @@ ParamRegistry::ParamRegistry() {
         Param p;
         p.id = "SYS.LOAD";
         p.label = "LOAD PROJ";
-        p.value = [](const UiContext&) { return "PRESS [A]"; };
+        p.value = [](const UiContext&) { return "BROWSE [A]"; };
         p.step = [](UiContext& c, int, bool) {
-            c.app.pattern_mgr.loadProject(PatternManager::defaultProjectPath(), c.audio, c.app.bpm);
-            c.app.last_action = "PROJECT LOADED";
+            ActionRegistry::instance().run("PROJECT.LOAD_OPEN", c);
         };
         add(std::move(p));
     }
