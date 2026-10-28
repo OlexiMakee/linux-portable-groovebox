@@ -36,18 +36,18 @@ void setupAppLayout(UiShell& shell) {
                         {"DX7",   {"TRK.P5", "TRK.P6", "TRK.P3", "TRK.P4"}},
                         {"TIMBRE",{"TRK.P2", "TRK.GLIDE", "FX.CHR_MIX", "FX.DRIVE"}},
                         {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
-                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
-                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.MULT", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
+                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.MULT", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
+                        {"SEND",  {"TRK.HPF", "TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
                     };
                 case EngineType::kAcid303:
                     return {
                         {"INST",  {"TRK.ENGINE", "TRK.P6", "TRK.RND"}},
                         {"303",   {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4"}},
                         {"ACID",  {"TRK.P5", "TRK.GLIDE", "FX.DRIVE", "FX.DRV_TONE"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
-                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
-                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.MULT", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
+                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.MULT", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
+                        {"SEND",  {"TRK.HPF", "TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
                     };
                 case EngineType::kFm2Op:
                     return {
@@ -55,9 +55,9 @@ void setupAppLayout(UiShell& shell) {
                         {"2-OP",  {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P5"}},
                         {"MOD",   {"TRK.P4", "TRK.P6", "FX.CHR_MIX", "FX.DRIVE"}},
                         {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
-                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
-                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.MULT", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
+                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.MULT", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
+                        {"SEND",  {"TRK.HPF", "TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
                     };
                 case EngineType::kChordPad:
                     return {
@@ -65,9 +65,9 @@ void setupAppLayout(UiShell& shell) {
                         {"CHORD", {"TRK.P3", "TRK.P5", "TRK.P1", "TRK.P2"}},
                         {"COLOR", {"FX.CHR_MIX", "FX.CHR_RATE", "FX.DRIVE", "TRK.P6"}},
                         {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
-                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
-                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.MULT", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
+                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.MULT", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
+                        {"SEND",  {"TRK.HPF", "TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
                     };
                 case EngineType::kSampleOneShot:
                 case EngineType::kSliceSampler:
@@ -76,16 +76,16 @@ void setupAppLayout(UiShell& shell) {
                         {"SMPL",  {"TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5"}},
                         {"COLOR", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.P6"}},
                         {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
-                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
-                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.MULT", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
+                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.MULT", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
+                        {"SEND",  {"TRK.HPF", "TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
                     };
                 case EngineType::kMidiOut:
                     return {
                         {"INST",  {"TRK.ENGINE", "TRK.P1", "TRK.P6"}},
                         {"CC_A",  {"TRK.P2", "TRK.P3"}},
                         {"CC_B",  {"TRK.P4", "TRK.P5"}},
-                        {"SEND",  {"TRK.PAN", "TRK.LVL"}}
+                        {"SEND",  {"TRK.HPF", "TRK.PAN", "TRK.LVL"}}
                     };
                 case EngineType::kVaMono:
                 default:
@@ -94,9 +94,9 @@ void setupAppLayout(UiShell& shell) {
                         {"OSC",   {"TRK.P5", "TRK.P6", "TRK.P1", "TRK.P2"}},
                         {"COLOR", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.P3"}},
                         {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
-                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
-                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.MULT", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
+                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.MULT", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
+                        {"SEND",  {"TRK.HPF", "TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
                     };
             }
         };
@@ -148,7 +148,7 @@ void setupAppLayout(UiShell& shell) {
                 char title[16];
                 std::snprintf(title, sizeof(title), "%02d:%s", t + 1, nm.c_str());
                 std::string pre = "T" + std::to_string(t + 1) + ".";
-                rows.push_back({title, {pre + "LVL", pre + "PAN", pre + "DLY", pre + "REV", pre + "MUTE"}});
+                rows.push_back({title, {pre + "HPF", pre + "LVL", pre + "PAN", pre + "DLY", pre + "REV", pre + "MUTE"}});
             }
             rows.push_back({"BUS", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "FX.CHR_RATE"}});
             rows.push_back({"MST", {"MST.VOL", "DLY.FBK", "REV.RET", "MST.BPM"}});
