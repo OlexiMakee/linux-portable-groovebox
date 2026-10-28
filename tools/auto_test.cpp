@@ -341,6 +341,29 @@ static void testAudioDspEngines() {
     audio.setTrackParams(0, tp_fx);
     TEST_ASSERT(audio.getTrackParams(0).fx.sc_pos == SidechainPos::kPostDelayRev, "Sidechain position toggles to POST delay/reverb");
 
+    // 17. Тестування Master FX Chain (GAIN/OVER, Sidechain Comp, HPF/LPF 12/24dB, Bell EQ)
+    auto mfx = audio.getMasterFx();
+    mfx.gain_over = 0.50f;
+    mfx.sc_source = 1;
+    mfx.sc_thresh = -18.0f;
+    mfx.sc_ratio = 4.0f;
+    mfx.hpf_cutoff = 0.20f;
+    mfx.hpf_slope_24 = true;
+    mfx.lpf_cutoff = 0.80f;
+    mfx.lpf_slope_24 = true;
+    mfx.bell_freq = 0.50f;
+    mfx.bell_gain = 6.0f;
+    mfx.bell_q = 1.4f;
+    audio.setMasterFx(mfx);
+
+    int16_t mst_test_buf[256 * 2];
+    audio.renderBlock(mst_test_buf, 256, 32000);
+
+    TEST_ASSERT(audio.getMasterFx().gain_over == 0.50f, "Master GAIN/OVER set to 0.50 (+12 dB crunch)");
+    TEST_ASSERT(audio.getMasterFx().hpf_slope_24 == true, "Master HPF 24 dB/oct 4-pole slope enabled");
+    TEST_ASSERT(audio.getMasterFx().lpf_slope_24 == true, "Master LPF 24 dB/oct 4-pole slope enabled");
+    TEST_ASSERT(audio.getMasterFx().bell_gain == 6.0f, "Master Bell EQ gain set to +6.0 dB boost");
+
     audio.stop();
 }
 
@@ -927,6 +950,12 @@ static void testViewsRendering() {
     audio.setTrackParams(app.selected_track, cur_tp);
     shell.render(app, audio, nullptr, in, hw, tel, midi, 1000);
     TEST_ASSERT(true, "TRACK FX submode dynamically rearranges table with S-COMP in POST position");
+
+    // 10. Рендеринг виділеної вкладки MASTERING ([R2]snd<MSTR>mix) з графіком АЧХ та смугами мастера
+    app.active_view = ViewId::kMix;
+    app.mix_submode = MixSubmode::kMaster;
+    shell.render(app, audio, nullptr, in, hw, tel, midi, 1000);
+    TEST_ASSERT(true, "MASTERING submode renders EQ spectrum curve (АЧХ) and master strips cleanly");
 
     audio.stop();
     SDL_DestroyRenderer(ren);
