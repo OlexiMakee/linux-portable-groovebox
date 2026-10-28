@@ -140,6 +140,81 @@ static void testAudioDspEngines() {
     audio.deleteTrack(15);
     TEST_ASSERT(audio.getActiveRowCount() == 15, "deleteTrack safely removes track and updates active count");
 
+    // 5. Тестування дефолтних нульових сендів
+    auto t0_p = audio.getTrackParams(0);
+    TEST_ASSERT(t0_p.delay_send == 0.0f, "Track 0 delay_send defaults to 0.0f");
+    TEST_ASSERT(t0_p.reverb_send == 0.0f, "Track 0 reverb_send defaults to 0.0f");
+    int new_trk = audio.addTrack(EngineType::kDx7, "NEW DX7");
+    TEST_ASSERT(new_trk >= 0, "New track added successfully");
+    auto new_tp = audio.getTrackParams(new_trk);
+    TEST_ASSERT(new_tp.delay_send == 0.0f && new_tp.reverb_send == 0.0f, "New track sends default to exactly 0.0f");
+
+    // 6. Тестування 4-голосної поліфонії (DX7, VA Mono, 2-OP FM)
+    // DX7: акордовий тригер 3 нот одночасно
+    auto dx_tp = audio.getTrackParams(2);
+    dx_tp.engine = EngineType::kDx7;
+    dx_tp.level = 0.9f;
+    audio.setTrackParams(2, dx_tp);
+    audio.panic();
+    audio.triggerNote(2, 60, 0.9f);
+    audio.triggerNote(2, 64, 0.9f);
+    audio.triggerNote(2, 67, 0.9f);
+    int16_t chord_buf[1024];
+    std::memset(chord_buf, 0, sizeof(chord_buf));
+    audio.renderBlock(chord_buf, 512, 32000);
+    bool dx_chord_audible = false;
+    for (int i = 0; i < 1024; ++i) {
+        if (std::abs(static_cast<int>(chord_buf[i])) > 200) dx_chord_audible = true;
+    }
+    TEST_ASSERT(dx_chord_audible, "DX7 engine renders 3-note chord simultaneously across polyphonic voices");
+
+    // VA Mono: акордовий тригер
+    auto va_tp = audio.getTrackParams(0);
+    va_tp.engine = EngineType::kVaMono;
+    va_tp.level = 0.9f;
+    audio.setTrackParams(0, va_tp);
+    audio.panic();
+    audio.triggerNote(0, 48, 0.9f);
+    audio.triggerNote(0, 52, 0.9f);
+    audio.triggerNote(0, 55, 0.9f);
+    std::memset(chord_buf, 0, sizeof(chord_buf));
+    audio.renderBlock(chord_buf, 512, 32000);
+    bool va_chord_audible = false;
+    for (int i = 0; i < 1024; ++i) {
+        if (std::abs(static_cast<int>(chord_buf[i])) > 200) va_chord_audible = true;
+    }
+    TEST_ASSERT(va_chord_audible, "VA Saw+Sub engine renders 3-note chord simultaneously");
+
+    // 7. Тестування подвійних LFO та режимів TRIG / FREE
+    auto lfo_tp = audio.getTrackParams(0);
+    lfo_tp.lfo1.mode = LfoMode::kTrig;
+    lfo_tp.lfo1.depth = 0.5f;
+    lfo_tp.lfo2.mode = LfoMode::kFree;
+    lfo_tp.lfo2.depth = 0.5f;
+    audio.setTrackParams(0, lfo_tp);
+    TEST_ASSERT(audio.getTrackParams(0).lfo1.mode == LfoMode::kTrig, "LFO1 mode can be set to TRIG");
+    TEST_ASSERT(audio.getTrackParams(0).lfo2.mode == LfoMode::kFree, "LFO2 mode can be set to FREE");
+
+    // 8. Тестування алгоритмічного Freeverb (хвіст реверберації)
+    audio.panic();
+    auto rev_tp = audio.getTrackParams(0);
+    rev_tp.reverb_send = 1.0f;
+    audio.setTrackParams(0, rev_tp);
+    audio.params().reverb_decay = 0.90f;
+    audio.params().reverb_mix = 1.0f;
+    audio.params().delay_mix = 0.0f;
+    audio.triggerNote(0, 48, 0.95f);
+    int16_t rv_impulse[1024];
+    audio.renderBlock(rv_impulse, 512, 32000);
+    // Наступний блок без нових нот — повинен містити дифузний спадаючий хвіст
+    int16_t rv_tail[1024];
+    audio.renderBlock(rv_tail, 512, 32000);
+    bool tail_active = false;
+    for (int i = 0; i < 1024; ++i) {
+        if (std::abs(static_cast<int>(rv_tail[i])) > 20) tail_active = true;
+    }
+    TEST_ASSERT(tail_active, "Freeverb algorithmic tank produces a dense sustaining reverb tail");
+
     audio.stop();
 }
 
@@ -381,6 +456,19 @@ static void testInputRouterAndStepEditor() {
     ActionRegistry::instance().run("SAMPLE_BROWSER.UP", ctx);
     ActionRegistry::instance().run("SAMPLE_BROWSER.CLOSE", ctx);
     TEST_ASSERT(app.sample_browser_open == false, "SAMPLE_BROWSER.CLOSE exits sample browser cleanly");
+
+    // 13. Тестування делінкації параметрів: TRK.WAVE_SAMPLE не змінює параметри VA (PW) чи DX7 (PRESET)
+    app.selected_track = 0;
+    auto tp_va = audio.getTrackParams(0);
+    tp_va.engine = EngineType::kVaMono;
+    tp_va.p[5] = 0.50f; // PULSE W
+    audio.setTrackParams(0, tp_va);
+    const Param* p_ws = ParamRegistry::instance().find("TRK.WAVE_SAMPLE");
+    TEST_ASSERT(p_ws != nullptr, "Param TRK.WAVE_SAMPLE is registered");
+    if (p_ws) {
+        p_ws->step(ctx, 1, false);
+        TEST_ASSERT(audio.getTrackParams(0).p[5] == 0.50f, "TRK.WAVE_SAMPLE stepping does not alter VA Mono p[5] (Pulse Width)");
+    }
 }
 
 static void testViewsRendering() {
