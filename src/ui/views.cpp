@@ -603,16 +603,41 @@ constexpr const char* kNoteNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G
 
 void SeqView::navigate(UiContext& c, int dx, int dy, bool coarse) {
     if (c.app.seq_submode == SeqSubmode::kSong) {
+        int max_selectable = (c.app.song_rows_count < 16) ? c.app.song_rows_count : 15;
         if (dy != 0) {
-            c.app.song_cursor_row = std::clamp(c.app.song_cursor_row + dy, 0, 15);
-            auto& cur_s = c.app.song_chain[c.app.song_cursor_row];
-            c.app.pattern_mgr.switchPatternNow(cur_s.bank, cur_s.pattern, c.audio, c.app.bpm);
+            c.app.song_cursor_row = std::clamp(c.app.song_cursor_row + dy, 0, max_selectable);
+            if (c.app.song_cursor_row < c.app.song_rows_count) {
+                auto& cur_s = c.app.song_chain[c.app.song_cursor_row];
+                c.app.pattern_mgr.switchPatternNow(cur_s.bank, cur_s.pattern, c.audio, c.app.bpm);
+            }
         }
         if (dx != 0) {
-            if (c.app.song_col == 4) {
-                c.app.song_mute_cursor_track = (c.app.song_mute_cursor_track + dx + 16) % 16;
-            } else {
-                c.app.song_col = (c.app.song_col + dx + 5) % 5;
+            if (c.app.song_cursor_row < c.app.song_rows_count) {
+                const int act_tracks = c.audio.getActiveRowCount();
+                if (c.app.song_col == 4) {
+                    // TRACK MUTES навігація: вихід вліво до BPM або вправо до STATUS
+                    if (dx < 0) {
+                        if (c.app.song_mute_cursor_track > 0) {
+                            c.app.song_mute_cursor_track--;
+                        } else {
+                            c.app.song_col = 3; // Перехід до BPM
+                        }
+                    } else if (dx > 0) {
+                        if (c.app.song_mute_cursor_track + 1 < act_tracks) {
+                            c.app.song_mute_cursor_track++;
+                        } else {
+                            c.app.song_col = 5; // Перехід до STATUS
+                        }
+                    }
+                } else if (c.app.song_col == 3 && dx > 0) {
+                    c.app.song_col = 4;
+                    c.app.song_mute_cursor_track = 0;
+                } else if (c.app.song_col == 5 && dx < 0) {
+                    c.app.song_col = 4;
+                    c.app.song_mute_cursor_track = std::max(0, act_tracks - 1);
+                } else {
+                    c.app.song_col = std::clamp(c.app.song_col + dx, 0, 5);
+                }
             }
         }
         return;
@@ -733,8 +758,9 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
 
         const int start_y = area.y + 23;
         const int row_h = 10;
+        const int total_song_rows = c.app.song_rows_count;
 
-        for (int i = 0; i < 16; ++i) {
+        for (int i = 0; i < total_song_rows && i < 16; ++i) {
             const int y = start_y + i * row_h;
             const bool is_cursor = (i == c.app.song_cursor_row);
             const bool is_playing = (c.app.transport_playing && i == c.app.song_play_step);
@@ -779,7 +805,8 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
             else std::snprintf(bpm_str, sizeof(bpm_str), "%3d ", step.bpm);
             cv.text(area.x + 98, y + 1, bpm_str, (is_cursor && c.app.song_col == 3) ? palette::kAccentCyan : palette::kTextMain);
 
-            // 16 MUTES
+            // 16 MUTES (активні світяться зеленим, нестворені — сірим)
+            const int act_tracks = c.audio.getActiveRowCount();
             for (int t = 0; t < 16; ++t) {
                 const int mx = area.x + 126 + t * 9;
                 const bool is_muted = (step.mute_mask & (1 << t)) != 0;
@@ -789,19 +816,35 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
                     cv.rect(mx - 1, y, 8, row_h - 1, palette::kAccentCyan);
                 }
 
-                char mc = (t < 9) ? ('1' + t) : ('a' + t - 9);
-                char mstr[2] = {mc, '\0'};
-                if (is_muted) {
-                    cv.text(mx, y + 1, ".", palette::kLevelWarnClip);
+                if (t < act_tracks) {
+                    char mc = (t < 9) ? ('1' + t) : ('a' + t - 9);
+                    char mstr[2] = {mc, '\0'};
+                    if (is_muted) {
+                        cv.text(mx, y + 1, ".", palette::kLevelWarnClip);
+                    } else {
+                        cv.text(mx, y + 1, mstr, palette::kLevelOk);
+                    }
                 } else {
-                    cv.text(mx, y + 1, mstr, palette::kLevelOk);
+                    cv.text(mx, y + 1, "-", palette::kGridDim);
                 }
             }
 
             // STATUS
             const char* st_txt = step.enabled ? "[PLAY]" : "[SKIP]";
             ColorRGB st_col = step.enabled ? (is_playing ? palette::kLevelOk : palette::kTextMain) : palette::kTextDim;
-            cv.text(area.x + 280, y + 1, st_txt, st_col);
+            cv.text(area.x + 280, y + 1, st_txt, (is_cursor && c.app.song_col == 5) ? palette::kAccentCyan : st_col);
+        }
+
+        // Кнопка додавання нового рядка в Song Mode
+        if (total_song_rows < 16) {
+            const int y = start_y + total_song_rows * row_h;
+            const bool is_cursor = (c.app.song_cursor_row == total_song_rows);
+            if (is_cursor) {
+                cv.fill(area.x + 2, y, area.w - 4, row_h - 1, palette::kHeaderSel);
+                cv.rect(area.x + 2, y, area.w - 4, row_h - 1, palette::kAccentCyan);
+            }
+            cv.text(area.x + 8, y + 1, "[+]", is_cursor ? palette::kAccentCyan : palette::kTextDim);
+            cv.text(area.x + 24, y + 1, "ADD ROW (APPEND PATTERN TO SONG)", is_cursor ? palette::kAccentCyan : palette::kTextDim);
         }
 
         // Help bar at bottom of Song Mode
@@ -909,12 +952,20 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
     } else {
         const char* trig = !st.enabled ? "---" : (st.is_param_trig ? "P-LOCK" : "NOTE");
         std::string trk_nm = c.audio.getTrackName(cur_r);
+
+        char ptn_buf[16];
+        int cur_bank = c.app.pattern_mgr.currentBank();
+        int cur_ptn = c.app.pattern_mgr.currentPattern();
+        std::snprintf(ptn_buf, sizeof(ptn_buf), "pattern %c%d", 'A' + cur_bank, cur_ptn + 1);
+        cv.text(area.x + 4, area.y + 3, ptn_buf, palette::kCursorWhite);
+        int ptn_w = static_cast<int>(std::strlen(ptn_buf)) * 6 + 6;
+
         std::snprintf(hdr, sizeof(hdr), "R%02d [%s: %s] | ST%03d %s%d %s%s | L%u",
                       cur_r + 1, trk_nm.c_str(), getEngineTypeName(tp.engine), c.app.cursor_step + 1,
                       kNoteNames[st.note % 12], st.note / 12 - 1, trig,
                       (st.slide ? " SLD" : ""),
                       cur_len);
-        cv.text(area.x + 4, area.y + 3, hdr, st.is_param_trig ? palette::kParamTrig : palette::kAccentOrange);
+        cv.text(area.x + 4 + ptn_w, area.y + 3, hdr, st.is_param_trig ? palette::kParamTrig : palette::kAccentOrange);
     }
 
     const int grid_x = area.x + 28;

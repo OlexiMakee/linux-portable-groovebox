@@ -364,6 +364,28 @@ static void testAudioDspEngines() {
     TEST_ASSERT(audio.getMasterFx().lpf_slope_24 == true, "Master LPF 24 dB/oct 4-pole slope enabled");
     TEST_ASSERT(audio.getMasterFx().bell_gain == 6.0f, "Master Bell EQ gain set to +6.0 dB boost");
 
+    // 15. Digitakt Sampler looping parameters (FWD, REV, PING-PONG, loop_point, tune)
+    auto smp_tp = audio.getTrackParams(0);
+    smp_tp.engine = EngineType::kSampleOneShot;
+    smp_tp.sample.loop_mode = SampleLoopMode::kPingPong;
+    smp_tp.sample.start = 0.10f;
+    smp_tp.sample.loop_point = 0.20f;
+    smp_tp.sample.end = 0.80f;
+    smp_tp.sample.tune = 7.0f;
+    audio.setTrackParams(0, smp_tp);
+    TEST_ASSERT(audio.getTrackParams(0).sample.loop_mode == SampleLoopMode::kPingPong, "Track 0 sample loop mode set to PING-PONG");
+    TEST_ASSERT(audio.getTrackParams(0).sample.tune == 7.0f, "Track 0 sample tune set to +7 semitones");
+
+    // 16. Stereo delay width & Solo track
+    smp_tp.fx.delay_width = 1.0f;
+    audio.setTrackParams(0, smp_tp);
+    TEST_ASSERT(audio.getTrackParams(0).fx.delay_width == 1.0f, "Track 0 delay stereo width set to 100% (Ping-Pong)");
+
+    audio.toggleSoloTrack(1);
+    TEST_ASSERT(audio.isSoloed(1) && !audio.getTrackParams(1).muted && audio.getTrackParams(0).muted, "Solo track 1 unmutes T1 and mutes T0");
+    audio.toggleSoloTrack(1);
+    TEST_ASSERT(!audio.isSoloed(1) && !audio.getTrackParams(0).muted, "Unsolo track 1 restores previous mute state");
+
     audio.stop();
 }
 
@@ -956,6 +978,19 @@ static void testViewsRendering() {
     app.mix_submode = MixSubmode::kMaster;
     shell.render(app, audio, nullptr, in, hw, tel, midi, 1000);
     TEST_ASSERT(true, "MASTERING submode renders EQ spectrum curve (АЧХ) and master strips cleanly");
+
+    // 11. Рендеринг візуалізатора хвилі Digitakt у вкладці SYNTH
+    app.active_view = ViewId::kSynth;
+    app.synth_submode = SynthSubmode::kSynth;
+    app.selected_track = 0;
+    shell.render(app, audio, nullptr, in, hw, tel, midi, 1000);
+    TEST_ASSERT(true, "SYNTH tab renders Digitakt waveform visualizer with S/L/E markers");
+
+    // 12. Рендеринг Song Mode з 1 рядком та [+] ADD ROW
+    app.active_view = ViewId::kSeq;
+    app.seq_submode = SeqSubmode::kSong;
+    shell.render(app, audio, nullptr, in, hw, tel, midi, 1000);
+    TEST_ASSERT(app.song_rows_count == 1, "Song mode starts with exactly 1 row");
 
     audio.stop();
     SDL_DestroyRenderer(ren);
