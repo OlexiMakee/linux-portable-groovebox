@@ -515,26 +515,58 @@ ActionRegistry::ActionRegistry() {
         closeAllModals(c.app);
         if (c.app.active_view != ViewId::kSeq) {
             c.app.active_view = ViewId::kSeq;
+            c.app.seq_submode = SeqSubmode::kMatrix;
+            c.app.rec_mode = false;
+            c.app.last_action = "VIEW: SEQ";
         } else {
             ActionRegistry::instance().run("SEQ.REC_TOGGLE", c);
         }
     }});
     add(Action{"TAB.L2", "TAB.L2", [](UiContext& c) {
         closeAllModals(c.app);
-        c.app.active_view = ViewId::kSynth;
         const int act = c.audio.getActiveRowCount();
         if (c.app.cursor_row < act) {
             c.app.selected_track = c.audio.getRowTrack(c.app.cursor_row);
         }
-    }});
-    add(Action{"TAB.R2", "MIX/FX", [](UiContext& c) {
-        closeAllModals(c.app);
-        if (c.app.active_view == ViewId::kMix) {
-            c.app.active_view = ViewId::kFx;
-            c.app.last_action = "VIEW: FX";
+        if (c.app.active_view != ViewId::kSynth) {
+            c.app.active_view = ViewId::kSynth;
+            c.app.synth_submode = SynthSubmode::kSynth;
+            c.app.last_action = "VIEW: SYNTH";
         } else {
+            // Цикл L2: SYN -> MOD -> FX -> SYN
+            if (c.app.synth_submode == SynthSubmode::kSynth) {
+                c.app.synth_submode = SynthSubmode::kMod;
+                c.app.last_action = "MODE: MOD";
+            } else if (c.app.synth_submode == SynthSubmode::kMod) {
+                c.app.synth_submode = SynthSubmode::kFx;
+                c.app.last_action = "MODE: FX";
+            } else {
+                c.app.synth_submode = SynthSubmode::kSynth;
+                c.app.last_action = "MODE: SYNTH";
+            }
+        }
+    }});
+    add(Action{"TAB.R2", "MIX", [](UiContext& c) {
+        closeAllModals(c.app);
+        if (c.app.active_view != ViewId::kMix && c.app.active_view != ViewId::kFx) {
             c.app.active_view = ViewId::kMix;
+            c.app.mix_submode = MixSubmode::kMix;
             c.app.last_action = "VIEW: MIX";
+        } else {
+            // Цикл R2: MIX -> SND -> MSTR -> MIX
+            if (c.app.mix_submode == MixSubmode::kMix) {
+                c.app.mix_submode = MixSubmode::kSend;
+                c.app.active_view = ViewId::kFx;
+                c.app.last_action = "MODE: SEND";
+            } else if (c.app.mix_submode == MixSubmode::kSend) {
+                c.app.mix_submode = MixSubmode::kMaster;
+                c.app.active_view = ViewId::kMix;
+                c.app.last_action = "MODE: MASTER";
+            } else {
+                c.app.mix_submode = MixSubmode::kMix;
+                c.app.active_view = ViewId::kMix;
+                c.app.last_action = "MODE: MIX";
+            }
         }
     }});
     add(Action{"TAB.R1", "SAMPLE", [](UiContext& c) {

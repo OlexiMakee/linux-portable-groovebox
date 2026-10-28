@@ -524,6 +524,42 @@ static void testInputRouterAndStepEditor() {
     int vol_pct = static_cast<int>(std::round(cur_vol * 100.0f));
     TEST_ASSERT(vol_pct >= 0 && vol_pct <= 100, "Volume percentage is in 0..100% range");
 
+    // 6c. Тестування TRK.GAIN_OVER та циклів перемикання підвкладок L1/L2/R2
+    app.selected_track = 0;
+    auto tp_init = audio.getTrackParams(0);
+    TEST_ASSERT(tp_init.gain_over == 0.0f, "Default track GAIN/OVER is 0.0f (0 dB clean normalized max)");
+
+    // Тестування першого натискання vs послідовного циклу L1
+    app.active_view = ViewId::kSys;
+    ActionRegistry::instance().run("TAB.L1", ctx);
+    TEST_ASSERT(app.active_view == ViewId::kSeq && app.seq_submode == SeqSubmode::kMatrix, "First L1 press always opens primary SEQ");
+    ActionRegistry::instance().run("TAB.L1", ctx);
+    TEST_ASSERT(app.seq_submode == SeqSubmode::kPianoRoll, "Second L1 press switches to Piano Roll (ROL)");
+    ActionRegistry::instance().run("TAB.L1", ctx);
+    TEST_ASSERT(app.seq_submode == SeqSubmode::kSong, "Third L1 press switches to Song Mode (SON)");
+    ActionRegistry::instance().run("TAB.L1", ctx);
+    TEST_ASSERT(app.seq_submode == SeqSubmode::kMatrix, "Fourth L1 press loops back to SEQ");
+
+    // Тестування першого натискання vs послідовного циклу L2
+    ActionRegistry::instance().run("TAB.L2", ctx);
+    TEST_ASSERT(app.active_view == ViewId::kSynth && app.synth_submode == SynthSubmode::kSynth, "First L2 press always opens primary SYN");
+    ActionRegistry::instance().run("TAB.L2", ctx);
+    TEST_ASSERT(app.synth_submode == SynthSubmode::kMod, "Second L2 press switches to MOD");
+    ActionRegistry::instance().run("TAB.L2", ctx);
+    TEST_ASSERT(app.synth_submode == SynthSubmode::kFx, "Third L2 press switches to FX");
+    ActionRegistry::instance().run("TAB.L2", ctx);
+    TEST_ASSERT(app.synth_submode == SynthSubmode::kSynth, "Fourth L2 press loops back to SYN");
+
+    // Тестування першого натискання vs послідовного циклу R2
+    ActionRegistry::instance().run("TAB.R2", ctx);
+    TEST_ASSERT(app.active_view == ViewId::kMix && app.mix_submode == MixSubmode::kMix, "First R2 press always opens primary MIX");
+    ActionRegistry::instance().run("TAB.R2", ctx);
+    TEST_ASSERT(app.mix_submode == MixSubmode::kSend, "Second R2 press switches to SEND");
+    ActionRegistry::instance().run("TAB.R2", ctx);
+    TEST_ASSERT(app.mix_submode == MixSubmode::kMaster, "Third R2 press switches to MASTER");
+    ActionRegistry::instance().run("TAB.R2", ctx);
+    TEST_ASSERT(app.mix_submode == MixSubmode::kMix, "Fourth R2 press loops back to MIX");
+
     // 7. Тестування асинхронного перемикання USB ролі (запобігання зависань)
     HardwareMonitor hw_mon;
     bool switch_ok = hw_mon.requestUsbRoleSwitch("device_ssh");
