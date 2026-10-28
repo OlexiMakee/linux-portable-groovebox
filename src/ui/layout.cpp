@@ -50,6 +50,22 @@ void setupAppLayout(UiShell& shell) {
                     {"R-STK2", {"STK.R2_X", "STK.R2_XAMT", "STK.R2_Y", "STK.R2_YAMT"}}
                 };
             }
+            if (c.app.synth_submode == SynthSubmode::kFx) {
+                const auto tp = c.audio.getTrackParams(c.app.selected_track);
+                GridRow r_crush = {"CRUSH",  {"FX.BC_BITS", "FX.SRR"}};
+                GridRow r_dist  = {"DIST",   {"FX.DST_DRV", "FX.DST_TONE", "FX.DST_MIX"}};
+                GridRow r_chor  = {"CHORUS", {"FX.CHR_MIX", "FX.CHR_RATE", "FX.CHR_DEP"}};
+                GridRow r_scomp = {"S-COMP", {"FX.SC_SRC", "FX.SC_THR", "FX.SC_RAT", "FX.SC_ATK", "FX.SC_REL", "FX.SC_POS"}};
+                GridRow r_dly   = {"DELAY",  {"FX.DLY_DIV", "FX.DLY_FBK", "FX.DLY_MIX"}};
+                GridRow r_rev   = {"REVERB", {"FX.REV_ENG", "FX.REV_DEC", "FX.REV_HICUT", "FX.REV_LOCUT", "FX.REV_PRE", "FX.REV_MIX"}};
+                GridRow r_snds  = {"SENDS",  {"TRK.DLY", "TRK.REV", "TRK.CHR", "TRK.PAN", "TRK.LVL"}};
+
+                if (tp.fx.sc_pos == SidechainPos::kPreDelayRev) {
+                    return { r_crush, r_dist, r_chor, r_scomp, r_dly, r_rev, r_snds };
+                } else {
+                    return { r_crush, r_dist, r_chor, r_dly, r_rev, r_scomp, r_snds };
+                }
+            }
             const auto tp = c.audio.getTrackParams(c.app.selected_track);
             switch (tp.engine) {
                 case EngineType::kDx7:

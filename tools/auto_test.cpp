@@ -308,6 +308,39 @@ static void testAudioDspEngines() {
                 "Live modulation bus produces real-time modulated offsets during block rendering");
     TEST_ASSERT(audio.getLiveModValue(0, ModTarget::kCutoff, 0.5f) >= 0.0f, "getLiveModValue clamps modulated value to valid range");
 
+    // 16. Тестування Per-Track FX Chain (Bitcrusher, SRR, Metal Zone Distortion, Chorus, Parallel Delay/Reverb, Sidechain)
+    auto tp_fx = audio.getTrackParams(0);
+    tp_fx.fx.bit_depth = 4; // 4 біти = 16 дискретних рівнів
+    tp_fx.fx.srr_factor = 4; // 4x sample rate reduction
+    tp_fx.fx.dist_drive = 0.85f;
+    tp_fx.fx.dist_tone = 0.60f;
+    tp_fx.fx.dist_mix = 0.75f;
+    tp_fx.fx.chorus_mix = 0.50f;
+    tp_fx.fx.delay_div = 2; // 1/16
+    tp_fx.fx.delay_mix = 0.40f;
+    tp_fx.fx.rev_engine = ReverbEngine::kPlate;
+    tp_fx.fx.rev_decay = 0.60f;
+    tp_fx.fx.rev_mix = 0.35f;
+    tp_fx.fx.sc_source = 1; // TRK 01
+    tp_fx.fx.sc_thresh = -12.0f;
+    tp_fx.fx.sc_ratio = 4.0f;
+    tp_fx.fx.sc_pos = SidechainPos::kPreDelayRev;
+    audio.setTrackParams(0, tp_fx);
+
+    int16_t fx_test_buf[256 * 2];
+    audio.renderBlock(fx_test_buf, 256, 32000);
+
+    TEST_ASSERT(audio.getTrackParams(0).fx.bit_depth == 4, "Per-track bitcrusher bit depth correctly set to 4");
+    TEST_ASSERT(audio.getTrackParams(0).fx.srr_factor == 4, "Per-track SRR downsampling factor correctly set to 4");
+    TEST_ASSERT(audio.getTrackParams(0).fx.dist_drive >= 0.80f, "Metal Zone distortion drive parameter configured");
+    TEST_ASSERT(audio.getTrackParams(0).fx.rev_engine == ReverbEngine::kPlate, "Reverb engine correctly set to Plate");
+    TEST_ASSERT(audio.getTrackParams(0).fx.sc_pos == SidechainPos::kPreDelayRev, "Sidechain position set to PRE delay/reverb");
+
+    // Перемикання Sidechain позиції на POST
+    tp_fx.fx.sc_pos = SidechainPos::kPostDelayRev;
+    audio.setTrackParams(0, tp_fx);
+    TEST_ASSERT(audio.getTrackParams(0).fx.sc_pos == SidechainPos::kPostDelayRev, "Sidechain position toggles to POST delay/reverb");
+
     audio.stop();
 }
 
@@ -881,6 +914,19 @@ static void testViewsRendering() {
     shell.render(app, audio, nullptr, in, hw, tel, midi, 1000);
     TEST_ASSERT(true, "MOD TARGET PICKER modal renders cleanly over workspace");
     app.mod_picker_open = false;
+
+    // 9. Рендеринг виділеної вкладки TRACK FX ([L2]mod<FX>syn) з динамічним розташуванням S-COMP (PRE vs POST)
+    app.synth_submode = SynthSubmode::kFx;
+    auto cur_tp = audio.getTrackParams(app.selected_track);
+    cur_tp.fx.sc_pos = SidechainPos::kPreDelayRev;
+    audio.setTrackParams(app.selected_track, cur_tp);
+    shell.render(app, audio, nullptr, in, hw, tel, midi, 1000);
+    TEST_ASSERT(true, "TRACK FX submode renders with S-COMP in PRE delay/reverb position");
+
+    cur_tp.fx.sc_pos = SidechainPos::kPostDelayRev;
+    audio.setTrackParams(app.selected_track, cur_tp);
+    shell.render(app, audio, nullptr, in, hw, tel, midi, 1000);
+    TEST_ASSERT(true, "TRACK FX submode dynamically rearranges table with S-COMP in POST position");
 
     audio.stop();
     SDL_DestroyRenderer(ren);

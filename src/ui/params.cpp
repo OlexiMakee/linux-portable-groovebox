@@ -499,7 +499,189 @@ ParamRegistry::ParamRegistry() {
         add(trackFloat(pre + "PAN", "PAN", t, [](TrackParameters& x) -> float& { return x.pan; }, -1.0f, 1.0f, 0.05f, fmtPan));
         add(trackFloat(pre + "DLY", "DLY SND", t, [](TrackParameters& x) -> float& { return x.delay_send; }, 0.0f, 1.0f, 0.02f, fmtPct));
         add(trackFloat(pre + "REV", "REV SND", t, [](TrackParameters& x) -> float& { return x.reverb_send; }, 0.0f, 1.0f, 0.02f, fmtPct));
+        add(trackFloat(pre + "CHR", "CHR SND", t, [](TrackParameters& x) -> float& { return x.fx.send_chorus; }, 0.0f, 1.0f, 0.02f, fmtPct));
         add(trackMute(pre + "MUTE", t));
+    }
+
+    // ===== TRACK INSERT FX (Bitcrusher, SRR, Distortion, Chorus, Delay, Reverb, Sidechain) =====
+    {
+        Param p;
+        p.id = "FX.BC_BITS";
+        p.label = "BITS";
+        p.value = [](const UiContext& c) {
+            auto tp = c.audio.getTrackParams(trk(c, S));
+            if (tp.fx.bit_depth >= 16) return std::string("16 (OFF)");
+            char b[16]; std::snprintf(b, sizeof(b), "%d BITS", tp.fx.bit_depth);
+            return std::string(b);
+        };
+        p.norm = [](const UiContext& c) {
+            return (c.audio.getTrackParams(trk(c, S)).fx.bit_depth - 1) / 15.0f;
+        };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            const int t = trk(c, S);
+            auto tp = c.audio.getTrackParams(t);
+            tp.fx.bit_depth = std::clamp(tp.fx.bit_depth + dir * (coarse ? 4 : 1), 1, 16);
+            c.audio.setTrackParams(t, tp);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "FX.SRR";
+        p.label = "SRR";
+        p.value = [](const UiContext& c) {
+            auto tp = c.audio.getTrackParams(trk(c, S));
+            if (tp.fx.srr_factor <= 1) return std::string("1X (OFF)");
+            char b[16]; std::snprintf(b, sizeof(b), "%dX", tp.fx.srr_factor);
+            return std::string(b);
+        };
+        p.norm = [](const UiContext& c) {
+            return (c.audio.getTrackParams(trk(c, S)).fx.srr_factor - 1) / 63.0f;
+        };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            const int t = trk(c, S);
+            auto tp = c.audio.getTrackParams(t);
+            tp.fx.srr_factor = std::clamp(tp.fx.srr_factor + dir * (coarse ? 8 : 1), 1, 64);
+            c.audio.setTrackParams(t, tp);
+        };
+        add(std::move(p));
+    }
+    add(trackFloat("FX.DST_DRV", "DRIVE", S, [](TrackParameters& t) -> float& { return t.fx.dist_drive; }, 0.0f, 1.0f, 0.02f, fmtPct));
+    add(trackFloat("FX.DST_TONE", "TONE", S, [](TrackParameters& t) -> float& { return t.fx.dist_tone; }, 0.0f, 1.0f, 0.02f, fmtPct));
+    add(trackFloat("FX.DST_MIX", "D.MIX", S, [](TrackParameters& t) -> float& { return t.fx.dist_mix; }, 0.0f, 1.0f, 0.02f, fmtPct));
+
+    add(trackFloat("FX.CHR_MIX", "C.MIX", S, [](TrackParameters& t) -> float& { return t.fx.chorus_mix; }, 0.0f, 1.0f, 0.02f, fmtPct));
+    add(trackFloat("FX.CHR_RATE", "C.RATE", S, [](TrackParameters& t) -> float& { return t.fx.chorus_rate; }, 0.1f, 8.0f, 0.1f, fmtHz));
+    add(trackFloat("FX.CHR_DEP", "C.DEP", S, [](TrackParameters& t) -> float& { return t.fx.chorus_depth; }, 0.0f, 1.0f, 0.02f, fmtPct));
+
+    {
+        Param p;
+        p.id = "FX.DLY_DIV";
+        p.label = "TIME";
+        p.value = [](const UiContext& c) {
+            int d = std::clamp(c.audio.getTrackParams(trk(c, S)).fx.delay_div, 0, 7);
+            return std::string(kDelayDivNames[d]);
+        };
+        p.norm = [](const UiContext& c) {
+            return std::clamp(c.audio.getTrackParams(trk(c, S)).fx.delay_div, 0, 7) / 7.0f;
+        };
+        p.step = [](UiContext& c, int dir, bool) {
+            const int t = trk(c, S);
+            auto tp = c.audio.getTrackParams(t);
+            tp.fx.delay_div = std::clamp(tp.fx.delay_div + dir, 0, 7);
+            c.audio.setTrackParams(t, tp);
+        };
+        add(std::move(p));
+    }
+    add(trackFloat("FX.DLY_FBK", "D.FBK", S, [](TrackParameters& t) -> float& { return t.fx.delay_feedback; }, 0.0f, 0.95f, 0.02f, fmtPct));
+    add(trackFloat("FX.DLY_MIX", "D.MIX", S, [](TrackParameters& t) -> float& { return t.fx.delay_mix; }, 0.0f, 1.0f, 0.02f, fmtPct));
+
+    {
+        Param p;
+        p.id = "FX.REV_ENG";
+        p.label = "ENGINE";
+        p.value = [](const UiContext& c) {
+            return std::string(getReverbEngineName(c.audio.getTrackParams(trk(c, S)).fx.rev_engine));
+        };
+        p.norm = [](const UiContext& c) {
+            return static_cast<int>(c.audio.getTrackParams(trk(c, S)).fx.rev_engine) / 3.0f;
+        };
+        p.step = [](UiContext& c, int dir, bool) {
+            const int t = trk(c, S);
+            auto tp = c.audio.getTrackParams(t);
+            int e = (static_cast<int>(tp.fx.rev_engine) + dir + 4) % 4;
+            tp.fx.rev_engine = static_cast<ReverbEngine>(e);
+            c.audio.setTrackParams(t, tp);
+        };
+        add(std::move(p));
+    }
+    add(trackFloat("FX.REV_DEC", "R.DEC", S, [](TrackParameters& t) -> float& { return t.fx.rev_decay; }, 0.05f, 0.98f, 0.02f, fmtPct));
+    add(trackFloat("FX.REV_HICUT", "HI-CUT", S, [](TrackParameters& t) -> float& { return t.fx.rev_hicut; }, 0.05f, 1.0f, 0.02f, fmtPct));
+    add(trackFloat("FX.REV_LOCUT", "LO-CUT", S, [](TrackParameters& t) -> float& { return t.fx.rev_locut; }, 0.0f, 0.8f, 0.02f, fmtPct));
+    add(trackFloat("FX.REV_PRE", "PRE-DLY", S, [](TrackParameters& t) -> float& { return t.fx.rev_predelay; }, 0.0f, 0.15f, 0.005f, fmtMs));
+    add(trackFloat("FX.REV_MIX", "R.MIX", S, [](TrackParameters& t) -> float& { return t.fx.rev_mix; }, 0.0f, 1.0f, 0.02f, fmtPct));
+
+    {
+        Param p;
+        p.id = "FX.SC_SRC";
+        p.label = "SC SRC";
+        p.value = [](const UiContext& c) {
+            int src = c.audio.getTrackParams(trk(c, S)).fx.sc_source;
+            if (src <= 0) return std::string("OFF");
+            char b[16]; std::snprintf(b, sizeof(b), "TRK %02d", src);
+            return std::string(b);
+        };
+        p.norm = [](const UiContext& c) {
+            return c.audio.getTrackParams(trk(c, S)).fx.sc_source / 16.0f;
+        };
+        p.step = [](UiContext& c, int dir, bool) {
+            const int t = trk(c, S);
+            auto tp = c.audio.getTrackParams(t);
+            int max_src = c.audio.getActiveRowCount();
+            tp.fx.sc_source = std::clamp(tp.fx.sc_source + dir, 0, max_src);
+            c.audio.setTrackParams(t, tp);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "FX.SC_THR";
+        p.label = "SC THR";
+        p.value = [](const UiContext& c) {
+            float th = c.audio.getTrackParams(trk(c, S)).fx.sc_thresh;
+            char b[16]; std::snprintf(b, sizeof(b), "%+.1f dB", th);
+            return std::string(b);
+        };
+        p.norm = [](const UiContext& c) {
+            return (c.audio.getTrackParams(trk(c, S)).fx.sc_thresh + 48.0f) / 48.0f;
+        };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            const int t = trk(c, S);
+            auto tp = c.audio.getTrackParams(t);
+            tp.fx.sc_thresh = std::clamp(tp.fx.sc_thresh + dir * (coarse ? 6.0f : 1.0f), -48.0f, 0.0f);
+            c.audio.setTrackParams(t, tp);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "FX.SC_RAT";
+        p.label = "SC RAT";
+        p.value = [](const UiContext& c) {
+            float r = c.audio.getTrackParams(trk(c, S)).fx.sc_ratio;
+            char b[16]; std::snprintf(b, sizeof(b), "%.1f:1", r);
+            return std::string(b);
+        };
+        p.norm = [](const UiContext& c) {
+            return (c.audio.getTrackParams(trk(c, S)).fx.sc_ratio - 1.0f) / 19.0f;
+        };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            const int t = trk(c, S);
+            auto tp = c.audio.getTrackParams(t);
+            tp.fx.sc_ratio = std::clamp(tp.fx.sc_ratio + dir * (coarse ? 2.0f : 0.5f), 1.0f, 20.0f);
+            c.audio.setTrackParams(t, tp);
+        };
+        add(std::move(p));
+    }
+    add(trackFloat("FX.SC_ATK", "SC ATK", S, [](TrackParameters& t) -> float& { return t.fx.sc_attack; }, 0.001f, 0.100f, 0.002f, fmtMs));
+    add(trackFloat("FX.SC_REL", "SC REL", S, [](TrackParameters& t) -> float& { return t.fx.sc_release; }, 0.020f, 1.000f, 0.020f, fmtMs));
+    {
+        Param p;
+        p.id = "FX.SC_POS";
+        p.label = "SC POS";
+        p.value = [](const UiContext& c) {
+            return std::string(getSidechainPosName(c.audio.getTrackParams(trk(c, S)).fx.sc_pos));
+        };
+        p.norm = [](const UiContext& c) {
+            return static_cast<int>(c.audio.getTrackParams(trk(c, S)).fx.sc_pos);
+        };
+        p.step = [](UiContext& c, int, bool) {
+            const int t = trk(c, S);
+            auto tp = c.audio.getTrackParams(t);
+            tp.fx.sc_pos = (tp.fx.sc_pos == SidechainPos::kPreDelayRev) ? SidechainPos::kPostDelayRev : SidechainPos::kPreDelayRev;
+            c.audio.setTrackParams(t, tp);
+        };
+        add(std::move(p));
     }
 
     // ===== Глобальні ефекти та майстер =====
