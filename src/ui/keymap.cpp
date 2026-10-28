@@ -49,6 +49,10 @@ Keymap::Keymap() {
     bind(ALL, Layer::kSelect, Button::kR2, Gesture::kPress, "TAB.SEL_R2");
     bind(ALL, Layer::kSelect, Button::kR1, Gesture::kPress, "TAB.SEL_R1");
 
+    // Digitakt Quick Temp Save & Recall (працює глобально в усіх екранах)
+    bind(ALL, Layer::kSelect, Button::kFn,    Gesture::kPress, "PROJECT.TEMP_SAVE");
+    bind(ALL, Layer::kSelect, Button::kStart, Gesture::kPress, "PROJECT.TEMP_RELOAD");
+
     // =========================================================================
     // 2. СЕКВЕНСОР (ViewId::kSeq)
     // =========================================================================
@@ -60,18 +64,12 @@ Keymap::Keymap() {
 
     // SELECT шар у секвенсорі (Elektron Pattern / Track Operations & Polymetry)
     bind(ViewId::kSeq, Layer::kSelect, Button::kA,         Gesture::kPress, "STEP.PREVIEW");
-    bind(ViewId::kSeq, Layer::kSelect, Button::kB,         Gesture::kPress, "SEQ.DEL_TRACK_SAFE");
-    bind(ViewId::kSeq, Layer::kSelect, Button::kX,         Gesture::kPress, "SEQ.LEN_DEC");
-    bind(ViewId::kSeq, Layer::kSelect, Button::kY,         Gesture::kPress, "SEQ.LEN_INC");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kB,         Gesture::kPress, "SEQ.CLEAR_TRACK");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kL1,        Gesture::kPress, "SEQ.DEL_TRACK_SAFE");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kX,         Gesture::kPress, "STEP.COPY");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kY,         Gesture::kPress, "STEP.PASTE");
     bind(ViewId::kSeq, Layer::kSelect, Button::kDpadLeft,  Gesture::kPress, "SEQ.LEN_DEC");
     bind(ViewId::kSeq, Layer::kSelect, Button::kDpadRight, Gesture::kPress, "SEQ.LEN_INC");
-    bind(ViewId::kSeq, Layer::kSelect, Button::kStart,     Gesture::kPress, "ARP.OPEN");
-
-    // HOLD L2 шар у секвенсорі: Elektron Live Quick Mute Mode для треків 1-4!
-    bind(ViewId::kSeq, Layer::kHoldL2, Button::kX, Gesture::kPress, "MUTE.T1");
-    bind(ViewId::kSeq, Layer::kHoldL2, Button::kY, Gesture::kPress, "MUTE.T2");
-    bind(ViewId::kSeq, Layer::kHoldL2, Button::kA, Gesture::kPress, "MUTE.T3");
-    bind(ViewId::kSeq, Layer::kHoldL2, Button::kB, Gesture::kPress, "MUTE.T4");
 
     // =========================================================================
     // 3. СИНТЕЗАТОР (ViewId::kSynth)
@@ -219,9 +217,6 @@ std::string Keymap::actionLabel(ViewId view, Layer layer, Button button) const {
 InputRouter::InputRouter(Keymap keymap) : keymap_(std::move(keymap)) {}
 
 Layer InputRouter::activeLayer(const UiContext& ctx) const {
-    if (ctx.app.active_view == ViewId::kSeq && ctx.in.l2) {
-        return Layer::kHoldL2; // MUTE режим
-    }
     if (ctx.in.btn_select) {
         return Layer::kSelect;
     }
