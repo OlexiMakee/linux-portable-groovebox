@@ -104,6 +104,15 @@ struct AppModel {
 
     // Короткий статус останньої дії (для HUD)
     std::string last_action = "READY";
+
+    // Буфер обміну тригера (STEP.COPY / STEP.PASTE)
+    bool has_clipboard_step = false;
+    SequencerStep clipboard_step{};
+
+    // Elektron Digitakt Temp Save / Recall (SELECT + G / SELECT + START)
+    bool has_temp_snapshot = false;
+    PatternData temp_snapshot{};
+    float temp_snapshot_bpm = 120.0f;
 };
 
 // Контекст, який отримують усі Param / Action / View (DIP: залежність від абстракції контексту)

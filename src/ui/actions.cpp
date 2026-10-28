@@ -312,7 +312,7 @@ ActionRegistry::ActionRegistry() {
     add(Action{"SEQ.LEN_INC", "LEN+", [](UiContext& c) {
         if (c.app.cursor_row < c.audio.getActiveRowCount()) {
             uint32_t len = c.audio.getRowLength(c.app.cursor_row);
-            uint32_t next = std::min(128u, ((len / 4u) + 1u) * 4u);
+            uint32_t next = (len >= 256u) ? 4u : std::min(256u, ((len / 4u) + 1u) * 4u);
             c.audio.setRowLength(c.app.cursor_row, next);
             if (c.app.cursor_step >= static_cast<int>(next)) c.app.cursor_step = static_cast<int>(next - 1);
         }
@@ -320,10 +320,72 @@ ActionRegistry::ActionRegistry() {
     add(Action{"SEQ.LEN_DEC", "LEN-", [](UiContext& c) {
         if (c.app.cursor_row < c.audio.getActiveRowCount()) {
             uint32_t len = c.audio.getRowLength(c.app.cursor_row);
-            uint32_t next = len > 4u ? ((len - 1u) / 4u) * 4u : 4u;
+            uint32_t next = (len <= 4u) ? 256u : (((len - 1u) / 4u) * 4u);
             c.audio.setRowLength(c.app.cursor_row, next);
             if (c.app.cursor_step >= static_cast<int>(next)) c.app.cursor_step = static_cast<int>(next - 1);
         }
+    }});
+    add(Action{"SEQ.CLEAR_TRACK", "CLEAR TRK", [](UiContext& c) {
+        const int act = c.audio.getActiveRowCount();
+        if (c.app.cursor_row >= 0 && c.app.cursor_row < act) {
+            const uint32_t len = c.audio.getRowLength(c.app.cursor_row);
+            for (uint32_t s = 0; s < len; ++s) {
+                c.audio.clearStep(c.app.cursor_row, s);
+            }
+            c.app.last_action = "TRACK CLEARED";
+        }
+    }});
+    add(Action{"STEP.COPY", "COPY TRIG", [](UiContext& c) {
+        const int act = c.audio.getActiveRowCount();
+        if (c.app.cursor_row >= 0 && c.app.cursor_row < act) {
+            c.app.clipboard_step = c.audio.getStep(c.app.cursor_row, c.app.cursor_step);
+            c.app.has_clipboard_step = true;
+            c.app.last_action = "TRIG COPIED";
+        }
+    }});
+    add(Action{"STEP.PASTE", "PASTE TRIG", [](UiContext& c) {
+        const int act = c.audio.getActiveRowCount();
+        if (c.app.has_clipboard_step && c.app.cursor_row >= 0 && c.app.cursor_row < act) {
+            c.audio.setStep(c.app.cursor_row, c.app.cursor_step, c.app.clipboard_step);
+            c.app.last_action = "TRIG PASTED";
+        }
+    }});
+    add(Action{"PROJECT.TEMP_SAVE", "TEMP SAVE", [](UiContext& c) {
+        c.app.temp_snapshot = PatternData{};
+        c.app.temp_snapshot.bpm = c.app.bpm;
+        c.app.temp_snapshot.pattern_length = c.audio.getPatternLength();
+        for (int t = 0; t < kTracksCount; ++t) {
+            c.app.temp_snapshot.tracks[t] = c.audio.getTrackParams(t);
+        }
+        const int act = c.audio.getActiveRowCount();
+        for (int r = 0; r < act; ++r) {
+            c.app.temp_snapshot.row_lengths[r] = c.audio.getRowLength(r);
+            for (uint32_t s = 0; s < kMaxSteps; ++s) {
+                c.app.temp_snapshot.steps[r][s] = c.audio.getStep(r, s);
+            }
+        }
+        c.app.temp_snapshot.initialized = true;
+        c.app.has_temp_snapshot = true;
+        c.app.last_action = "TEMP SAVED [FUNC+YES]";
+    }});
+    add(Action{"PROJECT.TEMP_RELOAD", "TEMP RECALL", [](UiContext& c) {
+        if (!c.app.has_temp_snapshot || !c.app.temp_snapshot.initialized) {
+            c.app.last_action = "NO TEMP SNAPSHOT";
+            return;
+        }
+        c.app.bpm = c.app.temp_snapshot.bpm;
+        c.audio.setPatternLength(c.app.temp_snapshot.pattern_length);
+        for (int t = 0; t < kTracksCount; ++t) {
+            c.audio.setTrackParams(t, c.app.temp_snapshot.tracks[t]);
+        }
+        const int act = c.audio.getActiveRowCount();
+        for (int r = 0; r < act; ++r) {
+            c.audio.setRowLength(r, c.app.temp_snapshot.row_lengths[r]);
+            for (uint32_t s = 0; s < kMaxSteps; ++s) {
+                c.audio.setStep(r, s, c.app.temp_snapshot.steps[r][s]);
+            }
+        }
+        c.app.last_action = "TEMP RECALL [FUNC+NO]";
     }});
     add(Action{"SEQ.CYCLE_PAGE", "ADD TRK", [](UiContext& c) {
         const int act = c.audio.getActiveRowCount();
