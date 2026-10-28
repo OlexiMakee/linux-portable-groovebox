@@ -121,7 +121,7 @@ public:
     // Тригер кроку секвенсора (master_tick 0..unlimited)
     void triggerSequencerStep(uint32_t master_tick);
     uint32_t getPatternLength() const { return pattern_length_.load(std::memory_order_relaxed); }
-    void setPatternLength(uint32_t len) { pattern_length_.store(std::clamp(len, 16u, 128u)); }
+    void setPatternLength(uint32_t len) { pattern_length_.store(std::clamp(len, 16u, kMaxSteps)); }
 
     // Поліметрія: незалежні довжини для кожного з 16 рядків (16..128 кроків)
     uint32_t getRowLength(int row) const;

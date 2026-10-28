@@ -298,6 +298,8 @@ static void testSequencerOperations() {
     // 2. Довжина доріжки (поліритмія) кроком у 4
     audio.setRowLength(0, 16);
     TEST_ASSERT(audio.getRowLength(0) == 16, "Row length sets to 16");
+    audio.setRowLength(0, 256);
+    TEST_ASSERT(audio.getRowLength(0) == 256, "Row length sets to 256 max steps");
 
     uint32_t next_len = audio.cycleRowLength(0);
     TEST_ASSERT(next_len == 20 || next_len == 32 || (next_len % 4 == 0), "cycleRowLength increments by step of 4");
@@ -462,6 +464,14 @@ static void testInputRouterAndStepEditor() {
     TEST_ASSERT(app.active_view == kScope, "SELECT + R2 switches to SCOPE view");
     ActionRegistry::instance().run("VIEW.BACK", ctx);
     TEST_ASSERT(app.active_view == ViewId::kSeq, "VIEW.BACK returns from SCOPE to previous view");
+
+    // 5b. Тестування циклічного лупу довжини треку (4 <-> 256)
+    app.cursor_row = 0;
+    audio.setRowLength(0, 4);
+    ActionRegistry::instance().run("SEQ.LEN_DEC", ctx);
+    TEST_ASSERT(audio.getRowLength(0) == 256, "SEQ.LEN_DEC loops backward from 4 to 256 steps");
+    ActionRegistry::instance().run("SEQ.LEN_INC", ctx);
+    TEST_ASSERT(audio.getRowLength(0) == 4, "SEQ.LEN_INC loops forward from 256 to 4 steps");
 
     // 6. Тестування переходу в робочу станцію семплювання (TAB.R1)
     ActionRegistry::instance().run("TAB.R1", ctx);

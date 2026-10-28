@@ -451,13 +451,13 @@ uint32_t AudioEngine::getRowLength(int row) const {
 
 void AudioEngine::setRowLength(int row, uint32_t len) {
     int r = std::clamp(row, 0, kTotalRows - 1);
-    row_lengths_[r].store(std::clamp(len, 1u, 128u), std::memory_order_relaxed);
+    row_lengths_[r].store(std::clamp(len, 1u, kMaxSteps), std::memory_order_relaxed);
 }
 
 uint32_t AudioEngine::cycleRowLength(int row) {
     int r = std::clamp(row, 0, kTotalRows - 1);
     uint32_t cur = row_lengths_[r].load(std::memory_order_relaxed);
-    uint32_t next = (cur >= 128u) ? 4u : std::min(128u, ((cur / 4u) + 1u) * 4u);
+    uint32_t next = (cur >= kMaxSteps) ? 4u : std::min(kMaxSteps, ((cur / 4u) + 1u) * 4u);
     row_lengths_[r].store(next, std::memory_order_relaxed);
     return next;
 }
