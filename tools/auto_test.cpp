@@ -215,6 +215,62 @@ static void testAudioDspEngines() {
     }
     TEST_ASSERT(tail_active, "Freeverb algorithmic tank produces a dense sustaining reverb tail");
 
+    // 9. Тестування подвійних SVF фільтрів (LPF + HPF) та біполярних огинаючих
+    auto filter_tp = audio.getTrackParams(0);
+    filter_tp.engine = EngineType::kVaMono;
+    filter_tp.lpf_cutoff = 0.98f;
+    filter_tp.hpf_cutoff = 0.0f;
+    filter_tp.lpf_env = 0.0f;
+    filter_tp.hpf_env = 0.0f;
+    audio.setTrackParams(0, filter_tp);
+
+    // Звучання з повністю відкритим LPF і вимкненим HPF
+    audio.triggerNote(0, 60, 0.90f);
+    int16_t open_buf[512 * 2];
+    audio.renderBlock(open_buf, 512, 32000);
+    int64_t energy_open = 0;
+    for (int i = 0; i < 1024; ++i) energy_open += std::abs(static_cast<int>(open_buf[i]));
+
+    // Закриваємо LPF до низьких частот -> енергія сигналу повинна значно зменшитись
+    audio.panic();
+    filter_tp.lpf_cutoff = 0.15f;
+    audio.setTrackParams(0, filter_tp);
+    audio.triggerNote(0, 60, 0.90f);
+    int16_t closed_buf[512 * 2];
+    audio.renderBlock(closed_buf, 512, 32000);
+    int64_t energy_lpf_closed = 0;
+    for (int i = 0; i < 1024; ++i) energy_lpf_closed += std::abs(static_cast<int>(closed_buf[i]));
+    TEST_ASSERT(energy_lpf_closed < energy_open, "LPF cutoff attenuation reduces signal energy at low cutoff");
+
+    // Відкриваємо LPF назад, але піднімаємо HPF cutoff -> високі частоти залишаються, бас зрізається
+    audio.panic();
+    filter_tp.lpf_cutoff = 0.98f;
+    filter_tp.hpf_cutoff = 0.65f;
+    audio.setTrackParams(0, filter_tp);
+    audio.triggerNote(0, 36, 0.90f); // Низька басова нота C2
+    int16_t hpf_buf[512 * 2];
+    audio.renderBlock(hpf_buf, 512, 32000);
+    int64_t energy_hpf = 0;
+    for (int i = 0; i < 1024; ++i) energy_hpf += std::abs(static_cast<int>(hpf_buf[i]));
+
+    audio.panic();
+    filter_tp.hpf_cutoff = 0.0f; // без HPF
+    audio.setTrackParams(0, filter_tp);
+    audio.triggerNote(0, 36, 0.90f);
+    int16_t full_bass_buf[512 * 2];
+    audio.renderBlock(full_bass_buf, 512, 32000);
+    int64_t energy_full_bass = 0;
+    for (int i = 0; i < 1024; ++i) energy_full_bass += std::abs(static_cast<int>(full_bass_buf[i]));
+    TEST_ASSERT(energy_hpf < energy_full_bass, "HPF cutoff attenuates low-frequency bass energy");
+
+    // Біполярна огинаюча: перевіряємо діапазон -100%..+100%
+    filter_tp.lpf_env = -0.75f;
+    audio.setTrackParams(0, filter_tp);
+    TEST_ASSERT(std::fabs(audio.getTrackParams(0).lpf_env - (-0.75f)) < 0.01f, "Bipolar LPF envelope accepts negative modulation (-75%)");
+    filter_tp.hpf_env = 0.50f;
+    audio.setTrackParams(0, filter_tp);
+    TEST_ASSERT(std::fabs(audio.getTrackParams(0).hpf_env - 0.50f) < 0.01f, "Bipolar HPF envelope accepts positive modulation (+50%)");
+
     audio.stop();
 }
 
@@ -500,6 +556,22 @@ static void testInputRouterAndStepEditor() {
     if (p_ws) {
         p_ws->step(ctx, 1, false);
         TEST_ASSERT(audio.getTrackParams(0).p[5] == 0.50f, "TRK.WAVE_SAMPLE stepping does not alter VA Mono p[5] (Pulse Width)");
+    }
+
+    // 14. Тестування параметрів LPF та HPF у ParamRegistry
+    const Param* p_lpf_cut = ParamRegistry::instance().find("TRK.LPF_CUT");
+    const Param* p_lpf_env = ParamRegistry::instance().find("TRK.LPF_ENV");
+    const Param* p_hpf_cut = ParamRegistry::instance().find("TRK.HPF_CUT");
+    const Param* p_hpf_env = ParamRegistry::instance().find("TRK.HPF_ENV");
+    TEST_ASSERT(p_lpf_cut && p_lpf_env && p_hpf_cut && p_hpf_env, "ParamRegistry contains TRK.LPF_CUT, TRK.LPF_ENV, TRK.HPF_CUT, TRK.HPF_ENV");
+    if (p_lpf_env) {
+        auto tp = audio.getTrackParams(0);
+        tp.lpf_env = 0.0f;
+        audio.setTrackParams(0, tp);
+        TEST_ASSERT(p_lpf_env->value(ctx) == "+0%", "LPF ENV default displays +0%");
+        p_lpf_env->step(ctx, -1, false);
+        TEST_ASSERT(audio.getTrackParams(0).lpf_env < 0.0f, "Stepping LPF ENV down produces negative modulation");
+        TEST_ASSERT(p_lpf_env->value(ctx).find("-") != std::string::npos, "Negative LPF ENV formatted with minus sign");
     }
 }
 
