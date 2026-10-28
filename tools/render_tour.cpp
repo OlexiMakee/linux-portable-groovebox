@@ -95,9 +95,21 @@ int main() {
     capture("/tmp/xu10_tour/tour_01_rec_piano.bmp");
     app.rec_mode = false;
 
+    // 1c. Song Mode
+    app.active_view = ViewId::kSeq;
+    app.seq_submode = SeqSubmode::kSong;
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
+    capture("/tmp/xu10_tour/tour_01_song.bmp");
+    app.seq_submode = SeqSubmode::kMatrix;
+
     // 2. SYNTH Tab (Cyan tab)
     app.active_view = ViewId::kSynth;
+    app.selected_track = 0; // Sampler Kick 808
     input = InputState{};
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
+    capture("/tmp/xu10_tour/tour_02_sampler.bmp");
+
+    app.selected_track = 1; // 303
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_02_synth.bmp");
 
@@ -112,6 +124,12 @@ int main() {
     input = InputState{};
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_04_mix.bmp");
+
+    // 4b. Mastering View
+    app.mix_submode = MixSubmode::kMaster;
+    ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
+    capture("/tmp/xu10_tour/tour_04_master.bmp");
+    app.mix_submode = MixSubmode::kMix;
 
     // 5. SAMPLE Tab (Sampling Workstation with 8 Slices & Active S3 Highlight)
     app.active_view = ViewId::kSample;
