@@ -478,6 +478,52 @@ static void testInputRouterAndStepEditor() {
     TEST_ASSERT(app.active_view == ViewId::kSample, "TAB.R1 switches directly to SAMPLE workstation");
     ActionRegistry::instance().run("VIEW.BACK", ctx);
 
+    // 6b. Тестування уніфікованої архітектури модальних вікон, кеймапів та обмежень доступу
+    app.active_view = ViewId::kSynth;
+    ActionRegistry::instance().run("ARP.OPEN", ctx);
+    TEST_ASSERT(app.arp_modal_open == false, "Arp cannot open from SYNTH (strict scope: SEQ only)");
+    ActionRegistry::instance().run("PROJECT.SAVE_AS_OPEN", ctx);
+    TEST_ASSERT(app.project_modal_open == false, "Project modal cannot open from SYNTH (strict scope: SYS only)");
+
+    app.active_view = ViewId::kSys;
+    ActionRegistry::instance().run("PROJECT.SAVE_AS_OPEN", ctx);
+    TEST_ASSERT(app.project_modal_open == true, "Project modal opens from SYS");
+    TEST_ASSERT(activeViewId(app) == ViewId::kProjectModal, "activeViewId reports kProjectModal when modal open");
+    TEST_ASSERT(isModalView(activeViewId(app)) == true, "isModalView reports true for kProjectModal");
+
+    // Dynamic HUD hints for active modal
+    std::string pm_lbl_a = keymap.actionLabel(ViewId::kProjectModal, Layer::kBase, Button::kA);
+    std::string pm_lbl_b = keymap.actionLabel(ViewId::kProjectModal, Layer::kBase, Button::kB);
+    std::string pm_lbl_x = keymap.actionLabel(ViewId::kProjectModal, Layer::kBase, Button::kX);
+    TEST_ASSERT(pm_lbl_a == "CONFIRM", "kProjectModal Button A hint is CONFIRM");
+    TEST_ASSERT(pm_lbl_b == "CANCEL", "kProjectModal Button B hint is CANCEL");
+    TEST_ASSERT(pm_lbl_x == "--", "kProjectModal Button X hint is -- (no conflict)");
+
+    // Button B cancels project modal via router
+    current_in = InputState{};
+    current_in.btn_b = true;
+    current_in.b_pressed = true;
+    ctx.now_ms = 3000;
+    router.processInput(ctx);
+    current_in.b_pressed = false;
+    TEST_ASSERT(app.project_modal_open == false, "Pressing B closes project modal");
+    TEST_ASSERT(activeViewId(app) == ViewId::kSys, "activeViewId returns to kSys after modal closed");
+
+    // Auto-close on tab switch
+    app.active_view = ViewId::kSys;
+    ActionRegistry::instance().run("PROJECT.LOAD_OPEN", ctx);
+    TEST_ASSERT(app.project_modal_open == true, "Project modal opened");
+    ActionRegistry::instance().run("TAB.L1", ctx);
+    TEST_ASSERT(app.project_modal_open == false, "Switching tab via TAB.L1 auto-closes modal");
+    TEST_ASSERT(app.active_view == ViewId::kSeq, "Switched to SEQ tab");
+
+    // Master volume accessor verification
+    audio.adjustMasterVolume(0.0f);
+    float cur_vol = audio.getMasterVolume();
+    TEST_ASSERT(cur_vol >= 0.0f && cur_vol <= 1.0f, "getMasterVolume returns normalized float");
+    int vol_pct = static_cast<int>(std::round(cur_vol * 100.0f));
+    TEST_ASSERT(vol_pct >= 0 && vol_pct <= 100, "Volume percentage is in 0..100% range");
+
     // 7. Тестування асинхронного перемикання USB ролі (запобігання зависань)
     HardwareMonitor hw_mon;
     bool switch_ok = hw_mon.requestUsbRoleSwitch("device_ssh");
