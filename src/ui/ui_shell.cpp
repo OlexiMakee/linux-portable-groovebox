@@ -261,7 +261,9 @@ void UiShell::renderHud(Canvas& cv, const UiContext& ctx) {
     // Рядок 2: Фокус активного вікна/параметра або модального екрана
     const ViewId active_v_id = activeViewId(ctx.app);
     std::string f_id;
-    if (ctx.app.project_modal_open) {
+    if (ctx.app.mod_picker_open) {
+        f_id = "MOD TARGET: " + ctx.app.mod_picker_param_id;
+    } else if (ctx.app.project_modal_open) {
         f_id = ctx.app.project_modal_is_save ? "PROJECT: SAVE AS" : "PROJECT: LOAD";
     } else if (ctx.app.sample_browser_open) {
         f_id = "SAMPLE BROWSER";
@@ -374,6 +376,48 @@ void UiShell::render(
             if (static_cast<EngineType>(e) == EngineType::kSampleOneShot) label = "SAMPLER (ONE-SHOT)";
             else if (static_cast<EngineType>(e) == EngineType::kSliceSampler) label = "LOOP SLICER";
             cv.text(mx + 8, ey + 2, label, sel ? palette::kAccentCyan : palette::kTextMain);
+        }
+    }
+
+    // Модальне контекстне меню вибору таргету модуляції (MOD TARGET PICKER)
+    if (app.mod_picker_open) {
+        const int mw = 220;
+        const int mh = 148;
+        const int mx = (logical_w_ - mw) / 2;
+        const int my = (logical_h_ - mh) / 2;
+        cv.fill(mx, my, mw, mh, palette::kPanelBg);
+        cv.rect(mx, my, mw, mh, palette::kAccentPurple);
+        cv.fill(mx + 1, my + 1, mw - 2, 11, palette::kHeaderSel);
+        std::string hdr = "MOD TARGET: " + app.mod_picker_param_id;
+        cv.textClip(mx + 4, my + 3, hdr, (mw - 8) / Canvas::kCharW, palette::kAccentPurple);
+
+        const int kVis = 11;
+        const int total_targets = static_cast<int>(ModTarget::kCount);
+        int scroll = std::clamp(app.mod_picker_sel - kVis / 2, 0, std::max(0, total_targets - kVis));
+
+        for (int i = 0; i < kVis && (scroll + i) < total_targets; ++i) {
+            int t_idx = scroll + i;
+            const int ey = my + 15 + i * 11;
+            const bool sel = (t_idx == app.mod_picker_sel);
+            if (sel) {
+                cv.fill(mx + 3, ey, mw - 12, 10, palette::kHeaderSel);
+                cv.rect(mx + 3, ey, mw - 12, 10, palette::kAccentPurple);
+            }
+            auto tgt = static_cast<ModTarget>(t_idx);
+            char row_str[64];
+            std::snprintf(row_str, sizeof(row_str), "[%-5s] %s", getModTargetShortName(tgt), getModTargetLongName(tgt));
+            cv.textClip(mx + 6, ey + 2, row_str, (mw - 18) / Canvas::kCharW, sel ? palette::kAccentPurple : palette::kTextMain);
+        }
+
+        // Вертикальна смуга скролу
+        if (total_targets > kVis) {
+            const int bar_x = mx + mw - 6;
+            const int bar_y0 = my + 15;
+            const int bar_h = kVis * 11;
+            cv.fill(bar_x, bar_y0, 2, bar_h, palette::kPanelBg);
+            const int thumb_h = std::max(8, bar_h * kVis / total_targets);
+            const int thumb_y = bar_y0 + (bar_h - thumb_h) * scroll / std::max(1, total_targets - kVis);
+            cv.fill(bar_x, thumb_y, 2, thumb_h, palette::kAccentPurple);
         }
     }
 

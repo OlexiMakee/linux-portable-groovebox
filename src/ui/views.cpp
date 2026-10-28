@@ -136,17 +136,37 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
         box.x = area.x + (area.w - box.w) / 2;
         box.y = area.y + (area.h - box.h) / 2 - 2;
 
+        ColorRGB effective_accent = spec_.accent;
+        if (spec_.id == ViewId::kSynth) {
+            if (c.app.synth_submode == SynthSubmode::kMod) effective_accent = palette::kAccentPurple;
+            else if (c.app.synth_submode == SynthSubmode::kFx) effective_accent = palette::kLevelOk;
+            else effective_accent = palette::kAccentCyan;
+        }
+
         cv.fill(box.x, box.y, box.w, box.h, palette::kPanelBg);
-        cv.rect(box.x, box.y, box.w, box.h, spec_.accent);
+        cv.rect(box.x, box.y, box.w, box.h, effective_accent);
         cv.fill(box.x + 1, box.y + 1, box.w - 2, 10, palette::kHeaderSel);
-        if (spec_.header) cv.text(box.x + 4, box.y + 3, spec_.header(c), spec_.accent);
+        if (spec_.header) cv.text(box.x + 4, box.y + 3, spec_.header(c), effective_accent);
         cv.text(box.x + box.w - 38, box.y + 3, "[L3:X]", palette::kTextDim);
 
         table_y0 = box.y + 14;
         cells_x = box.x + kTitleW;
         cells_w = box.w - kTitleW - 4;
     } else if (spec_.header) {
-        cv.text(area.x + 4, area.y + 3, spec_.header(c), spec_.accent);
+        ColorRGB effective_accent = spec_.accent;
+        if (spec_.id == ViewId::kSynth) {
+            if (c.app.synth_submode == SynthSubmode::kMod) effective_accent = palette::kAccentPurple;
+            else if (c.app.synth_submode == SynthSubmode::kFx) effective_accent = palette::kLevelOk;
+            else effective_accent = palette::kAccentCyan;
+        }
+        cv.text(area.x + 4, area.y + 3, spec_.header(c), effective_accent);
+    }
+
+    ColorRGB effective_accent = spec_.accent;
+    if (spec_.id == ViewId::kSynth) {
+        if (c.app.synth_submode == SynthSubmode::kMod) effective_accent = palette::kAccentPurple;
+        else if (c.app.synth_submode == SynthSubmode::kFx) effective_accent = palette::kLevelOk;
+        else effective_accent = palette::kAccentCyan;
     }
 
     auto rows = resolveRows(c);
@@ -162,7 +182,7 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
     for (int i = 0; i < rows_to_draw; ++i) {
         const int r = scroll + i;
         const int y = table_y0 + i * kTableRowH;
-        cv.text(box.x + 4, y + 8, rows[r].first, r == sel_r ? spec_.accent : palette::kTextDim);
+        cv.text(box.x + 4, y + 8, rows[r].first, r == sel_r ? effective_accent : palette::kTextDim);
 
         const auto& cells = rows[r].second;
         const int n = std::max(1, static_cast<int>(cells.size()));
@@ -175,8 +195,73 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
                 continue;
             }
             const float norm = p->norm ? p->norm(c) : -1.0f;
+
+            ModTarget tgt = ModTarget::kNone;
+            const std::string& pid = p->id;
+            if (pid == "TRK.LPF_CUT") tgt = ModTarget::kCutoff;
+            else if (pid == "TRK.LPF_RES") tgt = ModTarget::kResonance;
+            else if (pid == "TRK.LPF_ENV") tgt = ModTarget::kEnvMod;
+            else if (pid == "TRK.LPF_DEC") tgt = ModTarget::kLpfDecay;
+            else if (pid == "TRK.HPF_CUT") tgt = ModTarget::kHpfCutoff;
+            else if (pid == "TRK.HPF_RES") tgt = ModTarget::kHpfResonance;
+            else if (pid == "TRK.HPF_ENV") tgt = ModTarget::kHpfEnv;
+            else if (pid == "TRK.HPF_DEC") tgt = ModTarget::kHpfDecay;
+            else if (pid == "TRK.GAIN_OVER") tgt = ModTarget::kGainOver;
+            else if (pid == "TRK.GLIDE") tgt = ModTarget::kGlide;
+            else if (pid == "TRK.P1") tgt = ModTarget::kParam1;
+            else if (pid == "TRK.P2") tgt = ModTarget::kParam2;
+            else if (pid == "TRK.P3") tgt = ModTarget::kParam3;
+            else if (pid == "TRK.P4") tgt = ModTarget::kParam4;
+            else if (pid == "TRK.P5") tgt = ModTarget::kParam5;
+            else if (pid == "TRK.P6") tgt = ModTarget::kParam6;
+            else if (pid == "TRK.ATK") tgt = ModTarget::kAmpAttack;
+            else if (pid == "TRK.DEC") tgt = ModTarget::kAmpDecay;
+            else if (pid == "TRK.SUS") tgt = ModTarget::kAmpSustain;
+            else if (pid == "TRK.REL") tgt = ModTarget::kAmpRelease;
+            else if (pid == "TRK.PAN") tgt = ModTarget::kPan;
+            else if (pid == "TRK.LVL") tgt = ModTarget::kLevel;
+            else if (pid == "TRK.DLY") tgt = ModTarget::kDelaySend;
+            else if (pid == "TRK.REV") tgt = ModTarget::kReverbSend;
+            else if (pid == "LFO1.RATE") tgt = ModTarget::kLfo1Rate;
+            else if (pid == "LFO1.DEPTH") tgt = ModTarget::kLfo1Depth;
+            else if (pid == "LFO2.RATE") tgt = ModTarget::kLfo2Rate;
+            else if (pid == "LFO2.DEPTH") tgt = ModTarget::kLfo2Depth;
+            else if (pid == "LFO3.RATE") tgt = ModTarget::kLfo3Rate;
+            else if (pid == "LFO3.DEPTH") tgt = ModTarget::kLfo3Depth;
+            else if (pid == "LFO4.RATE") tgt = ModTarget::kLfo4Rate;
+            else if (pid == "LFO4.DEPTH") tgt = ModTarget::kLfo4Depth;
+            else if (pid == "ENV1.ATK") tgt = ModTarget::kEnv1Attack;
+            else if (pid == "ENV1.DEC") tgt = ModTarget::kEnv1Decay;
+            else if (pid == "ENV1.SUS") tgt = ModTarget::kEnv1Sustain;
+            else if (pid == "ENV1.REL") tgt = ModTarget::kEnv1Release;
+            else if (pid == "ENV2.ATK") tgt = ModTarget::kEnv2Attack;
+            else if (pid == "ENV2.DEC") tgt = ModTarget::kEnv2Decay;
+            else if (pid == "ENV2.SUS") tgt = ModTarget::kEnv2Sustain;
+            else if (pid == "ENV2.REL") tgt = ModTarget::kEnv2Release;
+
+            bool is_mod_target = false;
+            float live_norm = -1.0f;
+            if (tgt != ModTarget::kNone && norm >= 0.0f) {
+                int trk = c.app.selected_track;
+                const auto& tp = c.audio.getTrackParams(trk);
+                if ((tp.lfo1.dest == tgt && tp.lfo1.depth > 0.001f) ||
+                    (tp.lfo2.dest == tgt && tp.lfo2.depth > 0.001f) ||
+                    (tp.lfo3.dest == tgt && tp.lfo3.depth > 0.001f) ||
+                    (tp.lfo4.dest == tgt && tp.lfo4.depth > 0.001f) ||
+                    (tp.env1.dest == tgt && std::fabs(tp.env1.amount) > 0.001f) ||
+                    (tp.env2.dest == tgt && std::fabs(tp.env2.amount) > 0.001f) ||
+                    (tp.stick_l_m1.dest_x == tgt || tp.stick_l_m1.dest_y == tgt ||
+                     tp.stick_l_m2.dest_x == tgt || tp.stick_l_m2.dest_y == tgt ||
+                     tp.stick_r_m1.dest_x == tgt || tp.stick_r_m1.dest_y == tgt ||
+                     tp.stick_r_m2.dest_x == tgt || tp.stick_r_m2.dest_y == tgt)) {
+                    is_mod_target = true;
+                    live_norm = c.audio.getLiveModValue(trk, tgt, norm);
+                }
+            }
+
             widgets::paramCell(cv, cell, p->labelFor(c), p->value(c), norm,
-                               r == sel_r && k == sel_c, p->editable(), spec_.accent);
+                               r == sel_r && k == sel_c, p->editable(), effective_accent,
+                               live_norm, is_mod_target);
         }
     }
 

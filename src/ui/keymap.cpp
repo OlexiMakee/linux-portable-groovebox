@@ -191,6 +191,15 @@ Keymap::Keymap() {
     bind(ViewId::kEngineMenu, Layer::kBase, Button::kA,         Gesture::kPress, "ENGINE.MENU_CONFIRM");
     bind(ViewId::kEngineMenu, Layer::kBase, Button::kB,         Gesture::kPress, "ENGINE.MENU_CLOSE");
     bind(ViewId::kEngineMenu, Layer::kSelect, Button::kB,       Gesture::kPress, "ENGINE.MENU_CLOSE");
+
+    // =========================================================================
+    // 14. СЕЛЕКТОР ТАРГЕТУ МОДУЛЯЦІЇ (ViewId::kModPicker)
+    // =========================================================================
+    bind(ViewId::kModPicker, Layer::kBase, Button::kDpadUp,    Gesture::kPress, "MOD_PICKER.PREV");
+    bind(ViewId::kModPicker, Layer::kBase, Button::kDpadDown,  Gesture::kPress, "MOD_PICKER.NEXT");
+    bind(ViewId::kModPicker, Layer::kBase, Button::kA,         Gesture::kPress, "MOD_PICKER.CONFIRM");
+    bind(ViewId::kModPicker, Layer::kBase, Button::kB,         Gesture::kPress, "MOD_PICKER.CLOSE");
+    bind(ViewId::kModPicker, Layer::kSelect, Button::kB,       Gesture::kPress, "MOD_PICKER.CLOSE");
 }
 
 void Keymap::bind(KeyBinding b) {
