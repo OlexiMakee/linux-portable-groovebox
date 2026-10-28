@@ -3,6 +3,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 
 namespace groovebox {
@@ -23,6 +24,7 @@ PatternManager::PatternManager() {
         patterns_[i].row_lengths.fill(16);
         patterns_[i].initialized = false;
     }
+    current_project_path_ = defaultProjectPath();
 }
 
 std::string PatternManager::formatPatternCode(int bank, int pattern) {
@@ -50,6 +52,42 @@ void PatternManager::selectPattern(int bank, int pattern, bool quantized) {
         queued_bank_ = bank;
         queued_pattern_ = pattern;
     }
+}
+
+void PatternManager::switchPatternNow(int bank, int pattern, AudioEngine& engine, float& bpm) {
+    bank = std::clamp(bank, 0, kNumBanks - 1);
+    pattern = std::clamp(pattern, 0, kPatternsPerBank - 1);
+    if (bank == current_bank_ && pattern == current_pattern_) return;
+
+    // 1. Зберігаємо поточний патерн, щоб жодна нота не втратилася
+    captureCurrent(engine, bpm);
+
+    // 2. Перемикаємося на новий патерн
+    current_bank_ = bank;
+    current_pattern_ = pattern;
+    queued_bank_ = -1;
+    queued_pattern_ = -1;
+
+    // 3. Якщо цільовий патерн ще не був ініціалізований — копіюємо актуальні звуки треків і очищаємо кроки
+    const int idx = current_bank_ * kPatternsPerBank + current_pattern_;
+    auto& p = patterns_[idx];
+    if (!p.initialized) {
+        p.bpm = bpm;
+        p.pattern_length = engine.getPatternLength();
+        for (int t = 0; t < kTracksCount; ++t) {
+            p.tracks[t] = engine.getTrackParams(t);
+        }
+        for (int r = 0; r < kTotalRows; ++r) {
+            p.row_lengths[r] = engine.getRowLength(r);
+            for (uint32_t s = 0; s < kMaxSteps; ++s) {
+                p.steps[r][s] = SequencerStep{};
+            }
+        }
+        p.initialized = true;
+    }
+
+    // 4. Завантажуємо патерн у рушій
+    applyCurrent(engine, bpm);
 }
 
 void PatternManager::selectProgramChange(int program, bool quantized) {
@@ -110,16 +148,41 @@ void PatternManager::applyCurrent(AudioEngine& engine, float& bpm) {
     }
 }
 
-std::string PatternManager::defaultProjectPath() {
+std::string PatternManager::projectsDirectory() {
 #if defined(__linux__)
-    return "/storage/dev/groovebox/projects/default_project.gbx";
+    return "/storage/dev/groovebox/projects";
 #else
-    return "default_project.gbx";
+    return "projects";
 #endif
+}
+
+std::string PatternManager::defaultProjectPath() {
+    return projectsDirectory() + "/default_project.xgproj";
+}
+
+std::vector<std::string> PatternManager::listProjectFiles() {
+    std::vector<std::string> out;
+    std::string dir = projectsDirectory();
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    if (!std::filesystem::exists(dir, ec)) return out;
+
+    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+        if (!entry.is_regular_file()) continue;
+        auto ext = entry.path().extension().string();
+        if (ext == ".xgproj" || ext == ".gbx") {
+            out.push_back(entry.path().filename().string());
+        }
+    }
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 bool PatternManager::saveProject(const std::string& filepath, const AudioEngine& engine, float bpm) {
     const_cast<PatternManager*>(this)->captureCurrent(engine, bpm);
+
+    std::error_code ec;
+    std::filesystem::create_directories(std::filesystem::path(filepath).parent_path(), ec);
 
     std::ofstream os(filepath, std::ios::binary);
     if (!os.is_open()) return false;
@@ -133,7 +196,11 @@ bool PatternManager::saveProject(const std::string& filepath, const AudioEngine&
         os.write(reinterpret_cast<const char*>(&patterns_[i]), sizeof(PatternData));
     }
 
-    return os.good();
+    if (os.good()) {
+        const_cast<PatternManager*>(this)->current_project_path_ = filepath;
+        return true;
+    }
+    return false;
 }
 
 bool PatternManager::loadProject(const std::string& filepath, AudioEngine& engine, float& bpm) {
@@ -154,6 +221,7 @@ bool PatternManager::loadProject(const std::string& filepath, AudioEngine& engin
     }
 
     if (is.good()) {
+        current_project_path_ = filepath;
         applyCurrent(engine, bpm);
         return true;
     }

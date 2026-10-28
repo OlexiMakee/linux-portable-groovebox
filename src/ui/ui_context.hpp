@@ -113,6 +113,12 @@ struct AppModel {
     bool has_temp_snapshot = false;
     PatternData temp_snapshot{};
     float temp_snapshot_bpm = 120.0f;
+
+    // Модальне вікно управління проєктами (Save As / Load Project)
+    bool project_modal_open = false;
+    bool project_modal_is_save = false; // true = Save As, false = Load
+    std::vector<std::string> project_files;
+    int project_modal_sel = 0;
 };
 
 // Контекст, який отримують усі Param / Action / View (DIP: залежність від абстракції контексту)

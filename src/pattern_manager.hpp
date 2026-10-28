@@ -39,8 +39,9 @@ public:
     std::string activePatternName() const;
     static std::string formatPatternCode(int bank, int pattern);
 
-    // Вибір патерну (квантовано або миттєво)
+    // Вибір патерну (квантовано або миттєво) з автозбереженням поточного
     void selectPattern(int bank, int pattern, bool quantized = true);
+    void switchPatternNow(int bank, int pattern, AudioEngine& engine, float& bpm);
     // Вибір по номеру MIDI Program Change (0..127)
     void selectProgramChange(int program, bool quantized = true);
 
@@ -56,14 +57,19 @@ public:
     bool saveProject(const std::string& filepath, const AudioEngine& engine, float bpm);
     bool loadProject(const std::string& filepath, AudioEngine& engine, float& bpm);
 
-    // Дефолтний шлях до проєкту
+    // Шляхи та файловий менеджер проєктів
+    std::string currentProjectPath() const { return current_project_path_; }
+    void setCurrentProjectPath(std::string p) { current_project_path_ = std::move(p); }
+    static std::string projectsDirectory();
     static std::string defaultProjectPath();
+    static std::vector<std::string> listProjectFiles();
 
 private:
     int current_bank_ = 0;    // 0..7 (A..H)
     int current_pattern_ = 0; // 0..15 (01..16)
     int queued_bank_ = -1;
     int queued_pattern_ = -1;
+    std::string current_project_path_;
 
     std::vector<PatternData> patterns_;
 };
