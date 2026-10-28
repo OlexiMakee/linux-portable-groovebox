@@ -278,6 +278,36 @@ static void testAudioDspEngines() {
     audio.setTrackParams(0, filter_tp);
     TEST_ASSERT(std::fabs(audio.getTrackParams(0).hpf_env - 0.50f) < 0.01f, "Bipolar HPF envelope accepts positive modulation (+50%)");
 
+    // 8. 4 LFOs, 2 ADSRs, Stick Modes & Live Modulation Bus
+    auto mod_tp = audio.getTrackParams(0);
+    mod_tp.lfo1.dest = ModTarget::kCutoff;
+    mod_tp.lfo1.depth = 0.50f;
+    mod_tp.lfo2.dest = ModTarget::kResonance;
+    mod_tp.lfo2.depth = 0.40f;
+    mod_tp.lfo3.dest = ModTarget::kPitch;
+    mod_tp.lfo3.depth = 0.60f;
+    mod_tp.lfo4.dest = ModTarget::kLfo1Rate; // LFO cross-modulation!
+    mod_tp.lfo4.depth = 0.30f;
+    mod_tp.env1.dest = ModTarget::kParam1;
+    mod_tp.env1.amount = 0.45f;
+    mod_tp.env2.dest = ModTarget::kGainOver;
+    mod_tp.env2.amount = 0.35f;
+    mod_tp.stick_l_m1.dest_x = ModTarget::kCutoff;
+    mod_tp.stick_l_m1.amount_x = 0.50f;
+    audio.setTrackParams(0, mod_tp);
+
+    audio.triggerNote(0, 60, 0.8f);
+    int16_t mod_test_buf[256 * 2];
+    audio.renderBlock(mod_test_buf, 256, 32000);
+
+    TEST_ASSERT(audio.getTrackParams(0).lfo3.dest == ModTarget::kPitch, "LFO3 destination correctly assigned to Pitch");
+    TEST_ASSERT(audio.getTrackParams(0).lfo4.dest == ModTarget::kLfo1Rate, "LFO4 destination correctly assigned to LFO1 Rate cross-mod");
+    TEST_ASSERT(audio.getTrackParams(0).env1.dest == ModTarget::kParam1, "Assignable ENV1 correctly assigned to Param 1");
+    TEST_ASSERT(audio.getTrackParams(0).env2.dest == ModTarget::kGainOver, "Assignable ENV2 correctly assigned to Gain/Overdrive");
+    TEST_ASSERT(audio.getLiveModOffset(0, ModTarget::kCutoff) != 0.0f || audio.getLiveModOffset(0, ModTarget::kPitch) != 0.0f,
+                "Live modulation bus produces real-time modulated offsets during block rendering");
+    TEST_ASSERT(audio.getLiveModValue(0, ModTarget::kCutoff, 0.5f) >= 0.0f, "getLiveModValue clamps modulated value to valid range");
+
     audio.stop();
 }
 
@@ -706,6 +736,41 @@ static void testInputRouterAndStepEditor() {
         TEST_ASSERT(audio.getTrackParams(0).lpf_env < 0.0f, "Stepping LPF ENV down produces negative modulation");
         TEST_ASSERT(p_lpf_env->value(ctx).find("-") != std::string::npos, "Negative LPF ENV formatted with minus sign");
     }
+
+    // 15. Тест модального вікна вибору таргету модуляції (MOD TARGET PICKER)
+    app.active_view = ViewId::kSynth;
+    app.synth_submode = SynthSubmode::kMod;
+
+    // Фокусуємося на LFO1.DEST (Row 0, Col 4)
+    app.grid_row[static_cast<int>(ViewId::kSynth)] = 0;
+    app.grid_col[static_cast<int>(ViewId::kSynth)] = 4;
+    ActionRegistry::instance().run("PARAM.DEC", ctx); // Натискання кнопки A відкриває селектор таргету
+    TEST_ASSERT(app.mod_picker_open == true, "Pressing Button A on modulation target opens MOD TARGET PICKER modal");
+    TEST_ASSERT(app.mod_picker_param_id == "LFO1.DEST", "MOD TARGET PICKER captures focused parameter ID");
+
+    // Навігація в модальному вікні
+    int initial_sel = app.mod_picker_sel;
+    ActionRegistry::instance().run("MOD_PICKER.NEXT", ctx);
+    TEST_ASSERT(app.mod_picker_sel != initial_sel || static_cast<int>(ModTarget::kCount) == 1, "MOD_PICKER.NEXT navigates target list");
+    ActionRegistry::instance().run("MOD_PICKER.PREV", ctx);
+    TEST_ASSERT(app.mod_picker_sel == initial_sel, "MOD_PICKER.PREV returns to initial selection");
+
+    // Вибираємо таргет kPitch
+    app.mod_picker_sel = static_cast<int>(ModTarget::kPitch);
+    ActionRegistry::instance().run("MOD_PICKER.CONFIRM", ctx);
+    TEST_ASSERT(app.mod_picker_open == false, "MOD_PICKER.CONFIRM closes modal");
+    TEST_ASSERT(audio.getTrackParams(app.selected_track).lfo1.dest == ModTarget::kPitch, "MOD_PICKER.CONFIRM applies selected ModTarget to track");
+
+    // Перевірка фільтрації: ENV1 не може вибрати власні огинаючі параметри
+    app.grid_row[static_cast<int>(ViewId::kSynth)] = 4; // ENV1 row
+    app.grid_col[static_cast<int>(ViewId::kSynth)] = 5; // ENV1.DEST
+    ActionRegistry::instance().run("PARAM.DEC", ctx);
+    TEST_ASSERT(app.mod_picker_open == true, "Button A opens MOD TARGET PICKER for ENV1");
+    app.mod_picker_sel = static_cast<int>(ModTarget::kEnv1Attack);
+    ActionRegistry::instance().run("MOD_PICKER.NEXT", ctx); // Автоматично перестрибує через заборонені цілі
+    TEST_ASSERT(app.mod_picker_sel != static_cast<int>(ModTarget::kEnv1Attack), "MOD_PICKER filters out self-envelope targets for ENV1");
+    ActionRegistry::instance().run("MOD_PICKER.CLOSE", ctx);
+    TEST_ASSERT(app.mod_picker_open == false, "MOD_PICKER.CLOSE cancels and closes modal");
 }
 
 static void testViewsRendering() {
@@ -803,6 +868,19 @@ static void testViewsRendering() {
     app.active_view = ViewId::kFx;
     shell.render(app, audio, nullptr, in, hw, tel, midi, 1000);
     TEST_ASSERT(true, "FX view renders with pinned bottom oscilloscope/VU layout");
+
+    // 8. Рендеринг виділеної вкладки MOD ([L2]syn<MOD>fx) та модального селектора таргету
+    app.active_view = ViewId::kSynth;
+    app.synth_submode = SynthSubmode::kMod;
+    shell.render(app, audio, nullptr, in, hw, tel, midi, 1000);
+    TEST_ASSERT(true, "Dedicated MOD submode renders 4 LFOs, 2 ENVs, and Stick mode tables cleanly");
+
+    app.mod_picker_open = true;
+    app.mod_picker_param_id = "LFO1.DEST";
+    app.mod_picker_sel = static_cast<int>(ModTarget::kCutoff);
+    shell.render(app, audio, nullptr, in, hw, tel, midi, 1000);
+    TEST_ASSERT(true, "MOD TARGET PICKER modal renders cleanly over workspace");
+    app.mod_picker_open = false;
 
     audio.stop();
     SDL_DestroyRenderer(ren);
