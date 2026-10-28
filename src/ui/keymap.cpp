@@ -53,11 +53,9 @@ Keymap::Keymap() {
     // 2. СЕКВЕНСОР (ViewId::kSeq)
     // =========================================================================
     // Базовий шар
-    bind(ViewId::kSeq, Layer::kBase, Button::kA, Gesture::kTap,   "SEQ.TRIG");
-    bind(ViewId::kSeq, Layer::kBase, Button::kA, Gesture::kHold,  "INSPECT.OPEN");
+    bind(ViewId::kSeq, Layer::kBase, Button::kA, Gesture::kPress, "SEQ.TRIG");
     bind(ViewId::kSeq, Layer::kBase, Button::kB, Gesture::kPress, "SEQ.CLEAR_STEP");
-    bind(ViewId::kSeq, Layer::kBase, Button::kX, Gesture::kPress, "SEQ.NOTE_DOWN");
-    bind(ViewId::kSeq, Layer::kBase, Button::kY, Gesture::kPress, "SEQ.NOTE_UP");
+    bind(ViewId::kSeq, Layer::kBase, Button::kX, Gesture::kPress, "INSPECT.OPEN");
     bind(ViewId::kSeq, Layer::kBase, Button::kL1, Gesture::kPress, "SEQ.REC_TOGGLE");
 
     // SELECT шар у секвенсорі (Elektron Pattern / Track Operations & Polymetry)

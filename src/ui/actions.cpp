@@ -139,18 +139,77 @@ ActionRegistry::ActionRegistry() {
             int step = c.app.cursor_step;
             auto st = c.audio.getStep(t, step);
 
-            // Уніфікований хроматичний Piano Roll для всіх движків (включаючи Sampler)
             int pitch = c.app.rec_octave * 12 + (11 - std::clamp(c.app.rec_cursor_lane, 0, 11));
-            if (st.enabled && st.note == pitch) {
-                st.enabled = false;
+
+            // Перевіряємо, чи ця нота вже присутня у кроці
+            if (st.enabled) {
+                int found_slot = -1;
+                for (int i = 0; i < 4; ++i) {
+                    if (st.chord_notes[i] == pitch) {
+                        found_slot = i;
+                        break;
+                    }
+                }
+                if (found_slot == -1 && st.note == pitch) {
+                    found_slot = 0;
+                }
+
+                if (found_slot >= 0) {
+                    // Нота вже є — видаляємо її
+                    st.chord_notes[found_slot] = 255;
+                    std::vector<uint8_t> remaining;
+                    for (int i = 0; i < 4; ++i) {
+                        if (st.chord_notes[i] != 255) remaining.push_back(st.chord_notes[i]);
+                    }
+                    if (remaining.empty()) {
+                        st.enabled = false;
+                        st.chord_notes = {48, 255, 255, 255};
+                    } else {
+                        st.note = remaining[0];
+                        for (size_t i = 0; i < 4; ++i) {
+                            st.chord_notes[i] = (i < remaining.size()) ? remaining[i] : 255;
+                        }
+                    }
+                    c.audio.setStep(t, step, st);
+                    c.app.last_action = "NOTE REMOVED";
+                    return;
+                }
+
+                // Рахуємо кількість уже зайнятих голосів
+                int active_voices = 0;
+                for (int i = 0; i < 4; ++i) {
+                    if (st.chord_notes[i] != 255) active_voices++;
+                }
+                if (active_voices == 0 && st.note != 255) active_voices = 1;
+
+                if (active_voices >= 4) {
+                    // Ліміт голосів (максимум 4) вичерпано!
+                    c.app.last_action = "VOICE LIMIT: MAX 4";
+                    c.app.voice_limit_alert_until_ms = c.now_ms + 1500;
+                    return;
+                }
+
+                // Додаємо ноту у вільний слот
+                for (int i = 0; i < 4; ++i) {
+                    if (st.chord_notes[i] == 255) {
+                        st.chord_notes[i] = static_cast<uint8_t>(pitch);
+                        break;
+                    }
+                }
+                c.audio.triggerNote(t, pitch, 0.90f);
+                c.audio.setStep(t, step, st);
+                c.app.last_action = "NOTE ADDED";
+                return;
             } else {
                 st.enabled = true;
                 st.is_param_trig = false;
                 st.note = static_cast<uint8_t>(pitch);
+                st.chord_notes = {static_cast<uint8_t>(pitch), 255, 255, 255};
                 c.audio.triggerNote(t, pitch, 0.90f);
+                c.audio.setStep(t, step, st);
+                c.app.last_action = "NOTE PLACED";
+                return;
             }
-            c.audio.setStep(t, step, st);
-            return;
         }
 
         const int act = c.audio.getActiveRowCount();
@@ -167,6 +226,14 @@ ActionRegistry::ActionRegistry() {
     }});
     add(Action{"SEQ.REC_TOGGLE", "REC", [](UiContext& c) {
         c.app.rec_mode = !c.app.rec_mode;
+        if (c.app.rec_mode) {
+            c.app.selected_track = c.audio.getRowTrack(c.app.cursor_row);
+            auto st = c.audio.getStep(c.app.selected_track, c.app.cursor_step);
+            if (st.enabled) {
+                c.app.rec_octave = std::clamp(static_cast<int>(st.note / 12) - 1, 1, 8);
+                c.app.rec_cursor_lane = 11 - (st.note % 12);
+            }
+        }
         c.app.last_action = c.app.rec_mode ? "REC EXPANDED" : "SEQ OVERVIEW";
     }});
     add(Action{"SEQ.ADD_TRACK_SINGLE", "ADD TRK", [](UiContext& c) {
@@ -207,7 +274,7 @@ ActionRegistry::ActionRegistry() {
     }});
     add(Action{"SEQ.NOTE_UP", "OCT+/NOTE+", [](UiContext& c) {
         if (c.app.rec_mode) {
-            c.app.rec_octave = std::min(6, c.app.rec_octave + 1);
+            c.app.rec_octave = std::min(8, c.app.rec_octave + 1);
             c.app.last_action = "REC OCTAVE " + std::to_string(c.app.rec_octave);
         } else if (c.app.cursor_row < c.audio.getActiveRowCount()) {
             c.audio.adjustStepNote(c.app.cursor_row, c.app.cursor_step, +1);

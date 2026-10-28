@@ -879,9 +879,13 @@ ParamRegistry::ParamRegistry() {
             s.velocity = std::clamp(s.velocity + stepNorm(dir, coarse), 0.05f, 1.0f);
         }));
     add(stepParam("STEP.GATE", "GATE LEN",
-        [](const SequencerStep& s, const TrackParameters&) { return fmtPct(s.gate_len); },
-        [](SequencerStep& s, const TrackParameters&, int dir, bool) {
-            s.gate_len = std::clamp(s.gate_len + dir * 0.10f, 0.10f, 2.0f);
+        [](const SequencerStep& s, const TrackParameters&) {
+            int g = std::clamp(static_cast<int>(s.gate_len + 0.5f), 1, 128);
+            return std::to_string(g) + (g == 1 ? " STEP" : " STEPS");
+        },
+        [](SequencerStep& s, const TrackParameters&, int dir, bool coarse) {
+            int g = std::clamp(static_cast<int>(s.gate_len + 0.5f) + dir * (coarse ? 8 : 1), 1, 128);
+            s.gate_len = static_cast<float>(g);
         }));
     add(stepParam("STEP.SLIDE", "SLIDE",
         [](const SequencerStep& s, const TrackParameters&) {
