@@ -944,3 +944,20 @@
   * Тестовий набір [auto_test.cpp](file:///Users/oleksii/Documents/XU10%20Groovebox/tools/auto_test.cpp) розширено до **187 тестів** (**187/187 PASSED [OK]** на macOS та на Rockchip RK3326S ARM64).
   * Додаток успішно задеплоєно на MagicX XU10 як Dedicated Appliance (PID 183460, KMSDRM, ALSA 32k stereo).
 
+## [2026-10-28] Milestone 31: Mastering Tab [R2]snd<MSTR>mix, Master Bus DSP, Logarithmic EQ Curve & Retained Master Meters
+* **Архітектура майстер-шини (Mastering DSP Core) (src/synth_engines.hpp, src/audio_engine.hpp, src/audio_engine.cpp):**
+  * Створено структуру `MasterFxParameters` та інтегровано у загальний аудіорушій:
+    * **GAIN / OVER:** Вихідний нормалізований рівень (0 dB = чистий максимум) з теплим синусоїдальним овердрайвом / кранчем вище нуля.
+    * **Master Sidechain Compressor:** Справжній шинний компресор (Bus Compressor) з вибором детектора: Self/Bus (`BUS COMP`) або виділений трек бочки (`TRK 01`..`TRK 16`), порогом від -48 dB, співвідношенням від 1:1 до 20:1.
+    * **Master Dual HPF & LPF (12 dB / 24 dB):** Каскадні секції фільтрів стану змінних (SVF) з селектором крутизни зрізу (12 dB/oct 2-полюси або 24 dB/oct 4-полюси).
+    * **Master Parametric Bell EQ Filter:** Студійний biquad піковий фільтр у топології Direct Form II Transposed (діапазон 40 Гц .. 16 кГц, підсилення/ослаблення $\pm 18\text{ dB}$, добротність Q від 0.2 до 8.0).
+* **Інтерфейс вкладки мастерингу [R2]snd<MSTR>mix (src/ui/layout.cpp, src/ui/params.cpp):**
+  * Зареєстровано всі параметри мастерингу: `MST.GAIN`, `MST.SC_SRC`, `MST.SC_THR`, `MST.SC_RAT`, `MST.SC_ATK`, `MST.SC_REL`, `MST.HPF_CUT`, `MST.HPF_SLP`, `MST.LPF_CUT`, `MST.LPF_SLP`, `MST.EQ_FRQ`, `MST.EQ_GAIN`, `MST.EQ_Q`.
+  * Сформовано 4-рядкову таблицю майстер-налаштувань: `OUT` (GAIN, VOL, PAN, BPM), `COMP` (SC SRC, THR, RAT, ATK, REL), `FILT` (HPF CUT/SLP, LPF CUT/SLP), `EQ` (FRQ, GAIN, Q).
+* **Візуалізатор АЧХ спектру еквалайзера та смуги мастера (src/ui/views.cpp):**
+  * У нижній закріпленій частині екрана замість смуг треків розгорнуто аналітичний графік АЧХ (Biquad Frequency Response Curve $H(f)$ від 20 Гц до 20 кГц) у логарифмічній шкалі з лінією 0 dB та частотною сіткою (100 Hz, 1 kHz, 10 kHz).
+  * **Збережено смуги мастера праворуч від АЧХ:** Master L/R вертикальні індикатори рівнів та напис `MST` розміщені у правій зоні екрана.
+* **Автоматизоване тестування та деплой на консоль:**
+  * Тестовий набір [auto_test.cpp](file:///Users/oleksii/Documents/XU10%20Groovebox/tools/auto_test.cpp) розширено до **192 тестів** (**192/192 PASSED [OK]** на macOS та на Rockchip RK3326S ARM64).
+  * Процес перезапущено на консолі MagicX XU10 як Dedicated Appliance (PID 187888, KMSDRM, ALSA 32k stereo).
+
