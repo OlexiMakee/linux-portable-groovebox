@@ -276,6 +276,96 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
         cv.fill(bar_x, thumb_y, 2, thumb_h, spec_.accent);
     }
 
+    // Візуалізатор форми хвилі для семплерних движків (Digitakt style: START, LOOP, END + Live Playhead)
+    if (spec_.id == ViewId::kSynth && c.app.synth_submode == SynthSubmode::kSynth) {
+        int trk_idx = c.app.selected_track;
+        const auto tp = c.audio.getTrackParams(trk_idx);
+        if (tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler) {
+            const int wf_x = area.x + 4;
+            const int wf_y = 114;
+            const int wf_w = area.w - 8;
+            const int wf_h = (area.y + area.h) - wf_y - 2;
+
+            cv.fill(wf_x, wf_y, wf_w, wf_h, palette::kPanelBg);
+            cv.rect(wf_x, wf_y, wf_w, wf_h, palette::kGridDim);
+
+            const auto& sb = (tp.engine == EngineType::kSampleOneShot)
+                             ? c.audio.sampler().trackSample(trk_idx)
+                             : c.audio.sampler().recordedSample();
+
+            if (sb.loaded && sb.lengthFrames() > 0) {
+                const uint32_t total_frames = sb.lengthFrames();
+                const int mid_y = wf_y + wf_h / 2 + 5;
+                const int max_amp_h = (wf_h / 2) - 10;
+
+                cv.line(wf_x + 1, mid_y, wf_x + wf_w - 2, mid_y, palette::kGridDim);
+
+                float st_norm = std::clamp(tp.sample.start, 0.0f, 0.999f);
+                float lp_norm = std::clamp(tp.sample.loop_point, 0.0f, 0.999f);
+                float end_norm = std::clamp(tp.sample.end, 0.001f, 1.0f);
+                if (end_norm <= st_norm) end_norm = std::min(1.0f, st_norm + 0.01f);
+
+                int px_start = wf_x + 1 + static_cast<int>(st_norm * (wf_w - 2));
+                int px_loop  = wf_x + 1 + static_cast<int>(lp_norm * (wf_w - 2));
+                int px_end   = wf_x + 1 + static_cast<int>(end_norm * (wf_w - 2));
+
+                if (tp.sample.loop_mode != SampleLoopMode::kOff && px_end > px_loop) {
+                    cv.fill(px_loop, wf_y + 12, px_end - px_loop, wf_h - 13, ColorRGB{20, 36, 46});
+                }
+
+                const int wave_w = wf_w - 2;
+                for (int x = 0; x < wave_w; ++x) {
+                    uint32_t f_start = static_cast<uint32_t>(static_cast<uint64_t>(x) * total_frames / wave_w);
+                    uint32_t f_end   = static_cast<uint32_t>(static_cast<uint64_t>(x + 1) * total_frames / wave_w);
+                    f_end = std::clamp(f_end, f_start + 1, total_frames);
+
+                    float min_v = 0.0f, max_v = 0.0f;
+                    for (uint32_t f = f_start; f < f_end; ++f) {
+                        float s = sb.data_l[f];
+                        if (s < min_v) min_v = s;
+                        if (s > max_v) max_v = s;
+                    }
+                    int y1 = mid_y - static_cast<int>(max_v * max_amp_h);
+                    int y2 = mid_y - static_cast<int>(min_v * max_amp_h);
+                    if (y1 == y2) y2 = y1 + 1;
+
+                    int cur_px = wf_x + 1 + x;
+                    ColorRGB wave_col = (cur_px >= px_start && cur_px <= px_end) ? palette::kAccentCyan : palette::kTextDim;
+                    cv.line(cur_px, y1, cur_px, y2, wave_col);
+                }
+
+                // START (жовтий, Elektron style)
+                cv.line(px_start, wf_y + 11, px_start, wf_y + wf_h - 2, palette::kParamTrig);
+                cv.text(std::clamp(px_start - 3, wf_x + 2, wf_x + wf_w - 12), wf_y + 2, "S", palette::kParamTrig);
+
+                // LOOP POINT (бірюзовий)
+                if (tp.sample.loop_mode != SampleLoopMode::kOff) {
+                    cv.line(px_loop, wf_y + 11, px_loop, wf_y + wf_h - 2, ColorRGB{0, 240, 200});
+                    cv.text(std::clamp(px_loop - 3, wf_x + 2, wf_x + wf_w - 12), wf_y + 2, "L", ColorRGB{0, 240, 200});
+                }
+
+                // END (червоний)
+                cv.line(px_end, wf_y + 11, px_end, wf_y + wf_h - 2, palette::kLevelWarnClip);
+                cv.text(std::clamp(px_end - 3, wf_x + 2, wf_x + wf_w - 12), wf_y + 2, "E", palette::kLevelWarnClip);
+
+                // Живий плейхед
+                float ph = c.audio.trackPlayhead(trk_idx);
+                if (ph >= 0.0f && ph <= 1.0f) {
+                    int px_head = wf_x + 1 + static_cast<int>(ph * (wf_w - 2));
+                    cv.fill(px_head, wf_y + 11, 2, wf_h - 12, palette::kCursorWhite);
+                }
+
+                char info[64];
+                float sec = static_cast<float>(total_frames) / std::max(1u, sb.sample_rate);
+                std::snprintf(info, sizeof(info), "SMP: %s | %s | %.2fs",
+                              sb.name.c_str(), getSampleLoopModeName(tp.sample.loop_mode), sec);
+                cv.text(wf_x + 24, wf_y + 2, info, palette::kTextDim);
+            } else {
+                cv.text(wf_x + 20, wf_y + wf_h / 2 - 3, "NO SAMPLE LOADED (SELECT WAV IN [R1] BROWSER)", palette::kTextDim);
+            }
+        }
+    }
+
     // Закріплений знизу над HUD лейаут індикації (Scope + VU для кожного треку + Master)
     if (has_pinned_bottom) {
         const int lower_y = area.y + area.h - 26;
@@ -307,6 +397,28 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
             // Нульова лінія 0 dB (пунктир)
             for (int dx = 0; dx < eq_w; dx += 4) {
                 cv.fill(eq_x0 + dx, zero_y, 1, 1, palette::kGridDim);
+            }
+
+            // Спектральний аналізатор реального часу (RTA 24-band spectrum under EQ curve)
+            const int num_bands = 24;
+            float band_w = static_cast<float>(eq_w) / static_cast<float>(num_bands);
+            for (int b = 0; b < num_bands; ++b) {
+                float band_mag = 0.0f;
+                int k_step = std::max(1, 128 / num_bands);
+                int k_start = b * k_step;
+                int k_end = std::min(128, k_start + k_step);
+                for (int k = k_start; k < k_end; ++k) {
+                    float s = c.tel.scope_samples[k];
+                    band_mag += std::fabs(s);
+                }
+                band_mag /= std::max(1, k_end - k_start);
+                float h_norm = std::clamp(band_mag * 2.2f, 0.0f, 1.0f);
+                int bar_h = static_cast<int>(h_norm * (eq_h - 2));
+                if (bar_h > 0) {
+                    int bx = eq_x0 + static_cast<int>(b * band_w);
+                    int bw = std::max(1, static_cast<int>(band_w) - 1);
+                    cv.fill(bx, eq_y0 + eq_h - 1 - bar_h, bw, bar_h, ColorRGB{28, 52, 70});
+                }
             }
 
             // Отримуємо параметри еквалайзера
@@ -355,11 +467,9 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
             cv.text(x_1k  - 4, eq_y0 + 2, "1K",  palette::kTextDim);
             cv.text(x_10k - 6, eq_y0 + 2, "10K", palette::kTextDim);
 
-            // Праворуч від АЧХ залишаємо смуги мастера
-            widgets::verticalMeter(cv, Rect{mst_x, lower_y + 2, 8, 14}, c.tel.vu_left);
-            widgets::verticalMeter(cv, Rect{mst_x + 10, lower_y + 2, 8, 14}, c.tel.vu_right);
-            cv.text(mst_x + 1, lower_y + 17, "MST", palette::kAccentOrange);
-
+            // Праворуч від АЧХ залишаємо повнорозмірні смуги мастера на всю висоту 22px
+            widgets::verticalMeter(cv, Rect{mst_x, lower_y + 2, 8, 22}, c.tel.vu_left);
+            widgets::verticalMeter(cv, Rect{mst_x + 10, lower_y + 2, 8, 22}, c.tel.vu_right);
         } else {
             // 1. Квадратний міні-осцилограф висотою 22px
             widgets::scope(cv, Rect{area.x + 4, lower_y + 2, 22, 22}, c.tel.scope_samples, palette::kAccentCyan);

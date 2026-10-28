@@ -56,9 +56,9 @@ void setupAppLayout(UiShell& shell) {
                 GridRow r_dist  = {"DIST",   {"FX.DST_DRV", "FX.DST_TONE", "FX.DST_MIX"}};
                 GridRow r_chor  = {"CHORUS", {"FX.CHR_MIX", "FX.CHR_RATE", "FX.CHR_DEP"}};
                 GridRow r_scomp = {"S-COMP", {"FX.SC_SRC", "FX.SC_THR", "FX.SC_RAT", "FX.SC_ATK", "FX.SC_REL", "FX.SC_POS"}};
-                GridRow r_dly   = {"DELAY",  {"FX.DLY_DIV", "FX.DLY_FBK", "FX.DLY_MIX"}};
+                GridRow r_dly   = {"DELAY",  {"FX.DLY_DIV", "FX.DLY_FBK", "FX.DLY_WID", "FX.DLY_MIX"}};
                 GridRow r_rev   = {"REVERB", {"FX.REV_ENG", "FX.REV_DEC", "FX.REV_HICUT", "FX.REV_LOCUT", "FX.REV_PRE", "FX.REV_MIX"}};
-                GridRow r_snds  = {"SENDS",  {"TRK.DLY", "TRK.REV", "TRK.CHR", "TRK.PAN", "TRK.LVL"}};
+                GridRow r_snds  = {"SENDS",  {"TRK.DLY", "TRK.REV", "TRK.CHR"}};
 
                 if (tp.fx.sc_pos == SidechainPos::kPreDelayRev) {
                     return { r_crush, r_dist, r_chor, r_scomp, r_dly, r_rev, r_snds };
@@ -70,94 +70,72 @@ void setupAppLayout(UiShell& shell) {
             switch (tp.engine) {
                 case EngineType::kDx7:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.P1", "TRK.RND"}},
-                        {"DX7",   {"TRK.P5", "TRK.P6", "TRK.P3", "TRK.P4"}},
-                        {"TIMBRE",{"TRK.P2", "TRK.GLIDE", "FX.CHR_MIX", "FX.DRIVE"}},
-                        {"LPF",   {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
-                        {"HPF",   {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.MULT", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
-                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.MULT", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
-                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                        {"INST",   {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.P1", "TRK.RND"}},
+                        {"DX7",    {"TRK.P5", "TRK.P6", "TRK.P3", "TRK.P4"}},
+                        {"TIMBRE", {"TRK.P2", "TRK.GLIDE", "FX.CHR_MIX", "FX.DRIVE"}},
+                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
+                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
+                        {"ENV",    {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
                     };
                 case EngineType::kAcid303:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.P6", "TRK.RND"}},
-                        {"303",   {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4"}},
-                        {"ACID",  {"TRK.P5", "TRK.GLIDE", "FX.DRIVE", "FX.DRV_TONE"}},
-                        {"LPF",   {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
-                        {"HPF",   {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.MULT", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
-                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.MULT", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
-                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                        {"INST",   {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.P6", "TRK.RND"}},
+                        {"303",    {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4"}},
+                        {"ACID",   {"TRK.P5", "TRK.GLIDE", "FX.DRIVE", "FX.DRV_TONE"}},
+                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
+                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}}
                     };
                 case EngineType::kFm2Op:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.GLIDE", "TRK.RND"}},
-                        {"2-OP",  {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P5"}},
-                        {"MOD",   {"TRK.P4", "TRK.P6", "FX.CHR_MIX", "FX.DRIVE"}},
-                        {"LPF",   {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
-                        {"HPF",   {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.MULT", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
-                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.MULT", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
-                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                        {"INST",   {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.GLIDE", "TRK.RND"}},
+                        {"2-OP",   {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P5"}},
+                        {"MOD",    {"TRK.P4", "TRK.P6", "FX.CHR_MIX", "FX.DRIVE"}},
+                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
+                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
+                        {"ENV",    {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
                     };
                 case EngineType::kChordPad:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.GLIDE", "TRK.RND"}},
-                        {"CHORD", {"TRK.P3", "TRK.P5", "TRK.P1", "TRK.P2"}},
-                        {"COLOR", {"FX.CHR_MIX", "FX.CHR_RATE", "FX.DRIVE", "TRK.P6"}},
-                        {"LPF",   {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
-                        {"HPF",   {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.MULT", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
-                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.MULT", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
-                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                        {"INST",   {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.GLIDE", "TRK.RND"}},
+                        {"CHORD",  {"TRK.P3", "TRK.P5", "TRK.P1", "TRK.P2"}},
+                        {"COLOR",  {"FX.CHR_MIX", "FX.CHR_RATE", "FX.DRIVE", "TRK.P6"}},
+                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
+                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
+                        {"ENV",    {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
                     };
                 case EngineType::kSampleOneShot:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.GAIN_OVER", "TRK.P2", "TRK.RND"}},
-                        {"SMPL",  {"TRK.P3", "TRK.P4", "TRK.P5", "TRK.P6"}},
-                        {"COLOR", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.GLIDE"}},
-                        {"LPF",   {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
-                        {"HPF",   {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.MULT", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
-                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.MULT", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
-                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                        {"INST",   {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.GAIN_OVER", "TRK.RND"}},
+                        {"PLAY",   {"SMP.LOOP", "SMP.START", "SMP.LOOP_PT", "SMP.END"}},
+                        {"TUNING", {"SMP.TUNE", "TRK.GLIDE", "FX.DRIVE", "FX.DRV_TONE"}},
+                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
+                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
+                        {"ENV",    {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
                     };
                 case EngineType::kSliceSampler:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.GAIN_OVER", "TRK.P3", "TRK.RND"}},
-                        {"SMPL",  {"TRK.P2", "TRK.P4", "TRK.P5", "TRK.P6"}},
-                        {"COLOR", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.GLIDE"}},
-                        {"LPF",   {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
-                        {"HPF",   {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.MULT", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
-                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.MULT", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
-                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                        {"INST",   {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.GAIN_OVER", "TRK.RND"}},
+                        {"PLAY",   {"SMP.LOOP", "TRK.P2", "SMP.START", "SMP.END"}},
+                        {"TUNING", {"SMP.TUNE", "TRK.GLIDE", "FX.DRIVE", "FX.DRV_TONE"}},
+                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
+                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
+                        {"ENV",    {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
                     };
                 case EngineType::kMidiOut:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.P1", "TRK.P6"}},
-                        {"CC_A",  {"TRK.P2", "TRK.P3"}},
-                        {"CC_B",  {"TRK.P4", "TRK.P5"}},
-                        {"SEND",  {"TRK.PAN", "TRK.LVL"}}
+                        {"INST",   {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.P1", "TRK.P6"}},
+                        {"CC_A",   {"TRK.P2", "TRK.P3"}},
+                        {"CC_B",   {"TRK.P4", "TRK.P5"}}
                     };
                 case EngineType::kVaMono:
                 default:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.GLIDE", "TRK.RND"}},
-                        {"OSC",   {"TRK.P5", "TRK.P6", "TRK.P1", "TRK.P2"}},
-                        {"COLOR", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.P3"}},
-                        {"LPF",   {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
-                        {"HPF",   {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
-                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.MULT", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
-                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.MULT", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
-                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                        {"INST",   {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.GLIDE", "TRK.RND"}},
+                        {"OSC",    {"TRK.P5", "TRK.P6", "TRK.P1", "TRK.P2"}},
+                        {"COLOR",  {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.P3"}},
+                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
+                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
+                        {"ENV",    {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
                     };
             }
         };
@@ -225,7 +203,7 @@ void setupAppLayout(UiShell& shell) {
                 char title[16];
                 std::snprintf(title, sizeof(title), "%02d:%s", t + 1, nm.c_str());
                 std::string pre = "T" + std::to_string(t + 1) + ".";
-                rows.push_back({title, {pre + "HPF", pre + "LVL", pre + "PAN", pre + "DLY", pre + "REV", pre + "MUTE"}});
+                rows.push_back({title, {pre + "LVL", pre + "PAN", pre + "DLY", pre + "REV", pre + "CHR", pre + "MUTE"}});
             }
             rows.push_back({"BUS", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "FX.CHR_RATE"}});
             rows.push_back({"MST", {"MST.VOL", "DLY.FBK", "REV.RET", "MST.BPM"}});

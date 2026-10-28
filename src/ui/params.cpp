@@ -338,6 +338,38 @@ ParamRegistry::ParamRegistry() {
         add(std::move(p));
     }
     {
+        // Digitakt-style sampler parameters (SMP.LOOP, SMP.START, SMP.LOOP_PT, SMP.END, SMP.TUNE)
+        Param p;
+        p.id = "SMP.LOOP";
+        p.label = "LOOP";
+        p.value = [](const UiContext& c) {
+            return std::string(getSampleLoopModeName(c.audio.getTrackParams(trk(c, -1)).sample.loop_mode));
+        };
+        p.norm = [](const UiContext& c) {
+            return static_cast<int>(c.audio.getTrackParams(trk(c, -1)).sample.loop_mode) / 3.0f;
+        };
+        p.step = [](UiContext& c, int dir, bool) {
+            const int t = trk(c, -1);
+            auto tp = c.audio.getTrackParams(t);
+            int m = (static_cast<int>(tp.sample.loop_mode) + dir + 4) % 4;
+            tp.sample.loop_mode = static_cast<SampleLoopMode>(m);
+            c.audio.setTrackParams(t, tp);
+        };
+        add(std::move(p));
+    }
+    {
+        auto fmtTuneSemi = [](float v) -> std::string {
+            char b[16];
+            if (std::abs(v) < 0.05f) return "0 semi";
+            std::snprintf(b, sizeof(b), "%+d semi", static_cast<int>(std::round(v)));
+            return std::string(b);
+        };
+        add(trackFloat("SMP.START", "START", -1, [](TrackParameters& t) -> float& { return t.sample.start; }, 0.0f, 0.99f, 0.01f, fmtPct));
+        add(trackFloat("SMP.LOOP_PT", "LOOP PT", -1, [](TrackParameters& t) -> float& { return t.sample.loop_point; }, 0.0f, 0.99f, 0.01f, fmtPct));
+        add(trackFloat("SMP.END", "END", -1, [](TrackParameters& t) -> float& { return t.sample.end; }, 0.01f, 1.0f, 0.01f, fmtPct));
+        add(trackFloat("SMP.TUNE", "TUNE", -1, [](TrackParameters& t) -> float& { return t.sample.tune; }, -24.0f, 24.0f, 1.0f, fmtTuneSemi));
+    }
+    {
         Param p;
         p.id = "TRK.SEL";
         p.label = "TRACK";
@@ -574,6 +606,20 @@ ParamRegistry::ParamRegistry() {
         add(std::move(p));
     }
     add(trackFloat("FX.DLY_FBK", "D.FBK", S, [](TrackParameters& t) -> float& { return t.fx.delay_feedback; }, 0.0f, 0.95f, 0.02f, fmtPct));
+    auto fmtDelayWidth = [](float v) -> std::string {
+        int pct = static_cast<int>(std::round(v * 100.0f));
+        if (std::abs(pct) <= 2) return "MONO";
+        if (pct > 0) {
+            char b[16];
+            std::snprintf(b, sizeof(b), "PING %d%%", pct);
+            return std::string(b);
+        } else {
+            char b[16];
+            std::snprintf(b, sizeof(b), "PONG %d%%", -pct);
+            return std::string(b);
+        }
+    };
+    add(trackFloat("FX.DLY_WID", "STEREO", S, [](TrackParameters& t) -> float& { return t.fx.delay_width; }, -1.0f, 1.0f, 0.05f, fmtDelayWidth));
     add(trackFloat("FX.DLY_MIX", "D.MIX", S, [](TrackParameters& t) -> float& { return t.fx.delay_mix; }, 0.0f, 1.0f, 0.02f, fmtPct));
 
     {
