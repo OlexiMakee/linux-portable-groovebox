@@ -81,6 +81,7 @@ AudioEngine::AudioEngine()
     for (auto& s : scope_ring_) s.store(0.0f, std::memory_order_relaxed);
     for (auto& t : track_vu_) t.store(0.0f, std::memory_order_relaxed);
     initReverb(32000);
+    initTrackFx(32000);
     initDefaultPattern();
     net_streamer_.start(8000, 32000);
 }
@@ -108,6 +109,53 @@ void AudioEngine::initReverb(uint32_t sample_rate) {
         size_t sr = static_cast<size_t>(std::max(8, static_cast<int>((kAllpassTuning[i] + kStereoSpread) * scale)));
         allpass_l_[i].init(sl);
         allpass_r_[i].init(sr);
+    }
+}
+
+void AudioEngine::initTrackFx(uint32_t sample_rate) {
+    if (sample_rate == 0) sample_rate = 32000;
+    static constexpr int kCombTuning4[4] = {1116, 1277, 1422, 1557};
+    static constexpr int kAllpassTuning2[2] = {556, 341};
+    static constexpr int kStereoSpread = 23;
+    float scale = static_cast<float>(sample_rate) / 44100.0f;
+
+    for (int t = 0; t < kMaxTracks; ++t) {
+        auto& fx = track_fx_[t];
+        fx.srr_step = 0;
+        fx.srr_l = fx.srr_r = 0.0f;
+        fx.dist_hp_l = fx.dist_hp_r = 0.0f;
+        fx.dist_bp_l = fx.dist_bp_r = 0.0f;
+        fx.dist_lp_l = fx.dist_lp_r = 0.0f;
+
+        fx.chorus_l.assign(2048, 0.0f);
+        fx.chorus_r.assign(2048, 0.0f);
+        fx.chorus_idx = 0;
+        fx.chorus_phase = 0.0f;
+
+        fx.delay_l.assign(65536, 0.0f);
+        fx.delay_r.assign(65536, 0.0f);
+        fx.delay_idx = 0;
+
+        fx.rev_pre_l.assign(8192, 0.0f);
+        fx.rev_pre_r.assign(8192, 0.0f);
+        fx.rev_pre_idx = 0;
+
+        for (int i = 0; i < 4; ++i) {
+            size_t sl = static_cast<size_t>(std::max(16, static_cast<int>(kCombTuning4[i] * scale)));
+            size_t sr = static_cast<size_t>(std::max(16, static_cast<int>((kCombTuning4[i] + kStereoSpread) * scale)));
+            fx.comb_l[i].init(sl);
+            fx.comb_r[i].init(sr);
+        }
+        for (int i = 0; i < 2; ++i) {
+            size_t sl = static_cast<size_t>(std::max(8, static_cast<int>(kAllpassTuning2[i] * scale)));
+            size_t sr = static_cast<size_t>(std::max(8, static_cast<int>((kAllpassTuning2[i] + kStereoSpread) * scale)));
+            fx.allpass_l[i].init(sl);
+            fx.allpass_r[i].init(sr);
+        }
+        fx.rev_lp_l = fx.rev_lp_r = 0.0f;
+        fx.rev_hp_l = fx.rev_hp_r = 0.0f;
+        fx.sc_env = 0.0f;
+        fx.sc_gain = 1.0f;
     }
 }
 
@@ -921,7 +969,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
         local_tracks = tracks_;
     }
 
-    auto computeLfo = [](LfoParameters& lfo, float& phase, float dt, float rate_mod, float depth_mod) -> float {
+    auto computeLfo = [](const LfoParameters& lfo, float& phase, float dt, float rate_mod, float depth_mod) -> float {
         float eff_depth = std::clamp(lfo.depth + depth_mod, 0.0f, 1.0f);
         if (eff_depth <= 0.001f) return 0.0f;
         float mult = (lfo.multiplier > 0) ? static_cast<float>(lfo.multiplier) : 1.0f;
@@ -981,7 +1029,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
     // 2. 4 LFO з підтримкою крос-модуляції швидкості та глибини
     for (int t = 0; t < active_rows_count_; ++t) {
         auto& tp = local_tracks[t];
-        auto evalLfo = [&](LfoParameters& lfo, float& phase, ModTarget r_tgt, ModTarget d_tgt) {
+        auto evalLfo = [&](const LfoParameters& lfo, float& phase, ModTarget r_tgt, ModTarget d_tgt) {
             float r_mod = block_mod[t][static_cast<size_t>(r_tgt)];
             float d_mod = block_mod[t][static_cast<size_t>(d_tgt)];
             float val = computeLfo(lfo, phase, dt_block, r_mod, d_mod);
@@ -1030,6 +1078,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
 
     if (reverb_sample_rate_ != sample_rate) {
         initReverb(sample_rate);
+        initTrackFx(sample_rate);
     }
 
     float max_l = 0.0f;
@@ -1267,15 +1316,204 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             }
             out_s *= trk_level;
 
-            float abs_s = std::fabs(out_s);
+            float s_l = out_s * pan_l;
+            float s_r = out_s * pan_r;
+
+            auto& fx_state = track_fx_[t];
+            const auto& fx_p = tp.fx;
+
+            // 1. Bitcrusher (Elektron style: bit reduction 16 down to 1 bit)
+            if (fx_p.bit_depth < 16) {
+                int b = std::clamp(fx_p.bit_depth, 1, 16);
+                float steps = std::pow(2.0f, static_cast<float>(b)) - 1.0f;
+                float half = steps * 0.5f;
+                s_l = std::round(s_l * half) / half;
+                s_r = std::round(s_r * half) / half;
+            }
+
+            // 2. SRR (Sample Rate Reduction: 1x down to 64x factor)
+            if (fx_p.srr_factor > 1) {
+                int factor = std::clamp(fx_p.srr_factor, 1, 64);
+                if (fx_state.srr_step % factor == 0) {
+                    fx_state.srr_l = s_l;
+                    fx_state.srr_r = s_r;
+                } else {
+                    s_l = fx_state.srr_l;
+                    s_r = fx_state.srr_r;
+                }
+                fx_state.srr_step++;
+            }
+
+            // 3. Distortion (Boss Metal Zone style: mid-frequency bite + hard square clip)
+            if (fx_p.dist_mix > 0.001f && fx_p.dist_drive > 0.001f) {
+                // Boss Metal Zone pre-emphasis mid-EQ (peaking around 1.0 - 1.6 kHz)
+                float mid_f = 800.0f + fx_p.dist_tone * 1200.0f;
+                float alpha_mid = std::clamp(2.0f * 3.14159265f * mid_f * inv_sr, 0.02f, 0.85f);
+                fx_state.dist_bp_l += alpha_mid * (s_l - fx_state.dist_bp_l);
+                fx_state.dist_bp_r += alpha_mid * (s_r - fx_state.dist_bp_r);
+                float pre_l = s_l + fx_state.dist_bp_l * 2.8f;
+                float pre_r = s_r + fx_state.dist_bp_r * 2.8f;
+
+                // High-gain hard-clipping waveshaping
+                float gain = 1.0f + fx_p.dist_drive * 19.0f;
+                float hard_l = std::clamp(pre_l * gain, -1.0f, 1.0f);
+                float hard_r = std::clamp(pre_r * gain, -1.0f, 1.0f);
+
+                // Post-clip low-pass smoothing (guitar cabinet roll-off ~4.5 kHz)
+                float alpha_post = 0.40f;
+                fx_state.dist_lp_l += alpha_post * (hard_l - fx_state.dist_lp_l);
+                fx_state.dist_lp_r += alpha_post * (hard_r - fx_state.dist_lp_r);
+
+                float norm = 1.0f / std::sqrt(1.0f + fx_p.dist_drive * 5.0f);
+                float wet_l = fx_state.dist_lp_l * norm;
+                float wet_r = fx_state.dist_lp_r * norm;
+
+                s_l = s_l * (1.0f - fx_p.dist_mix) + wet_l * fx_p.dist_mix;
+                s_r = s_r * (1.0f - fx_p.dist_mix) + wet_r * fx_p.dist_mix;
+            }
+
+            // 4. Per-track Chorus
+            if (fx_p.chorus_mix > 0.005f) {
+                if (!fx_state.chorus_l.empty()) {
+                    fx_state.chorus_l[fx_state.chorus_idx] = s_l;
+                    fx_state.chorus_r[fx_state.chorus_idx] = s_r;
+                    float lfo_l = (std::sin(fx_state.chorus_phase) + 1.0f) * 0.5f;
+                    float lfo_r = (std::cos(fx_state.chorus_phase) + 1.0f) * 0.5f;
+                    fx_state.chorus_phase += fx_p.chorus_rate * 6.2831853f * inv_sr;
+                    if (fx_state.chorus_phase >= 6.2831853f) fx_state.chorus_phase -= 6.2831853f;
+
+                    float mod_l = 80.0f + lfo_l * fx_p.chorus_depth * 140.0f;
+                    float mod_r = 80.0f + lfo_r * fx_p.chorus_depth * 140.0f;
+                    size_t c_idx_l = (fx_state.chorus_idx + fx_state.chorus_l.size() - static_cast<size_t>(mod_l)) % fx_state.chorus_l.size();
+                    size_t c_idx_r = (fx_state.chorus_idx + fx_state.chorus_r.size() - static_cast<size_t>(mod_r)) % fx_state.chorus_r.size();
+
+                    s_l = s_l * (1.0f - fx_p.chorus_mix * 0.5f) + fx_state.chorus_l[c_idx_l] * (fx_p.chorus_mix * 0.70f);
+                    s_r = s_r * (1.0f - fx_p.chorus_mix * 0.5f) + fx_state.chorus_r[c_idx_r] * (fx_p.chorus_mix * 0.70f);
+                    fx_state.chorus_idx = (fx_state.chorus_idx + 1) % fx_state.chorus_l.size();
+                }
+            }
+
+            // Sidechain compressor lambda
+            auto applySidechain = [&](float& sig_l, float& sig_r) {
+                if (fx_p.sc_source > 0 && fx_p.sc_source <= kMaxTracks) {
+                    int src_trk = fx_p.sc_source - 1;
+                    float sc_sig = last_track_sample_[src_trk];
+                    float sc_level = std::fabs(sc_sig);
+                    float atk_c = std::exp(-1.0f / (std::clamp(fx_p.sc_attack, 0.001f, 0.2f) * static_cast<float>(sample_rate)));
+                    float rel_c = std::exp(-1.0f / (std::clamp(fx_p.sc_release, 0.010f, 1.5f) * static_cast<float>(sample_rate)));
+                    if (sc_level > fx_state.sc_env) {
+                        fx_state.sc_env = sc_level + atk_c * (fx_state.sc_env - sc_level);
+                    } else {
+                        fx_state.sc_env = sc_level + rel_c * (fx_state.sc_env - sc_level);
+                    }
+                    float thresh_lin = std::pow(10.0f, fx_p.sc_thresh / 20.0f);
+                    if (fx_state.sc_env > thresh_lin && thresh_lin > 0.0001f) {
+                        float over_db = 20.0f * std::log10(fx_state.sc_env / thresh_lin);
+                        float gr_db = over_db * (1.0f - 1.0f / std::max(1.0f, fx_p.sc_ratio));
+                        fx_state.sc_gain = std::pow(10.0f, -gr_db / 20.0f);
+                    } else {
+                        fx_state.sc_gain = 1.0f;
+                    }
+                    sig_l *= fx_state.sc_gain;
+                    sig_r *= fx_state.sc_gain;
+                }
+            };
+
+            // Якщо компресор стоїть перед Del/Rev (PRE):
+            if (fx_p.sc_pos == SidechainPos::kPreDelayRev) {
+                applySidechain(s_l, s_r);
+            }
+
+            // 5. Parallel Delay & Reverb
+            float wet_dly_l = 0.0f, wet_dly_r = 0.0f;
+            float wet_rev_l = 0.0f, wet_rev_r = 0.0f;
+
+            // Parallel Delay
+            if (fx_p.delay_mix > 0.005f && !fx_state.delay_l.empty()) {
+                float div_mult = kDelayDivMultiplier[std::clamp(fx_p.delay_div, 0, 7)];
+                float cur_bpm = std::clamp(bpm_.load(std::memory_order_relaxed), 30.0f, 300.0f);
+                uint32_t d_samples = static_cast<uint32_t>((60.0f / cur_bpm) * div_mult * sample_rate);
+                d_samples = std::clamp(d_samples, 16u, static_cast<uint32_t>(fx_state.delay_l.size() - 1));
+
+                size_t r_idx = (fx_state.delay_idx + fx_state.delay_l.size() - d_samples) % fx_state.delay_l.size();
+                wet_dly_l = fx_state.delay_l[r_idx];
+                wet_dly_r = fx_state.delay_r[r_idx];
+
+                float fbk = std::clamp(fx_p.delay_feedback, 0.0f, 0.95f);
+                fx_state.delay_l[fx_state.delay_idx] = s_l + wet_dly_r * fbk;
+                fx_state.delay_r[fx_state.delay_idx] = s_r + wet_dly_l * fbk;
+                fx_state.delay_idx = (fx_state.delay_idx + 1) % fx_state.delay_l.size();
+            }
+
+            // Parallel Reverb
+            if (fx_p.rev_mix > 0.005f && !fx_state.rev_pre_l.empty()) {
+                // Pre-delay
+                uint32_t pre_samples = static_cast<uint32_t>(std::clamp(fx_p.rev_predelay, 0.0f, 0.15f) * sample_rate);
+                pre_samples = std::clamp(pre_samples, 1u, static_cast<uint32_t>(fx_state.rev_pre_l.size() - 1));
+                size_t p_r_idx = (fx_state.rev_pre_idx + fx_state.rev_pre_l.size() - pre_samples) % fx_state.rev_pre_l.size();
+                float pre_in_l = fx_state.rev_pre_l[p_r_idx];
+                float pre_in_r = fx_state.rev_pre_r[p_r_idx];
+                fx_state.rev_pre_l[fx_state.rev_pre_idx] = s_l;
+                fx_state.rev_pre_r[fx_state.rev_pre_idx] = s_r;
+                fx_state.rev_pre_idx = (fx_state.rev_pre_idx + 1) % fx_state.rev_pre_l.size();
+
+                float rev_in = (pre_in_l + pre_in_r) * 0.5f;
+
+                // Engine-specific tuning
+                float fbk_scale = 1.0f;
+                float damp_bias = 0.0f;
+                switch (fx_p.rev_engine) {
+                    case ReverbEngine::kPlate: fbk_scale = 0.90f; damp_bias = 0.15f; break;
+                    case ReverbEngine::kHall:  fbk_scale = 0.95f; damp_bias = 0.35f; break;
+                    case ReverbEngine::kRoom:  fbk_scale = 0.75f; damp_bias = 0.50f; break;
+                    case ReverbEngine::kDark:  fbk_scale = 0.92f; damp_bias = 0.70f; break;
+                    default: break;
+                }
+
+                float fbk = std::clamp(fx_p.rev_decay * fbk_scale, 0.1f, 0.96f);
+                float damp = std::clamp((1.0f - fx_p.rev_hicut) + damp_bias, 0.05f, 0.95f);
+
+                float c_out_l = 0.0f, c_out_r = 0.0f;
+                for (int ci = 0; ci < 4; ++ci) {
+                    c_out_l += fx_state.comb_l[ci].process(rev_in, fbk, damp);
+                    c_out_r += fx_state.comb_r[ci].process(rev_in, fbk, damp);
+                }
+                c_out_l *= 0.25f;
+                c_out_r *= 0.25f;
+
+                for (int ai = 0; ai < 2; ++ai) {
+                    c_out_l = fx_state.allpass_l[ai].process(c_out_l);
+                    c_out_r = fx_state.allpass_r[ai].process(c_out_r);
+                }
+
+                // Low-cut filter on reverb output
+                float alpha_locut = std::clamp(2.0f * 3.14159265f * (30.0f + fx_p.rev_locut * 500.0f) * inv_sr, 0.005f, 0.40f);
+                fx_state.rev_hp_l += alpha_locut * (c_out_l - fx_state.rev_hp_l);
+                fx_state.rev_hp_r += alpha_locut * (c_out_r - fx_state.rev_hp_r);
+                wet_rev_l = c_out_l - fx_state.rev_hp_l;
+                wet_rev_r = c_out_r - fx_state.rev_hp_r;
+            }
+
+            // Sum parallel wet outputs
+            s_l += wet_dly_l * fx_p.delay_mix + wet_rev_l * fx_p.rev_mix;
+            s_r += wet_dly_r * fx_p.delay_mix + wet_rev_r * fx_p.rev_mix;
+
+            // Якщо компресор стоїть після Del/Rev (POST):
+            if (fx_p.sc_pos == SidechainPos::kPostDelayRev) {
+                applySidechain(s_l, s_r);
+            }
+
+            last_track_sample_[t] = (s_l + s_r) * 0.5f;
+
+            float abs_s = std::max(std::fabs(s_l), std::fabs(s_r));
             if (abs_s > trk_peak[t]) trk_peak[t] = abs_s;
 
-            mix_l += out_s * pan_l;
-            mix_r += out_s * pan_r;
-            send_l += out_s * d_send * pan_l;
-            send_r += out_s * d_send * pan_r;
-            rev_l  += out_s * r_send * pan_l;
-            rev_r  += out_s * r_send * pan_r;
+            mix_l += s_l;
+            mix_r += s_r;
+            send_l += s_l * d_send;
+            send_r += s_r * d_send;
+            rev_l  += s_l * r_send;
+            rev_r  += s_r * r_send;
         }
 
         // Стерео Хорус (LFO-модульована затримка 7-18мс)

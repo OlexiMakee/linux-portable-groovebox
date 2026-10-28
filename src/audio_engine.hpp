@@ -66,6 +66,8 @@ public:
     void updateRouting(int card_index, bool is_usb_48k, bool headphones_plugged);
     void adjustMasterVolume(float delta);
     float getMasterVolume() const { return params_.master_volume.load(std::memory_order_relaxed); }
+    void setBpm(float bpm) { bpm_.store(bpm, std::memory_order_relaxed); }
+    float getBpm() const { return bpm_.load(std::memory_order_relaxed); }
 
     // Оверрайд аудіовиходу: Auto (USB за наявності) <-> Force Internal (RK817)
     void toggleOutputOverride();
@@ -302,6 +304,47 @@ private:
     float drive_lp_l_ = 0.0f;
     float drive_lp_r_ = 0.0f;
 
+    // Стан індивідуального ланцюжка ефектів для кожного треку (Per-Track FX Chain)
+    struct TrackFxState {
+        int srr_step = 0;
+        float srr_l = 0.0f;
+        float srr_r = 0.0f;
+
+        float dist_hp_l = 0.0f;
+        float dist_hp_r = 0.0f;
+        float dist_bp_l = 0.0f;
+        float dist_bp_r = 0.0f;
+        float dist_lp_l = 0.0f;
+        float dist_lp_r = 0.0f;
+
+        std::vector<float> chorus_l;
+        std::vector<float> chorus_r;
+        size_t chorus_idx = 0;
+        float chorus_phase = 0.0f;
+
+        std::vector<float> delay_l;
+        std::vector<float> delay_r;
+        size_t delay_idx = 0;
+
+        std::vector<float> rev_pre_l;
+        std::vector<float> rev_pre_r;
+        size_t rev_pre_idx = 0;
+        std::array<CombFilter, 4> comb_l;
+        std::array<CombFilter, 4> comb_r;
+        std::array<AllpassFilter, 2> allpass_l;
+        std::array<AllpassFilter, 2> allpass_r;
+        float rev_lp_l = 0.0f;
+        float rev_lp_r = 0.0f;
+        float rev_hp_l = 0.0f;
+        float rev_hp_r = 0.0f;
+
+        float sc_env = 0.0f;
+        float sc_gain = 1.0f;
+    };
+    std::array<TrackFxState, kMaxTracks> track_fx_{};
+    std::array<float, kMaxTracks> last_track_sample_{};
+    void initTrackFx(uint32_t sample_rate);
+
     NetAudioStreamer net_streamer_;
 
     std::atomic<bool> running_{false};
@@ -317,6 +360,7 @@ private:
     std::atomic<float> vu_l_{0.0f};
     std::atomic<float> vu_r_{0.0f};
     std::atomic<float> peak_hold_{0.0f};
+    std::atomic<float> bpm_{120.0f};
     std::atomic<float> send_delay_peak_{0.0f};
     std::atomic<float> send_reverb_peak_{0.0f};
     std::atomic<float> send_chorus_peak_{0.0f};

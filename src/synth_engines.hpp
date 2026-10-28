@@ -323,7 +323,7 @@ struct LfoParameters {
     LfoMode mode = LfoMode::kTrig;
     uint8_t multiplier = 1;   // 1, 2, 4, 8, 16, 32, 64 (Elektron Digitakt style)
     float phase = 0.0f;
-    float value = 0.0f;
+    mutable float value = 0.0f;
 };
 
 struct ModEnvParameters {
@@ -340,6 +340,91 @@ struct StickAxisConfig {
     float amount_x = 0.50f; // 0.0 .. 1.0 (0% .. 100%)
     ModTarget dest_y = ModTarget::kNone;
     float amount_y = 0.50f; // 0.0 .. 1.0 (0% .. 100%)
+};
+
+enum class ReverbEngine : uint8_t {
+    kPlate = 0,
+    kHall,
+    kRoom,
+    kDark,
+    kCount
+};
+
+inline constexpr const char* getReverbEngineName(ReverbEngine eng) {
+    switch (eng) {
+        case ReverbEngine::kPlate: return "PLATE";
+        case ReverbEngine::kHall:  return "HALL";
+        case ReverbEngine::kRoom:  return "ROOM";
+        case ReverbEngine::kDark:  return "DARK";
+        default:                   return "PLATE";
+    }
+}
+
+enum class SidechainPos : uint8_t {
+    kPreDelayRev = 0, // перед паралельними Delay та Reverb
+    kPostDelayRev,    // після паралельних Delay та Reverb
+    kCount
+};
+
+inline constexpr const char* getSidechainPosName(SidechainPos pos) {
+    switch (pos) {
+        case SidechainPos::kPreDelayRev:  return "PRE";
+        case SidechainPos::kPostDelayRev: return "POST";
+        default:                          return "PRE";
+    }
+}
+
+inline constexpr const char* kDelayDivNames[] = {
+    "1/64", "1/32", "1/16", "1/8", "3/16", "1/4", "1/2", "1/1"
+};
+
+inline constexpr float kDelayDivMultiplier[] = {
+    0.0625f, 0.125f, 0.25f, 0.5f, 0.75f, 1.0f, 2.0f, 4.0f
+};
+
+// Індивідуальні ефекти на кожну доріжку (Per-Track FX Insert Chain)
+// Послідовність роутингу:
+// Bitcrusher -> SRR -> Distortion (Metal Zone) -> Chorus -> [PRE: SC-Comp] -> (Delay || Reverb) -> [POST: SC-Comp] -> Sends
+struct TrackFxParameters {
+    // 1. Bitcrusher (Elektron style: 16 bit down to 1 bit)
+    int bit_depth = 16;           // 1 .. 16 bits (16 = off / clean)
+
+    // 2. Sample Rate Reduction (SRR: 1x down to 64x factor)
+    int srr_factor = 1;           // 1 .. 64 (1 = off / native rate)
+
+    // 3. Distortion (Boss Metal Zone style: hard-clipped square saturation with mid-bite)
+    float dist_drive = 0.0f;      // 0.0 .. 1.0 (0.0 = clean, 1.0 = heavy square clip)
+    float dist_tone = 0.5f;       // 0.0 .. 1.0 (pre-clip mid-frequency bite and tone shape)
+    float dist_mix = 0.0f;        // 0.0 .. 1.0 (0.0 = dry, 1.0 = wet)
+
+    // 4. Stereo Chorus
+    float chorus_mix = 0.0f;      // 0.0 .. 1.0
+    float chorus_rate = 0.8f;     // 0.1 .. 8.0 Hz
+    float chorus_depth = 0.5f;    // 0.0 .. 1.0
+
+    // 5. Parallel Delay (Elektron proportional note divisions)
+    int delay_div = 2;            // 0: 1/64, 1: 1/32, 2: 1/16, 3: 1/8, 4: 3/16, 5: 1/4, 6: 1/2, 7: 1/1
+    float delay_feedback = 0.35f; // 0.0 .. 0.95
+    float delay_mix = 0.0f;       // 0.0 .. 1.0 (parallel wet level)
+
+    // 6. Parallel Reverb
+    ReverbEngine rev_engine = ReverbEngine::kPlate;
+    float rev_decay = 0.40f;      // 0.05 .. 0.98
+    float rev_hicut = 0.75f;      // 0.05 .. 1.0 (damping)
+    float rev_locut = 0.10f;      // 0.0 .. 0.8 (low cut)
+    float rev_predelay = 0.02f;   // 0.0 .. 0.15s (0..150ms pre-delay)
+    float rev_mix = 0.0f;         // 0.0 .. 1.0 (parallel wet level)
+
+    // 7. Sidechain Compressor
+    int sc_source = 0;            // 0 = OFF, 1..16 = TRK 1 .. TRK 16
+    float sc_thresh = 0.0f;       // -48.0 .. 0.0 dB (0.0 = no compression)
+    float sc_ratio = 4.0f;        // 1.0 .. 20.0
+    float sc_attack = 0.010f;     // 0.001 .. 0.100s (1 .. 100ms)
+    float sc_release = 0.150f;    // 0.020 .. 1.000s (20 .. 1000ms)
+    SidechainPos sc_pos = SidechainPos::kPreDelayRev; // PRE or POST (динамічне переміщення в таблиці!)
+
+    // 8. Send FX (посили на Master FX шину)
+    float send_chorus = 0.0f;     // 0.0 .. 1.0
 };
 
 struct TrackParameters {
@@ -388,6 +473,9 @@ struct TrackParameters {
     // 2 призначувані ADSR огинаючі на трек
     ModEnvParameters env1{.attack = 0.01f, .decay = 0.30f, .sustain = 0.0f, .release = 0.10f, .amount = 0.0f, .dest = ModTarget::kNone};
     ModEnvParameters env2{.attack = 0.01f, .decay = 0.25f, .sustain = 0.2f, .release = 0.15f, .amount = 0.0f, .dest = ModTarget::kNone};
+
+    // Індивідуальні ефекти доріжки (Per-Track Insert FX Chain)
+    TrackFxParameters fx{};
 };
 
 inline constexpr const char* kParamNames[static_cast<int>(EngineType::kCount)][kParamsPerTrack] = {
