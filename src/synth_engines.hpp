@@ -229,6 +229,7 @@ struct TrackParameters {
     float sustain = 0.0f;   // 0% sustain by default (no infinite drone!)
     float release = 0.05f;  // 50ms minimal release
     float level = 0.85f;
+    float gain_over = 0.0f; // -1.0 .. +1.0 (-24 dB .. +24 dB, 0.0 = 0 dB clean normalized max)
     float pan = 0.0f;       // -1.0 (L) .. +1.0 (R)
     float delay_send = 0.0f;
     float reverb_send = 0.0f;

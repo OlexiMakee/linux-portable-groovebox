@@ -270,6 +270,37 @@ ParamRegistry::ParamRegistry() {
     }
     {
         Param p;
+        p.id = "TRK.GAIN_OVER";
+        p.label = "GAIN";
+        p.value = [](const UiContext& c) {
+            float g = c.audio.getTrackParams(trk(c, -1)).gain_over;
+            char b[24];
+            if (std::fabs(g) < 0.005f) {
+                std::snprintf(b, sizeof(b), "0.0 dB [CLN]");
+            } else if (g < 0.0f) {
+                float db = g * 24.0f;
+                std::snprintf(b, sizeof(b), "%+4.1f dB", db);
+            } else {
+                float db = g * 24.0f;
+                std::snprintf(b, sizeof(b), "%+4.1f dB [CRUNCH]", db);
+            }
+            return std::string(b);
+        };
+        p.norm = [](const UiContext& c) {
+            float g = c.audio.getTrackParams(trk(c, -1)).gain_over;
+            return (g + 1.0f) * 0.5f;
+        };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            const int t = trk(c, -1);
+            auto tp = c.audio.getTrackParams(t);
+            float step = coarse ? 0.10f : 0.02f;
+            tp.gain_over = std::clamp(tp.gain_over + dir * step, -1.0f, 1.0f);
+            c.audio.setTrackParams(t, tp);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
         p.id = "TRK.RND";
         p.label = "RANDOM";
         p.value = [](const UiContext&) { return "DICE [A]"; };

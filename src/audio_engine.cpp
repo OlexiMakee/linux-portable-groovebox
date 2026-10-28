@@ -1178,7 +1178,22 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                 trk_sum += v.svf_low * amp * v.velocity;
             } // end vi loop
 
-            float out_s = trk_sum * trk_level;
+            // Per-track Model:Cycles / Model:Samples GAIN / OVERDRIVE curve
+            float g = tp.gain_over;
+            float out_s = trk_sum;
+            if (g <= 0.0f) {
+                // Чисте плавне затухання до 0: 0.0 = 100% (0 dB), -1.0 = тиша
+                float atten = std::clamp(1.0f + g, 0.0f, 1.0f);
+                out_s = trk_sum * (atten * atten);
+            } else {
+                // Вище нуля: теплий синусоїдальний/гіперболічний овердрайв (guitar crunch)
+                float drive = 1.0f + g * 5.0f;
+                float sat = std::tanh(trk_sum * drive);
+                float comp = 1.0f / std::sqrt(1.0f + g * 3.5f);
+                out_s = sat * comp;
+            }
+            out_s *= trk_level;
+
             float abs_s = std::fabs(out_s);
             if (abs_s > trk_peak[t]) trk_peak[t] = abs_s;
 
