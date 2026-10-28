@@ -82,11 +82,28 @@ int main(int argc, char* argv[]) {
     uint32_t last_step_ms = SDL_GetTicks();
     int rendered_frames = 0;
 
+    auto setMute = [&](int t, bool muted) {
+        if (t >= 0 && t < audio_engine.getActiveRowCount()) {
+            auto tp = audio_engine.getTrackParams(t);
+            if (tp.muted != muted) {
+                tp.muted = muted;
+                audio_engine.setTrackParams(t, tp);
+            }
+        }
+    };
+
     auto step_sequencer = [&]() {
         if (!app.transport_playing) return;
         const uint32_t prev_step = app.current_step;
-        app.current_step = (app.current_step + 1) % app.pattern_length;
-        if (app.current_step == 0 && prev_step == app.pattern_length - 1 && app.seq_submode == groovebox::SeqSubmode::kSong) {
+
+        uint32_t eff_len = app.pattern_length;
+        if (app.seq_submode == groovebox::SeqSubmode::kSong) {
+            const auto& cur_s = app.song_chain[app.song_play_step];
+            if (cur_s.length > 0) eff_len = cur_s.length;
+        }
+
+        app.current_step = (app.current_step + 1) % eff_len;
+        if (app.current_step == 0 && prev_step == eff_len - 1 && app.seq_submode == groovebox::SeqSubmode::kSong) {
             app.song_play_repeat++;
             if (app.song_play_repeat >= app.song_chain[app.song_play_step].repeats) {
                 app.song_play_repeat = 0;
@@ -98,7 +115,13 @@ int main(int argc, char* argv[]) {
                 app.song_play_step = next_step;
                 app.song_cursor_row = next_step;
                 auto& s = app.song_chain[next_step];
-                app.pattern_mgr.switchPatternNow(s.bank, s.pattern, audio_engine, app.bpm);
+                float play_bpm = (s.bpm > 0) ? static_cast<float>(s.bpm) : app.bpm;
+                app.pattern_mgr.switchPatternNow(s.bank, s.pattern, audio_engine, play_bpm);
+
+                // Застосування маски mutes для поточного рядка сонгмоду (Elektron Pattern Mutes)
+                for (int t = 0; t < 16; ++t) {
+                    setMute(t, (s.mute_mask & (1 << t)) != 0);
+                }
             }
         }
         audio_engine.triggerSequencerStep(app.current_step);
@@ -120,7 +143,11 @@ int main(int argc, char* argv[]) {
                     app.song_play_step = 0;
                     app.song_play_repeat = 0;
                     auto& s = app.song_chain[0];
-                    app.pattern_mgr.switchPatternNow(s.bank, s.pattern, audio_engine, app.bpm);
+                    float play_bpm = (s.bpm > 0) ? static_cast<float>(s.bpm) : app.bpm;
+                    app.pattern_mgr.switchPatternNow(s.bank, s.pattern, audio_engine, play_bpm);
+                    for (int t = 0; t < 16; ++t) {
+                        setMute(t, (s.mute_mask & (1 << t)) != 0);
+                    }
                 }
                 audio_engine.triggerSequencerStep(0);
             }

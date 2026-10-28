@@ -560,6 +560,31 @@ static void testInputRouterAndStepEditor() {
     ActionRegistry::instance().run("TAB.R2", ctx);
     TEST_ASSERT(app.mix_submode == MixSubmode::kMix, "Fourth R2 press loops back to MIX");
 
+    // 6d. Тестування функціоналу Elektron Song Mode (колонки, мути, LEN/BPM)
+    app.active_view = ViewId::kSeq;
+    app.seq_submode = SeqSubmode::kSong;
+    app.song_cursor_row = 0;
+    app.song_col = 0; // PAT
+    ActionRegistry::instance().run("INSPECT.OPEN", ctx);
+    TEST_ASSERT(app.song_chain[0].pattern == 1, "INSPECT.OPEN in Song PAT column increments pattern");
+    ActionRegistry::instance().run("SEQ.CLEAR_STEP", ctx);
+    TEST_ASSERT(app.song_chain[0].pattern == 0, "SEQ.CLEAR_STEP in Song PAT column decrements pattern");
+
+    // Перемикання колонки на MUTES
+    app.song_col = 4; // MUTES
+    app.song_mute_cursor_track = 2; // Track 3
+    uint16_t initial_mask = app.song_chain[0].mute_mask;
+    ActionRegistry::instance().run("SEQ.TRIG", ctx);
+    TEST_ASSERT((app.song_chain[0].mute_mask & (1 << 2)) != 0, "SEQ.TRIG in Song MUTES column toggles track 3 mute");
+    ActionRegistry::instance().run("SEQ.TRIG", ctx);
+    TEST_ASSERT(app.song_chain[0].mute_mask == initial_mask, "Second SEQ.TRIG unmutes track 3 in song row");
+
+    // Перевірка LEN override
+    app.song_col = 2; // LEN
+    ActionRegistry::instance().run("SEQ.TRIG", ctx);
+    TEST_ASSERT(app.song_chain[0].length > 0, "SEQ.TRIG in Song LEN column activates length override");
+    app.seq_submode = SeqSubmode::kMatrix;
+
     // 7. Тестування асинхронного перемикання USB ролі (запобігання зависань)
     HardwareMonitor hw_mon;
     bool switch_ok = hw_mon.requestUsbRoleSwitch("device_ssh");
