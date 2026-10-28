@@ -93,18 +93,23 @@ struct AppModel {
     SeqSubmode seq_submode = SeqSubmode::kMatrix; // Цикл L1: SEQ -> Piano Roll (ROL) -> Song Mode (SON)
     SynthSubmode synth_submode = SynthSubmode::kSynth; // Цикл L2: SYN -> MOD -> FX
     MixSubmode mix_submode = MixSubmode::kMix; // Цикл R2: MIX -> SND -> MSTR
+    int song_rows_count = 1; // За замовчуванням створено 1 рядок патерна
     int song_cursor_row = 0;
-    int song_col = 0; // 0 = PAT, 1 = REP, 2 = LEN, 3 = BPM, 4 = MUTES
+    int song_col = 0; // 0 = PAT, 1 = REP, 2 = LEN, 3 = BPM, 4 = MUTES, 5 = STATUS
     int song_mute_cursor_track = 0; // 0..15 для вибору треку в колонці MUTES
     int song_play_step = 0;
     int song_play_repeat = 0;
     std::array<SongStep, 16> song_chain = []() {
         std::array<SongStep, 16> sc{};
-        for (int i = 0; i < 16; ++i) {
+        sc[0].bank = 0;
+        sc[0].pattern = 0;
+        sc[0].repeats = 1;
+        sc[0].enabled = true;
+        for (int i = 1; i < 16; ++i) {
             sc[i].bank = 0;
             sc[i].pattern = i;
             sc[i].repeats = 1;
-            sc[i].enabled = (i < 4);
+            sc[i].enabled = false;
         }
         return sc;
     }();

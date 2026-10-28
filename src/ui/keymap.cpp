@@ -70,6 +70,8 @@ Keymap::Keymap() {
     bind(ViewId::kSeq, Layer::kSelect, Button::kY,         Gesture::kPress, "STEP.PASTE");
     bind(ViewId::kSeq, Layer::kSelect, Button::kDpadLeft,  Gesture::kPress, "SEQ.LEN_DEC");
     bind(ViewId::kSeq, Layer::kSelect, Button::kDpadRight, Gesture::kPress, "SEQ.LEN_INC");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kDpadUp,    Gesture::kPress, "PATTERN.PREV");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kDpadDown,  Gesture::kPress, "PATTERN.NEXT");
 
     // =========================================================================
     // 3. СИНТЕЗАТОР (ViewId::kSynth)
@@ -102,7 +104,7 @@ Keymap::Keymap() {
     bind(ViewId::kMix, Layer::kBase, Button::kB, Gesture::kPress, "PARAM.INC");
     bind(ViewId::kMix, Layer::kBase, Button::kA, Gesture::kPress, "PARAM.DEC");
     bind(ViewId::kMix, Layer::kBase, Button::kX, Gesture::kPress, "MUTE.CUR");
-    bind(ViewId::kMix, Layer::kBase, Button::kY, Gesture::kPress, "MUTE.CUR");
+    bind(ViewId::kMix, Layer::kBase, Button::kY, Gesture::kPress, "SOLO.CUR");
 
     // =========================================================================
     // 6. РОБОЧА СТАНЦІЯ СЕМПЛЮВАННЯ (ViewId::kSample)
