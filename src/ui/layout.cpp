@@ -194,13 +194,29 @@ void setupAppLayout(UiShell& shell) {
         mix_spec.tab_title = [](const UiContext&) { return "MIX/FX"; };
         mix_spec.header = [](const UiContext& c) {
             char b[64];
-            std::snprintf(b, sizeof(b), "MIXER [%02d CHANNELS ACTIVE] & BUS/MST", c.audio.getActiveRowCount());
+            if (c.app.mix_submode == MixSubmode::kMaster) {
+                std::snprintf(b, sizeof(b), "MASTERING BUS | GAIN/OVER * COMP * HPF/LPF * BELL EQ");
+            } else if (c.app.mix_submode == MixSubmode::kSend) {
+                std::snprintf(b, sizeof(b), "SEND FX BUS | DELAY, REVERB & CHORUS");
+            } else {
+                std::snprintf(b, sizeof(b), "MIXER [%02d CHANNELS ACTIVE] & BUS/MST", c.audio.getActiveRowCount());
+            }
             return std::string(b);
         };
         mix_spec.on_focus = [](UiContext& c, int r) {
-            if (r >= 0 && r < c.audio.getActiveRowCount()) c.app.selected_track = r;
+            if (c.app.mix_submode != MixSubmode::kMaster && r >= 0 && r < c.audio.getActiveRowCount()) {
+                c.app.selected_track = r;
+            }
         };
         mix_spec.dynamic_rows = [](const UiContext& c) -> std::vector<GridRow> {
+            if (c.app.mix_submode == MixSubmode::kMaster) {
+                return {
+                    {"OUT",  {"MST.GAIN", "MST.VOL", "MST.PAN", "MST.BPM"}},
+                    {"COMP", {"MST.SC_SRC", "MST.SC_THR", "MST.SC_RAT", "MST.SC_ATK", "MST.SC_REL"}},
+                    {"FILT", {"MST.HPF_CUT", "MST.HPF_SLP", "MST.LPF_CUT", "MST.LPF_SLP"}},
+                    {"EQ",   {"MST.EQ_FRQ", "MST.EQ_GAIN", "MST.EQ_Q"}}
+                };
+            }
             std::vector<GridRow> rows;
             const int count = c.audio.getActiveRowCount();
             for (int t = 0; t < count; ++t) {

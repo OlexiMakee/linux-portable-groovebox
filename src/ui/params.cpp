@@ -703,6 +703,219 @@ ParamRegistry::ParamRegistry() {
         p.step = [](UiContext& c, int dir, bool coarse) { c.audio.adjustMasterVolume(dir * (coarse ? 0.10f : 0.02f)); };
         add(std::move(p));
     }
+
+    // ===== MASTERING BUS PARAMS =====
+    {
+        Param p;
+        p.id = "MST.GAIN";
+        p.label = "GAIN";
+        p.value = [](const UiContext& c) {
+            float g = c.audio.getMasterFx().gain_over;
+            char b[16];
+            if (g > 0.001f) std::snprintf(b, sizeof(b), "+%.1f CRN", g * 24.0f);
+            else if (g < -0.001f) std::snprintf(b, sizeof(b), "%.1f dB", g * 24.0f);
+            else std::snprintf(b, sizeof(b), "0 dB (MAX)");
+            return std::string(b);
+        };
+        p.norm = [](const UiContext& c) { return (c.audio.getMasterFx().gain_over + 1.0f) * 0.5f; };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            auto mfx = c.audio.getMasterFx();
+            mfx.gain_over = std::clamp(mfx.gain_over + dir * (coarse ? 0.10f : 0.02f), -1.0f, 1.0f);
+            c.audio.setMasterFx(mfx);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "MST.PAN";
+        p.label = "PAN";
+        p.value = [](const UiContext&) { return fmtPan(0.0f); };
+        p.norm = [](const UiContext&) { return 0.5f; };
+        p.step = [](UiContext&, int, bool) {};
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "MST.SC_SRC";
+        p.label = "SC SRC";
+        p.value = [](const UiContext& c) {
+            int src = c.audio.getMasterFx().sc_source;
+            if (src == 0) return std::string("BUS COMP");
+            char b[16]; std::snprintf(b, sizeof(b), "TRK %02d", src);
+            return std::string(b);
+        };
+        p.norm = [](const UiContext& c) { return c.audio.getMasterFx().sc_source / 16.0f; };
+        p.step = [](UiContext& c, int dir, bool) {
+            auto mfx = c.audio.getMasterFx();
+            int max_src = c.audio.getActiveRowCount();
+            mfx.sc_source = std::clamp(mfx.sc_source + dir, 0, max_src);
+            c.audio.setMasterFx(mfx);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "MST.SC_THR";
+        p.label = "SC THR";
+        p.value = [](const UiContext& c) {
+            float th = c.audio.getMasterFx().sc_thresh;
+            if (th >= -0.1f) return std::string("OFF");
+            char b[16]; std::snprintf(b, sizeof(b), "%+.1f dB", th);
+            return std::string(b);
+        };
+        p.norm = [](const UiContext& c) { return (c.audio.getMasterFx().sc_thresh + 48.0f) / 48.0f; };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            auto mfx = c.audio.getMasterFx();
+            mfx.sc_thresh = std::clamp(mfx.sc_thresh + dir * (coarse ? 6.0f : 1.0f), -48.0f, 0.0f);
+            c.audio.setMasterFx(mfx);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "MST.SC_RAT";
+        p.label = "SC RAT";
+        p.value = [](const UiContext& c) {
+            float r = c.audio.getMasterFx().sc_ratio;
+            char b[16]; std::snprintf(b, sizeof(b), "%.1f:1", r);
+            return std::string(b);
+        };
+        p.norm = [](const UiContext& c) { return (c.audio.getMasterFx().sc_ratio - 1.0f) / 19.0f; };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            auto mfx = c.audio.getMasterFx();
+            mfx.sc_ratio = std::clamp(mfx.sc_ratio + dir * (coarse ? 2.0f : 0.5f), 1.0f, 20.0f);
+            c.audio.setMasterFx(mfx);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "MST.SC_ATK";
+        p.label = "SC ATK";
+        p.value = [](const UiContext& c) { return fmtMs(c.audio.getMasterFx().sc_attack); };
+        p.norm = [](const UiContext& c) { return (c.audio.getMasterFx().sc_attack - 0.001f) / 0.099f; };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            auto mfx = c.audio.getMasterFx();
+            mfx.sc_attack = std::clamp(mfx.sc_attack + dir * (coarse ? 0.010f : 0.002f), 0.001f, 0.100f);
+            c.audio.setMasterFx(mfx);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "MST.SC_REL";
+        p.label = "SC REL";
+        p.value = [](const UiContext& c) { return fmtMs(c.audio.getMasterFx().sc_release); };
+        p.norm = [](const UiContext& c) { return (c.audio.getMasterFx().sc_release - 0.020f) / 0.980f; };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            auto mfx = c.audio.getMasterFx();
+            mfx.sc_release = std::clamp(mfx.sc_release + dir * (coarse ? 0.050f : 0.010f), 0.020f, 1.000f);
+            c.audio.setMasterFx(mfx);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "MST.HPF_CUT";
+        p.label = "HP CUT";
+        p.value = [](const UiContext& c) { return fmtHpf(c.audio.getMasterFx().hpf_cutoff); };
+        p.norm = [](const UiContext& c) { return c.audio.getMasterFx().hpf_cutoff; };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            auto mfx = c.audio.getMasterFx();
+            mfx.hpf_cutoff = std::clamp(mfx.hpf_cutoff + dir * (coarse ? 0.05f : 0.01f), 0.0f, 0.95f);
+            c.audio.setMasterFx(mfx);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "MST.HPF_SLP";
+        p.label = "HP SLP";
+        p.value = [](const UiContext& c) { return c.audio.getMasterFx().hpf_slope_24 ? "24 dB" : "12 dB"; };
+        p.norm = [](const UiContext& c) { return c.audio.getMasterFx().hpf_slope_24 ? 1.0f : 0.0f; };
+        p.step = [](UiContext& c, int, bool) {
+            auto mfx = c.audio.getMasterFx();
+            mfx.hpf_slope_24 = !mfx.hpf_slope_24;
+            c.audio.setMasterFx(mfx);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "MST.LPF_CUT";
+        p.label = "LP CUT";
+        p.value = [](const UiContext& c) { return fmtLpf(c.audio.getMasterFx().lpf_cutoff); };
+        p.norm = [](const UiContext& c) { return c.audio.getMasterFx().lpf_cutoff; };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            auto mfx = c.audio.getMasterFx();
+            mfx.lpf_cutoff = std::clamp(mfx.lpf_cutoff + dir * (coarse ? 0.05f : 0.01f), 0.05f, 1.0f);
+            c.audio.setMasterFx(mfx);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "MST.LPF_SLP";
+        p.label = "LP SLP";
+        p.value = [](const UiContext& c) { return c.audio.getMasterFx().lpf_slope_24 ? "24 dB" : "12 dB"; };
+        p.norm = [](const UiContext& c) { return c.audio.getMasterFx().lpf_slope_24 ? 1.0f : 0.0f; };
+        p.step = [](UiContext& c, int, bool) {
+            auto mfx = c.audio.getMasterFx();
+            mfx.lpf_slope_24 = !mfx.lpf_slope_24;
+            c.audio.setMasterFx(mfx);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "MST.EQ_FRQ";
+        p.label = "EQ FRQ";
+        p.value = [](const UiContext& c) {
+            float f = 40.0f * std::pow(400.0f, c.audio.getMasterFx().bell_freq);
+            return fmtHz(f);
+        };
+        p.norm = [](const UiContext& c) { return c.audio.getMasterFx().bell_freq; };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            auto mfx = c.audio.getMasterFx();
+            mfx.bell_freq = std::clamp(mfx.bell_freq + dir * (coarse ? 0.05f : 0.01f), 0.0f, 1.0f);
+            c.audio.setMasterFx(mfx);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "MST.EQ_GAIN";
+        p.label = "EQ GAIN";
+        p.value = [](const UiContext& c) {
+            float g = c.audio.getMasterFx().bell_gain;
+            char b[16]; std::snprintf(b, sizeof(b), "%+.1f dB", g);
+            return std::string(b);
+        };
+        p.norm = [](const UiContext& c) { return (c.audio.getMasterFx().bell_gain + 18.0f) / 36.0f; };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            auto mfx = c.audio.getMasterFx();
+            mfx.bell_gain = std::clamp(mfx.bell_gain + dir * (coarse ? 3.0f : 0.5f), -18.0f, 18.0f);
+            c.audio.setMasterFx(mfx);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "MST.EQ_Q";
+        p.label = "EQ Q";
+        p.value = [](const UiContext& c) {
+            float q = c.audio.getMasterFx().bell_q;
+            char b[16]; std::snprintf(b, sizeof(b), "Q %.2f", q);
+            return std::string(b);
+        };
+        p.norm = [](const UiContext& c) { return (c.audio.getMasterFx().bell_q - 0.2f) / 7.8f; };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            auto mfx = c.audio.getMasterFx();
+            mfx.bell_q = std::clamp(mfx.bell_q + dir * (coarse ? 0.5f : 0.1f), 0.2f, 8.0f);
+            c.audio.setMasterFx(mfx);
+        };
+        add(std::move(p));
+    }
     {
         Param p = info("MST.PEAK", "PEAK", [](const UiContext& c) { return fmtPct(c.tel.peak_hold); });
         p.norm = [](const UiContext& c) { return c.tel.peak_hold; };

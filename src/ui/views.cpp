@@ -282,37 +282,116 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
         cv.line(area.x, lower_y, area.x + area.w - 1, lower_y, palette::kGridDim);
         cv.fill(area.x, lower_y + 1, area.w, 25, palette::kPanelBg);
 
-        // 1. Квадратний міні-осцилограф висотою 22px
-        widgets::scope(cv, Rect{area.x + 4, lower_y + 2, 22, 22}, c.tel.scope_samples, palette::kAccentCyan);
-
-        // 2. Компактні індикатори рівнів для ВСІХ активних треків (висота відповідає осцилографу 22px)
-        const int act_tracks = c.audio.getActiveRowCount();
-        for (int t = 0; t < act_tracks && t < kMaxTracks; ++t) {
-            const int mx = area.x + 32 + t * 14;
-            if (mx + 10 >= area.x + area.w - 58) break; // Захист від наїзду на FX + Master
-            widgets::verticalMeter(cv, Rect{mx, lower_y + 2, 8, 14}, c.tel.track_levels[t]);
-            char tb[4];
-            std::snprintf(tb, sizeof(tb), "%d", t + 1);
-            const bool is_muted = c.audio.getTrackParams(t).muted;
-            cv.text(mx + 1, lower_y + 17, tb, is_muted ? palette::kGridDim : palette::kTextDim);
-        }
-
-        // 3. Send FX meters (DLY, REV, CHR) directly to the left of Master VU
         const int mst_x = area.x + area.w - 24;
-        const int fx_x = mst_x - 32;
-        widgets::verticalMeter(cv, Rect{fx_x, lower_y + 2, 7, 14}, c.tel.send_delay);
-        cv.text(fx_x + 1, lower_y + 17, "D", palette::kAccentCyan);
 
-        widgets::verticalMeter(cv, Rect{fx_x + 10, lower_y + 2, 7, 14}, c.tel.send_reverb);
-        cv.text(fx_x + 11, lower_y + 17, "R", palette::kAccentPurple);
+        if (spec_.id == ViewId::kMix && c.app.mix_submode == MixSubmode::kMaster) {
+            // ЕКРАН МАСТЕРИНГУ: графік еквалайзеру (АЧХ) ліворуч/по центру,
+            // а праворуч від АЧХ — смуги мастера
+            const int eq_x0 = area.x + 6;
+            const int eq_w = mst_x - eq_x0 - 6;
+            const int eq_y0 = lower_y + 2;
+            const int eq_h = 22;
+            const int zero_y = eq_y0 + eq_h / 2;
 
-        widgets::verticalMeter(cv, Rect{fx_x + 20, lower_y + 2, 7, 14}, c.tel.send_chorus);
-        cv.text(fx_x + 21, lower_y + 17, "C", palette::kLevelOk);
+            // Рамка та частотна сітка еквалайзера
+            cv.rect(eq_x0 - 1, eq_y0 - 1, eq_w + 2, eq_h + 2, palette::kGridDim);
 
-        // 4. Справа: Master L та R вертикальні міні-VU
-        widgets::verticalMeter(cv, Rect{mst_x, lower_y + 2, 8, 14}, c.tel.vu_left);
-        widgets::verticalMeter(cv, Rect{mst_x + 10, lower_y + 2, 8, 14}, c.tel.vu_right);
-        cv.text(mst_x + 1, lower_y + 17, "MST", palette::kAccentOrange);
+            const int x_100 = eq_x0 + static_cast<int>(eq_w * 0.233f);
+            const int x_1k  = eq_x0 + static_cast<int>(eq_w * 0.566f);
+            const int x_10k = eq_x0 + static_cast<int>(eq_w * 0.900f);
+
+            cv.line(x_100, eq_y0, x_100, eq_y0 + eq_h - 1, palette::kGridDim);
+            cv.line(x_1k,  eq_y0, x_1k,  eq_y0 + eq_h - 1, palette::kGridDim);
+            cv.line(x_10k, eq_y0, x_10k, eq_y0 + eq_h - 1, palette::kGridDim);
+
+            // Нульова лінія 0 dB (пунктир)
+            for (int dx = 0; dx < eq_w; dx += 4) {
+                cv.fill(eq_x0 + dx, zero_y, 1, 1, palette::kGridDim);
+            }
+
+            // Отримуємо параметри еквалайзера
+            const auto mfx = c.audio.getMasterFx();
+            float f_hpf = (mfx.hpf_cutoff > 0.005f) ? (20.0f * std::pow(800.0f, mfx.hpf_cutoff)) : 0.0f;
+            float hpf_order = mfx.hpf_slope_24 ? 4.0f : 2.0f;
+            float f_bell = 40.0f * std::pow(400.0f, mfx.bell_freq);
+            float bell_q = std::clamp(mfx.bell_q, 0.2f, 10.0f);
+            float f_lpf = (mfx.lpf_cutoff < 0.995f) ? (20.0f * std::pow(1000.0f, mfx.lpf_cutoff)) : 30000.0f;
+            float lpf_order = mfx.lpf_slope_24 ? 4.0f : 2.0f;
+
+            int prev_cy = zero_y;
+            for (int dx = 0; dx < eq_w; ++dx) {
+                float f = 20.0f * std::pow(1000.0f, static_cast<float>(dx) / static_cast<float>(eq_w));
+
+                float hpf_db = 0.0f;
+                if (f_hpf > 20.0f) {
+                    float r = f / f_hpf;
+                    hpf_db = -10.0f * std::log10(1.0f + std::pow(1.0f / std::max(0.001f, r), hpf_order));
+                }
+
+                float bell_db = 0.0f;
+                if (std::fabs(mfx.bell_gain) > 0.05f) {
+                    float f_ratio = f / std::max(1.0f, f_bell) - f_bell / std::max(1.0f, f);
+                    bell_db = mfx.bell_gain / (1.0f + bell_q * bell_q * f_ratio * f_ratio);
+                }
+
+                float lpf_db = 0.0f;
+                if (f_lpf < 20000.0f) {
+                    float r = f / f_lpf;
+                    lpf_db = -10.0f * std::log10(1.0f + std::pow(r, lpf_order));
+                }
+
+                float total_db = hpf_db + bell_db + lpf_db;
+                int cur_cy = zero_y - static_cast<int>(std::clamp(total_db * (10.0f / 18.0f), -10.0f, 10.0f));
+
+                if (dx == 0) {
+                    cv.fill(eq_x0 + dx, cur_cy, 1, 1, palette::kAccentOrange);
+                } else {
+                    cv.line(eq_x0 + dx - 1, prev_cy, eq_x0 + dx, cur_cy, palette::kAccentOrange);
+                }
+                prev_cy = cur_cy;
+            }
+
+            cv.text(x_100 - 6, eq_y0 + 2, "100", palette::kTextDim);
+            cv.text(x_1k  - 4, eq_y0 + 2, "1K",  palette::kTextDim);
+            cv.text(x_10k - 6, eq_y0 + 2, "10K", palette::kTextDim);
+
+            // Праворуч від АЧХ залишаємо смуги мастера
+            widgets::verticalMeter(cv, Rect{mst_x, lower_y + 2, 8, 14}, c.tel.vu_left);
+            widgets::verticalMeter(cv, Rect{mst_x + 10, lower_y + 2, 8, 14}, c.tel.vu_right);
+            cv.text(mst_x + 1, lower_y + 17, "MST", palette::kAccentOrange);
+
+        } else {
+            // 1. Квадратний міні-осцилограф висотою 22px
+            widgets::scope(cv, Rect{area.x + 4, lower_y + 2, 22, 22}, c.tel.scope_samples, palette::kAccentCyan);
+
+            // 2. Компактні індикатори рівнів для ВСІХ активних треків (висота відповідає осцилографу 22px)
+            const int act_tracks = c.audio.getActiveRowCount();
+            for (int t = 0; t < act_tracks && t < kMaxTracks; ++t) {
+                const int mx = area.x + 32 + t * 14;
+                if (mx + 10 >= area.x + area.w - 58) break; // Захист від наїзду на FX + Master
+                widgets::verticalMeter(cv, Rect{mx, lower_y + 2, 8, 14}, c.tel.track_levels[t]);
+                char tb[4];
+                std::snprintf(tb, sizeof(tb), "%d", t + 1);
+                const bool is_muted = c.audio.getTrackParams(t).muted;
+                cv.text(mx + 1, lower_y + 17, tb, is_muted ? palette::kGridDim : palette::kTextDim);
+            }
+
+            // 3. Send FX meters (DLY, REV, CHR) directly to the left of Master VU
+            const int fx_x = mst_x - 32;
+            widgets::verticalMeter(cv, Rect{fx_x, lower_y + 2, 7, 14}, c.tel.send_delay);
+            cv.text(fx_x + 1, lower_y + 17, "D", palette::kAccentCyan);
+
+            widgets::verticalMeter(cv, Rect{fx_x + 10, lower_y + 2, 7, 14}, c.tel.send_reverb);
+            cv.text(fx_x + 11, lower_y + 17, "R", palette::kAccentPurple);
+
+            widgets::verticalMeter(cv, Rect{fx_x + 20, lower_y + 2, 7, 14}, c.tel.send_chorus);
+            cv.text(fx_x + 21, lower_y + 17, "C", palette::kLevelOk);
+
+            // 4. Справа: Master L та R вертикальні міні-VU
+            widgets::verticalMeter(cv, Rect{mst_x, lower_y + 2, 8, 14}, c.tel.vu_left);
+            widgets::verticalMeter(cv, Rect{mst_x + 10, lower_y + 2, 8, 14}, c.tel.vu_right);
+            cv.text(mst_x + 1, lower_y + 17, "MST", palette::kAccentOrange);
+        }
     }
 }
 
