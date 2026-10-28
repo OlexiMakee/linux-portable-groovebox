@@ -48,6 +48,10 @@ std::vector<std::string> ActionRegistry::ids() const {
 ActionRegistry::ActionRegistry() {
     // ---------------- Навігація ----------------
     add(Action{"NAV.UP", "UP", [](UiContext& c) {
+        if (c.app.project_modal_open) {
+            ActionRegistry::instance().run("PROJECT.MODAL_UP", c);
+            return;
+        }
         if (c.app.sample_browser_open) {
             ActionRegistry::instance().run("SAMPLE_BROWSER.UP", c);
             return;
@@ -59,6 +63,10 @@ ActionRegistry::ActionRegistry() {
         if (c.shell) c.shell->currentView(c).navigate(c, 0, -1, false);
     }});
     add(Action{"NAV.DOWN", "DOWN", [](UiContext& c) {
+        if (c.app.project_modal_open) {
+            ActionRegistry::instance().run("PROJECT.MODAL_DOWN", c);
+            return;
+        }
         if (c.app.sample_browser_open) {
             ActionRegistry::instance().run("SAMPLE_BROWSER.DOWN", c);
             return;
@@ -70,11 +78,11 @@ ActionRegistry::ActionRegistry() {
         if (c.shell) c.shell->currentView(c).navigate(c, 0, 1, false);
     }});
     add(Action{"NAV.LEFT", "LEFT", [](UiContext& c) {
-        if (c.app.sample_browser_open || c.app.engine_menu_open) return;
+        if (c.app.project_modal_open || c.app.sample_browser_open || c.app.engine_menu_open) return;
         if (c.shell) c.shell->currentView(c).navigate(c, -1, 0, false);
     }});
     add(Action{"NAV.RIGHT", "RIGHT", [](UiContext& c) {
-        if (c.app.sample_browser_open || c.app.engine_menu_open) return;
+        if (c.app.project_modal_open || c.app.sample_browser_open || c.app.engine_menu_open) return;
         if (c.shell) c.shell->currentView(c).navigate(c, 1, 0, false);
     }});
     add(Action{"NAV.PAGE_UP", "PG.UP", [](UiContext& c) {
@@ -92,6 +100,10 @@ ActionRegistry::ActionRegistry() {
 
     // ---------------- Редагування параметра у фокусі ----------------
     add(Action{"PARAM.INC", "VAL+", [](UiContext& c) {
+        if (c.app.project_modal_open) {
+            ActionRegistry::instance().run("PROJECT.MODAL_CANCEL", c);
+            return;
+        }
         if (c.app.sample_browser_open) {
             ActionRegistry::instance().run("SAMPLE_BROWSER.CONFIRM", c);
             return;
@@ -106,6 +118,10 @@ ActionRegistry::ActionRegistry() {
         }
     }});
     add(Action{"PARAM.DEC", "VAL-", [](UiContext& c) {
+        if (c.app.project_modal_open) {
+            ActionRegistry::instance().run("PROJECT.MODAL_CONFIRM", c);
+            return;
+        }
         if (c.app.sample_browser_open) {
             ActionRegistry::instance().run("SAMPLE_BROWSER.CLOSE", c);
             return;
@@ -212,6 +228,13 @@ ActionRegistry::ActionRegistry() {
             }
         }
 
+        if (c.app.seq_submode == SeqSubmode::kSong) {
+            auto& cur_s = c.app.song_chain[c.app.song_cursor_row];
+            cur_s.enabled = !cur_s.enabled;
+            c.app.last_action = cur_s.enabled ? "STEP PLAY" : "STEP SKIP";
+            return;
+        }
+
         const int act = c.audio.getActiveRowCount();
         if (c.app.cursor_row >= act) {
             if (act < kTotalRows) {
@@ -225,16 +248,25 @@ ActionRegistry::ActionRegistry() {
         }
     }});
     add(Action{"SEQ.REC_TOGGLE", "REC", [](UiContext& c) {
-        c.app.rec_mode = !c.app.rec_mode;
-        if (c.app.rec_mode) {
+        if (c.app.seq_submode == SeqSubmode::kMatrix) {
+            c.app.seq_submode = SeqSubmode::kPianoRoll;
+            c.app.rec_mode = true;
             c.app.selected_track = c.audio.getRowTrack(c.app.cursor_row);
             auto st = c.audio.getStep(c.app.selected_track, c.app.cursor_step);
             if (st.enabled) {
                 c.app.rec_octave = std::clamp(static_cast<int>(st.note / 12) - 1, 1, 8);
                 c.app.rec_cursor_lane = 11 - (st.note % 12);
             }
+            c.app.last_action = "PIANO ROLL";
+        } else if (c.app.seq_submode == SeqSubmode::kPianoRoll) {
+            c.app.seq_submode = SeqSubmode::kSong;
+            c.app.rec_mode = false;
+            c.app.last_action = "SONG MODE";
+        } else {
+            c.app.seq_submode = SeqSubmode::kMatrix;
+            c.app.rec_mode = false;
+            c.app.last_action = "MATRIX SEQ";
         }
-        c.app.last_action = c.app.rec_mode ? "REC EXPANDED" : "SEQ OVERVIEW";
     }});
     add(Action{"SEQ.ADD_TRACK_SINGLE", "ADD TRK", [](UiContext& c) {
         const int act = c.audio.getActiveRowCount();
@@ -256,6 +288,12 @@ ActionRegistry::ActionRegistry() {
         }
     }});
     add(Action{"SEQ.CLEAR_STEP", "DEL", [](UiContext& c) {
+        if (c.app.seq_submode == SeqSubmode::kSong) {
+            auto& cur_s = c.app.song_chain[c.app.song_cursor_row];
+            cur_s.repeats = (cur_s.repeats <= 1) ? 16 : (cur_s.repeats - 1);
+            c.app.last_action = "REPEAT DEC";
+            return;
+        }
         if (c.app.rec_mode) {
             c.audio.clearStep(c.app.selected_track, c.app.cursor_step);
         } else if (c.app.cursor_row < c.audio.getActiveRowCount()) {
@@ -474,7 +512,11 @@ ActionRegistry::ActionRegistry() {
 
     // ---------------- Перемикання вкладок ----------------
     add(Action{"TAB.L1", "TAB.L1", [](UiContext& c) {
-        c.app.active_view = ViewId::kSeq;
+        if (c.app.active_view != ViewId::kSeq) {
+            c.app.active_view = ViewId::kSeq;
+        } else {
+            ActionRegistry::instance().run("SEQ.REC_TOGGLE", c);
+        }
     }});
     add(Action{"TAB.L2", "TAB.L2", [](UiContext& c) {
         c.app.active_view = ViewId::kSynth;
@@ -552,8 +594,16 @@ ActionRegistry::ActionRegistry() {
 
     // ---------------- Модальні вікна (INSPECT) ----------------
     add(Action{"INSPECT.OPEN", "INSPECT", [](UiContext& c) {
-        if (c.app.active_view == ViewId::kSeq && c.app.cursor_row < c.audio.getActiveRowCount()) {
-            c.app.step_inspector_open = true;
+        if (c.app.active_view == ViewId::kSeq) {
+            if (c.app.seq_submode == SeqSubmode::kSong) {
+                auto& cur_s = c.app.song_chain[c.app.song_cursor_row];
+                cur_s.repeats = (cur_s.repeats >= 16) ? 1 : (cur_s.repeats + 1);
+                c.app.last_action = "REPEAT INC";
+                return;
+            }
+            if (c.app.cursor_row < c.audio.getActiveRowCount()) {
+                c.app.step_inspector_open = true;
+            }
         }
     }});
     add(Action{"INSPECT.CLOSE", "CLOSE", [](UiContext& c) {

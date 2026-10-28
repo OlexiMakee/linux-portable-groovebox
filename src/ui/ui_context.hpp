@@ -38,6 +38,19 @@ inline constexpr const char* kViewNames[kViewCount] = {
     "SEQ", "SYNTH", "PERF", "FX", "MIX", "SAMPLE", "SYS", "ARP", "INSPECT"
 };
 
+enum class SeqSubmode : uint8_t {
+    kMatrix = 0,    // 1. Matrix Sequencer (16-track matrix overview)
+    kPianoRoll,     // 2. Piano Roll / REC Mode (per-note lanes)
+    kSong           // 3. Song Mode (pattern chain arranger)
+};
+
+struct SongStep {
+    uint8_t bank = 0;       // 0..7 (A..H)
+    uint8_t pattern = 0;    // 0..15 (01..16)
+    uint8_t repeats = 1;    // 1..16 (x1..x16)
+    bool enabled = true;
+};
+
 inline constexpr const char* viewName(ViewId v) {
     return kViewNames[static_cast<int>(v)];
 }
@@ -58,6 +71,20 @@ struct AppModel {
     int cursor_step = 0;    // 0..127
     int seq_scroll_step = 0;// плавний горизонтальний скрол секвенсера по кроку
     bool rec_mode = false;  // Режим розгортання доріжки (Piano Roll / Drum Lanes)
+    SeqSubmode seq_submode = SeqSubmode::kMatrix; // Цикл L1: SEQ -> Piano Roll -> Song Mode
+    int song_cursor_row = 0;
+    int song_play_step = 0;
+    int song_play_repeat = 0;
+    std::array<SongStep, 16> song_chain = []() {
+        std::array<SongStep, 16> sc{};
+        for (int i = 0; i < 16; ++i) {
+            sc[i].bank = 0;
+            sc[i].pattern = i;
+            sc[i].repeats = 1;
+            sc[i].enabled = (i < 4);
+        }
+        return sc;
+    }();
     int rec_cursor_lane = 0;// 0..7 (Drum Lanes) або 0..11 (Piano Roll Semitones)
     int rec_octave = 3;     // Октава піанорола 1..8 (C1..C8)
     uint32_t voice_limit_alert_until_ms = 0; // Показ червоного попередження "VOICE LIMIT: MAX 4"

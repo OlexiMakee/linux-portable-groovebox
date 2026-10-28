@@ -204,7 +204,7 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
         const int act_tracks = c.audio.getActiveRowCount();
         for (int t = 0; t < act_tracks && t < kMaxTracks; ++t) {
             const int mx = area.x + 32 + t * 14;
-            if (mx + 10 >= area.x + area.w - 26) break; // Захист від наїзду на Master
+            if (mx + 10 >= area.x + area.w - 58) break; // Захист від наїзду на FX + Master
             widgets::verticalMeter(cv, Rect{mx, lower_y + 2, 8, 14}, c.tel.track_levels[t]);
             char tb[4];
             std::snprintf(tb, sizeof(tb), "%d", t + 1);
@@ -212,8 +212,19 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
             cv.text(mx + 1, lower_y + 17, tb, is_muted ? palette::kGridDim : palette::kTextDim);
         }
 
-        // 3. Справа: Master L та R вертикальні міні-VU
+        // 3. Send FX meters (DLY, REV, CHR) directly to the left of Master VU
         const int mst_x = area.x + area.w - 24;
+        const int fx_x = mst_x - 32;
+        widgets::verticalMeter(cv, Rect{fx_x, lower_y + 2, 7, 14}, c.tel.send_delay);
+        cv.text(fx_x + 1, lower_y + 17, "D", palette::kAccentCyan);
+
+        widgets::verticalMeter(cv, Rect{fx_x + 10, lower_y + 2, 7, 14}, c.tel.send_reverb);
+        cv.text(fx_x + 11, lower_y + 17, "R", palette::kAccentPurple);
+
+        widgets::verticalMeter(cv, Rect{fx_x + 20, lower_y + 2, 7, 14}, c.tel.send_chorus);
+        cv.text(fx_x + 21, lower_y + 17, "C", palette::kLevelOk);
+
+        // 4. Справа: Master L та R вертикальні міні-VU
         widgets::verticalMeter(cv, Rect{mst_x, lower_y + 2, 8, 14}, c.tel.vu_left);
         widgets::verticalMeter(cv, Rect{mst_x + 10, lower_y + 2, 8, 14}, c.tel.vu_right);
         cv.text(mst_x + 1, lower_y + 17, "MST", palette::kAccentOrange);
@@ -317,6 +328,24 @@ constexpr const char* kNoteNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G
 } // namespace
 
 void SeqView::navigate(UiContext& c, int dx, int dy, bool coarse) {
+    if (c.app.seq_submode == SeqSubmode::kSong) {
+        if (dy != 0) {
+            c.app.song_cursor_row = std::clamp(c.app.song_cursor_row + dy, 0, 15);
+            auto& cur_s = c.app.song_chain[c.app.song_cursor_row];
+            c.app.pattern_mgr.switchPatternNow(cur_s.bank, cur_s.pattern, c.audio, c.app.bpm);
+        }
+        if (dx != 0) {
+            auto& cur_s = c.app.song_chain[c.app.song_cursor_row];
+            int pat_total = cur_s.bank * 16 + cur_s.pattern;
+            pat_total = (pat_total + dx * (coarse ? 16 : 1) + 128) % 128;
+            cur_s.bank = static_cast<uint8_t>(pat_total / 16);
+            cur_s.pattern = static_cast<uint8_t>(pat_total % 16);
+            c.app.pattern_mgr.switchPatternNow(cur_s.bank, cur_s.pattern, c.audio, c.app.bpm);
+            c.app.last_action = "PAT CHANGED";
+        }
+        return;
+    }
+
     if (c.app.rec_mode) {
         const int t = c.app.selected_track;
         const int max_lanes = 12;
@@ -384,6 +413,11 @@ void SeqView::navigate(UiContext& c, int dx, int dy, bool coarse) {
 }
 
 std::string SeqView::focusId(const UiContext& c) const {
+    if (c.app.seq_submode == SeqSubmode::kSong) {
+        char b[24];
+        std::snprintf(b, sizeof(b), "SONG.S%02d", c.app.song_cursor_row + 1);
+        return b;
+    }
     if (c.app.cursor_row >= c.audio.getActiveRowCount()) return "SEQ.ADD";
     char b[24];
     std::snprintf(b, sizeof(b), "SEQ.R%02d.S%03d", c.app.cursor_row + 1, c.app.cursor_step + 1);
@@ -406,6 +440,50 @@ void SeqView::tick(UiContext& c) {
 }
 
 void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
+    if (c.app.seq_submode == SeqSubmode::kSong) {
+        char hdr[96];
+        const auto& cur_step = c.app.song_chain[c.app.song_cursor_row];
+        std::snprintf(hdr, sizeof(hdr), "SONG MODE | STEP %02d/16: %c%02d x%d | L1: EXIT TO SEQ",
+                      c.app.song_cursor_row + 1, 'A' + cur_step.bank, cur_step.pattern + 1, cur_step.repeats);
+        cv.text(area.x + 4, area.y + 3, hdr, palette::kAccentCyan);
+
+        // Render 16 song steps in two columns of 8
+        const int col_w = (area.w - 24) / 2;
+        const int row_h = 18;
+        const int start_y = area.y + kHeaderH + 4;
+
+        for (int i = 0; i < 16; ++i) {
+            const int col = i / 8;
+            const int row = i % 8;
+            const int x = area.x + 8 + col * (col_w + 8);
+            const int y = start_y + row * (row_h + 3);
+            const bool is_cursor = (i == c.app.song_cursor_row);
+            const bool is_playing = (c.app.transport_playing && i == c.app.song_play_step);
+            const auto& step = c.app.song_chain[i];
+
+            if (is_cursor) {
+                cv.fill(x, y, col_w, row_h, palette::kHeaderSel);
+                cv.rect(x, y, col_w, row_h, palette::kAccentCyan);
+            } else {
+                cv.fill(x, y, col_w, row_h, ColorRGB{16, 16, 22});
+                cv.rect(x, y, col_w, row_h, ColorRGB{32, 32, 44});
+            }
+
+            char step_lbl[48];
+            std::snprintf(step_lbl, sizeof(step_lbl), "%s%02d: %c%02d x%-2d [%s]",
+                          is_playing ? ">" : " ", i + 1, 'A' + step.bank, step.pattern + 1, step.repeats,
+                          step.enabled ? "PLAY" : "SKIP");
+            ColorRGB txt_col = is_cursor ? palette::kAccentCyan : (step.enabled ? (is_playing ? palette::kLevelOk : palette::kTextMain) : palette::kTextDim);
+            cv.text(x + 4, y + 4, step_lbl, txt_col);
+        }
+
+        // Help bar at bottom of Song Mode
+        const int help_y = area.y + area.h - 14;
+        cv.line(area.x + 4, help_y - 2, area.x + area.w - 4, help_y - 2, palette::kGridDim);
+        cv.text(area.x + 8, help_y, "D-PAD: STEP/PAT | X/B: REPEATS | A: ON/OFF | L1: SEQ", palette::kTextDim);
+        return;
+    }
+
     if (c.app.rec_mode) {
         const int t = c.app.selected_track;
         const auto tp = c.audio.getTrackParams(t);
