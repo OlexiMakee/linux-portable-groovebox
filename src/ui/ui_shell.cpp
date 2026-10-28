@@ -125,11 +125,9 @@ void UiShell::renderTabBar(Canvas& cv, const UiContext& ctx) {
 
         // Перевіряємо чи активне одне з вікон цього слота
         bool is_active = false;
-        IView* active_in_slot = nullptr;
         for (ViewId vid : slot.views) {
             if (ctx.app.active_view == vid) {
                 is_active = true;
-                active_in_slot = findView(vid);
                 break;
             }
         }
@@ -142,37 +140,67 @@ void UiShell::renderTabBar(Canvas& cv, const UiContext& ctx) {
         else if (slot.key_label == "[R1]") is_held = ctx.in.r1;
         else if (slot.key_label == "[G]")  is_held = ctx.in.btn_fn;
 
-        // Формуємо підпис: наприклад "[L1] SYNTH" або "[R2] MIX/FX"
+        // Формуємо підпис: наприклад "[L1]son<SEQ>rol" або "[L2]fx<SYN>mod"
         std::string title = slot.key_label;
+        ColorRGB slot_accent = palette::kAccentOrange;
         if (ctx.in.btn_select) {
             if (slot.key_label == "[L1]") title += " INSP";
             else if (slot.key_label == "[L2]") title += " ARP";
             else if (slot.key_label == "[R2]") title += " SCOPE";
             else if (slot.key_label == "[R1]") title += " PERF";
-            else if (slot.key_label == "[G]")  title += " SYS";
+            else if (slot.key_label == "[G]")  title += "SYS";
+            slot_accent = palette::kParamTrig;
         } else if (slot.key_label == "[L1]") {
-            title += ctx.app.rec_mode ? " REC" : " SEQ";
+            if (ctx.app.seq_submode == SeqSubmode::kPianoRoll) {
+                title += "seq<ROL>son";
+                slot_accent = palette::kParamTrig; // Жовтий
+            } else if (ctx.app.seq_submode == SeqSubmode::kSong) {
+                title += "rol<SON>seq";
+                slot_accent = palette::kLevelWarnClip; // Червоний
+            } else {
+                title += "son<SEQ>rol";
+                slot_accent = palette::kAccentOrange; // Помаранчевий
+            }
+        } else if (slot.key_label == "[L2]") {
+            if (ctx.app.synth_submode == SynthSubmode::kMod) {
+                title += "syn<MOD>fx";
+                slot_accent = palette::kAccentPurple; // Фіолетовий
+            } else if (ctx.app.synth_submode == SynthSubmode::kFx) {
+                title += "mod<FX>syn";
+                slot_accent = palette::kLevelOk; // Зелений
+            } else {
+                title += "fx<SYN>mod";
+                slot_accent = palette::kAccentCyan; // Неоново-блакитний
+            }
         } else if (slot.key_label == "[R2]") {
-            if (ctx.app.active_view == ViewId::kFx) title += " FX/MIX";
-            else title += " MIX/FX";
-        } else if (is_active && active_in_slot) {
-            title += " " + active_in_slot->tabTitle(ctx);
-        } else if (!slot.views.empty()) {
-            IView* v0 = findView(slot.views[0]);
-            if (v0) title += " " + v0->tabTitle(ctx);
+            if (ctx.app.mix_submode == MixSubmode::kSend) {
+                title += "mix<SND>mstr";
+                slot_accent = palette::kAccentPurple; // Бузковий
+            } else if (ctx.app.mix_submode == MixSubmode::kMaster) {
+                title += "snd<MSTR>mix";
+                slot_accent = palette::kAccentOrange; // Золотистий
+            } else {
+                title += "mstr<MIX>snd";
+                slot_accent = palette::kAccentCyan; // Ціан
+            }
+        } else if (slot.key_label == "[R1]") {
+            title += "SAMPLE";
+            slot_accent = palette::kAccentCyan;
+        } else if (slot.key_label == "[G]") {
+            title += "SYS";
+            slot_accent = palette::kAccentOrange;
         }
 
         const int text_w = Canvas::textWidth(title);
         const int text_x = tx + (tw - text_w) / 2;
 
         if (is_active) {
-            ColorRGB accent = active_in_slot ? active_in_slot->accent() : palette::kAccentOrange;
-            if (ctx.app.active_view == ViewId::kFx) accent = palette::kAccentPurple;
+            ColorRGB accent = slot_accent;
             if (ctx.in.btn_select) accent = palette::kParamTrig;
             cv.fill(tx + 1, 1, tw - 2, kTabBarH - 3, accent);
             cv.text(text_x, 5, title, palette::kBgDark);
         } else if (is_held) {
-            cv.fill(tx + 1, 1, tw - 2, kTabBarH - 3, palette::kAccentCyan);
+            cv.fill(tx + 1, 1, tw - 2, kTabBarH - 3, slot_accent);
             cv.text(text_x, 5, title, palette::kBgDark);
         } else if (ctx.in.btn_select) {
             cv.rect(tx + 1, 1, tw - 2, kTabBarH - 3, palette::kParamTrig);

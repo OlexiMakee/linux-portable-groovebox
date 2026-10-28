@@ -32,7 +32,7 @@ void setupAppLayout(UiShell& shell) {
             switch (tp.engine) {
                 case EngineType::kDx7:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.P1", "TRK.RND"}},
+                        {"INST",  {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.P1", "TRK.RND"}},
                         {"DX7",   {"TRK.P5", "TRK.P6", "TRK.P3", "TRK.P4"}},
                         {"TIMBRE",{"TRK.P2", "TRK.GLIDE", "FX.CHR_MIX", "FX.DRIVE"}},
                         {"LPF",   {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
@@ -44,7 +44,7 @@ void setupAppLayout(UiShell& shell) {
                     };
                 case EngineType::kAcid303:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.P6", "TRK.RND"}},
+                        {"INST",  {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.P6", "TRK.RND"}},
                         {"303",   {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4"}},
                         {"ACID",  {"TRK.P5", "TRK.GLIDE", "FX.DRIVE", "FX.DRV_TONE"}},
                         {"LPF",   {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
@@ -55,7 +55,7 @@ void setupAppLayout(UiShell& shell) {
                     };
                 case EngineType::kFm2Op:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.GLIDE", "TRK.RND"}},
+                        {"INST",  {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.GLIDE", "TRK.RND"}},
                         {"2-OP",  {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P5"}},
                         {"MOD",   {"TRK.P4", "TRK.P6", "FX.CHR_MIX", "FX.DRIVE"}},
                         {"LPF",   {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
@@ -67,7 +67,7 @@ void setupAppLayout(UiShell& shell) {
                     };
                 case EngineType::kChordPad:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.GLIDE", "TRK.RND"}},
+                        {"INST",  {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.GLIDE", "TRK.RND"}},
                         {"CHORD", {"TRK.P3", "TRK.P5", "TRK.P1", "TRK.P2"}},
                         {"COLOR", {"FX.CHR_MIX", "FX.CHR_RATE", "FX.DRIVE", "TRK.P6"}},
                         {"LPF",   {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
@@ -79,7 +79,7 @@ void setupAppLayout(UiShell& shell) {
                     };
                 case EngineType::kSampleOneShot:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.P2", "TRK.RND"}},
+                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.GAIN_OVER", "TRK.P2", "TRK.RND"}},
                         {"SMPL",  {"TRK.P3", "TRK.P4", "TRK.P5", "TRK.P6"}},
                         {"COLOR", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.GLIDE"}},
                         {"LPF",   {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
@@ -91,7 +91,7 @@ void setupAppLayout(UiShell& shell) {
                     };
                 case EngineType::kSliceSampler:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.P3", "TRK.RND"}},
+                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.GAIN_OVER", "TRK.P3", "TRK.RND"}},
                         {"SMPL",  {"TRK.P2", "TRK.P4", "TRK.P5", "TRK.P6"}},
                         {"COLOR", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.GLIDE"}},
                         {"LPF",   {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
@@ -103,7 +103,7 @@ void setupAppLayout(UiShell& shell) {
                     };
                 case EngineType::kMidiOut:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.P1", "TRK.P6"}},
+                        {"INST",  {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.P1", "TRK.P6"}},
                         {"CC_A",  {"TRK.P2", "TRK.P3"}},
                         {"CC_B",  {"TRK.P4", "TRK.P5"}},
                         {"SEND",  {"TRK.PAN", "TRK.LVL"}}
@@ -111,7 +111,7 @@ void setupAppLayout(UiShell& shell) {
                 case EngineType::kVaMono:
                 default:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.GLIDE", "TRK.RND"}},
+                        {"INST",  {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.GLIDE", "TRK.RND"}},
                         {"OSC",   {"TRK.P5", "TRK.P6", "TRK.P1", "TRK.P2"}},
                         {"COLOR", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.P3"}},
                         {"LPF",   {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
@@ -269,11 +269,11 @@ void setupAppLayout(UiShell& shell) {
     // Вкладка R1: Робоча станція семплювання (SAMPLE). Живий PERF викликається через SELECT + R1!
     // =========================================================================
     shell.setTabSlots({
-        TabSlot{"[L1]", {ViewId::kSeq}, 70},
-        TabSlot{"[L2]", {ViewId::kSynth}, 70},
-        TabSlot{"[R2]", {ViewId::kMix, ViewId::kFx}, 70},
-        TabSlot{"[R1]", {ViewId::kSample}, 70},
-        TabSlot{"[G]",  {ViewId::kSys}, 40}
+        TabSlot{"[L1]", {ViewId::kSeq}, 72},
+        TabSlot{"[L2]", {ViewId::kSynth}, 72},
+        TabSlot{"[R2]", {ViewId::kMix, ViewId::kFx}, 72},
+        TabSlot{"[R1]", {ViewId::kSample}, 72},
+        TabSlot{"[G]",  {ViewId::kSys}, 32}
     });
 }
 

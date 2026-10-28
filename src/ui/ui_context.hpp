@@ -42,9 +42,21 @@ inline constexpr const char* kViewNames[kViewCount] = {
 };
 
 enum class SeqSubmode : uint8_t {
-    kMatrix = 0,    // 1. Matrix Sequencer (16-track matrix overview)
-    kPianoRoll,     // 2. Piano Roll / REC Mode (per-note lanes)
-    kSong           // 3. Song Mode (pattern chain arranger)
+    kMatrix = 0,    // 1. Matrix Sequencer (16-track matrix overview: son<SEQ>rol)
+    kPianoRoll,     // 2. Piano Roll / Note Editor (seq<ROL>son)
+    kSong           // 3. Song Mode / Pattern Arranger (rol<SON>seq)
+};
+
+enum class SynthSubmode : uint8_t {
+    kSynth = 0,     // 1. Synth Sound Engine Parameters (fx<SYN>mod)
+    kMod,           // 2. Modulation Matrix: 4 LFOs, 2 ADSRs, Sticks (syn<MOD>fx)
+    kFx             // 3. Per-Track FX Chain (mod<FX>syn)
+};
+
+enum class MixSubmode : uint8_t {
+    kMix = 0,       // 1. 16-channel Mixer & Bus (mstr<MIX>snd)
+    kSend,          // 2. Send FX Tracks: Delay, Reverb, Chorus (mix<SND>mstr)
+    kMaster         // 3. Mastering Bus & EQ (snd<MSTR>mix)
 };
 
 struct SongStep {
@@ -74,7 +86,9 @@ struct AppModel {
     int cursor_step = 0;    // 0..127
     int seq_scroll_step = 0;// плавний горизонтальний скрол секвенсера по кроку
     bool rec_mode = false;  // Режим розгортання доріжки (Piano Roll / Drum Lanes)
-    SeqSubmode seq_submode = SeqSubmode::kMatrix; // Цикл L1: SEQ -> Piano Roll -> Song Mode
+    SeqSubmode seq_submode = SeqSubmode::kMatrix; // Цикл L1: SEQ -> Piano Roll (ROL) -> Song Mode (SON)
+    SynthSubmode synth_submode = SynthSubmode::kSynth; // Цикл L2: SYN -> MOD -> FX
+    MixSubmode mix_submode = MixSubmode::kMix; // Цикл R2: MIX -> SND -> MSTR
     int song_cursor_row = 0;
     int song_play_step = 0;
     int song_play_repeat = 0;
