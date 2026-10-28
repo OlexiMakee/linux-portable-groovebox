@@ -843,3 +843,28 @@
   * Додано нові тести перевірки суворих меж відкриття вікон, активного ViewId, динамічних підказок HUD, скасування по кнопці B та автозакриття при перемиканні вкладок.
   * Тестовий набір розширено до **144 тестів**: 100% проходження (**144/144 PASSED [OK]**) як на робочій станції, так і на фізичному пристрої MagicX XU10.
   * Додаток зібрано та перезапущено на залізі MagicX XU10 (`10.1.1.2`, PID 112897).
+
+## [2026-10-28] Milestone 27: Model:Cycles Style GAIN/OVER Drive Curve, Dynamic 3-State Tab Cycles & Color Branding
+* **Крива GAIN / OVER за зразком Elektron Model:Cycles/Samples (src/synth_engines.hpp, src/audio_engine.cpp, src/ui/params.cpp):**
+  * Додано параметр `gain_over` (-1.0 .. +1.0, що відповідає -24 dB .. +24 dB, дефолт 0.0 = 0 dB clean normalized max) до кожного треку.
+  * Реалізовано дводіапазонну передавальну функцію:
+    * При $g \le 0.0$: чисте плавне згасання амплітуди без жодних спотворень (0 dB .. -24 dB / тиша).
+    * При $g > 0.0$: розгін у теплий синусоїдальний/гіперболічний овердрайв $\tanh(x \cdot drive)$ з компенсацією амплітуди для щільного гітарного кранчу.
+  * Відкалібровано та нормалізовано рівні мікшування ядер синтезу (VA Mono, Chord Pad, Acid 303, FM 2-Op, DX7, Sampler) для гарантованого відтворення чистого сигналу без кліпу на дефолтних налаштуваннях.
+  * Параметр `TRK.GAIN_OVER` додано у перший рядок `INST` усіх синтезаторних рушіїв у [layout.cpp](file:///Users/oleksii/Documents/XU10%20Groovebox/src/ui/layout.cpp) з динамічним відображенням `0.0 dB [CLN]` / `+X.X dB [CRUNCH]`.
+* **3-рівнева циклічна навігація вкладок та первинне скидання (src/ui/ui_context.hpp, src/ui/actions.cpp):**
+  * Створено `SynthSubmode` (`kSynth`, `kMod`, `kFx`) та `MixSubmode` (`kMix`, `kSend`, `kMaster`).
+  * Реалізовано правило першого натискання бамперів:
+    * `TAB.L1`: перше натискання завжди перемикає на головний екран матричного секвенсора `SEQ` (`kMatrix`). Наступні послідовні натискання циклічно змінюють `SEQ` $\rightarrow$ `ROL` (Piano Roll) $\rightarrow$ `SON` (Song Mode) $\rightarrow$ `SEQ`.
+    * `TAB.L2`: перше натискання відкриває головний синтезатор `SYN` (`kSynth`). Наступні — перемикають `SYN` $\rightarrow$ `MOD` $\rightarrow$ `FX` $\rightarrow$ `SYN`.
+    * `TAB.R2`: перше натискання відкриває головний мікшер `MIX` (`kMix`). Наступні — перемикають `MIX` $\rightarrow$ `SND` $\rightarrow$ `MSTR` $\rightarrow$ `MIX`.
+* **Динамічні заголовки підвкладок та кольорове брендування (src/ui/ui_shell.cpp, src/ui/layout.cpp):**
+  * Верхній рядок табів формує заголовки згідно зі специфікацією:
+    * `[L1]son<SEQ>rol` (помаранчевий `kAccentOrange`), `[L1]seq<ROL>son` (жовтий `kParamTrig`), `[L1]rol<SON>seq` (червоний `kLevelWarnClip`).
+    * `[L2]fx<SYN>mod` (ціан `kAccentCyan`), `[L2]syn<MOD>fx` (фіолетовий `kAccentPurple`), `[L2]mod<FX>syn` (зелений `kLevelOk`).
+    * `[R2]mstr<MIX>snd` (ціан `kAccentCyan`), `[R2]mix<SND>mstr` (бузковий `kAccentPurple`), `[R2]snd<MSTR>mix` (золотистий `kAccentOrange`).
+  * Ширину слотів оптимізовано для гармонійного вигляду та розміщення тексту: 72px (L1), 72px (L2), 72px (R2), 72px (R1: SAMPLE), та звужену 32px під `[G]SYS`.
+* **Верифікація та тестування на залізі:**
+  * Додано юніт-тести для перевірки дефолтного `GAIN/OVER = 0`, меж регулювання, першого натискання та циклів `L1`, `L2`, `R2`.
+  * Тестовий набір розширено до **157 тестів** (**157/157 PASSED [OK]** на macOS та на консолі Rockchip RK3326S ARM64).
+  * Додаток оновлено та запущено на MagicX XU10 (`10.1.1.2`, PID 154977).
