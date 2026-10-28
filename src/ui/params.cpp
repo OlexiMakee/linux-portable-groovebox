@@ -20,6 +20,19 @@ std::string fmtPan(float v)     {
     char b[16]; std::snprintf(b, sizeof(b), "%s%2.0f", v < 0 ? "L" : "R", std::abs(v) * 100.0f); return b;
 }
 std::string fmtHz(float v)      { char b[16]; std::snprintf(b, sizeof(b), "%4.1f HZ", v * 10.0f); return b; }
+std::string fmtBipolarPct(float v) {
+    char b[16];
+    int p = static_cast<int>(std::round(v * 100.0f));
+    std::snprintf(b, sizeof(b), "%+d%%", p);
+    return b;
+}
+std::string fmtLpf(float v) {
+    float hz = 20.0f * std::pow(1000.0f, v);
+    char b[16];
+    if (hz < 1000.0f) std::snprintf(b, sizeof(b), "%.0fHz", hz);
+    else std::snprintf(b, sizeof(b), "%.1fkHz", hz / 1000.0f);
+    return b;
+}
 std::string fmtHpf(float v) {
     if (v <= 0.005f) return "OFF";
     float hz = 20.0f * std::pow(800.0f, v);
@@ -421,10 +434,20 @@ ParamRegistry::ParamRegistry() {
     add(trackEnum<StickDest>("STICK.RX", "R-STK X", S, [](TrackParameters& t) -> StickDest& { return t.stick_right_x; }, destName));
     add(trackEnum<StickDest>("STICK.RY", "R-STK Y", S, [](TrackParameters& t) -> StickDest& { return t.stick_right_y; }, destName));
 
-    // ===== TRK.* (обраний трек) та T1..T4.* (фіксований трек для MIX) — рівні та посили =====
+    // ===== TRK.* (обраний трек) та T1..T4.* (фіксований трек для MIX) — фільтри, рівні та посили =====
     for (int t = -1; t < kTracksCount; ++t) {
         const std::string pre = (t < 0) ? "TRK." : ("T" + std::to_string(t + 1) + ".");
-        add(trackFloat(pre + "HPF", "HPF (LC)", t, [](TrackParameters& x) -> float& { return x.hpf_cutoff; }, 0.0f, 1.0f, 0.02f, fmtHpf));
+        add(trackFloat(pre + "LPF_CUT", "LP CUT", t, [](TrackParameters& x) -> float& { return x.lpf_cutoff; }, 0.02f, 0.98f, 0.02f, fmtLpf));
+        add(trackFloat(pre + "LPF_RES", "LP RES", t, [](TrackParameters& x) -> float& { return x.lpf_resonance; }, 0.0f, 0.95f, 0.02f, fmtPct));
+        add(trackFloat(pre + "LPF_ENV", "LP ENV", t, [](TrackParameters& x) -> float& { return x.lpf_env; }, -1.0f, 1.0f, 0.05f, fmtBipolarPct));
+        add(trackFloat(pre + "LPF_DEC", "LP DEC", t, [](TrackParameters& x) -> float& { return x.lpf_decay; }, 0.01f, 2.5f, 0.05f, fmtMs));
+
+        add(trackFloat(pre + "HPF_CUT", "HP CUT", t, [](TrackParameters& x) -> float& { return x.hpf_cutoff; }, 0.0f, 0.98f, 0.02f, fmtHpf));
+        add(trackFloat(pre + "HPF_RES", "HP RES", t, [](TrackParameters& x) -> float& { return x.hpf_resonance; }, 0.0f, 0.95f, 0.02f, fmtPct));
+        add(trackFloat(pre + "HPF_ENV", "HP ENV", t, [](TrackParameters& x) -> float& { return x.hpf_env; }, -1.0f, 1.0f, 0.05f, fmtBipolarPct));
+        add(trackFloat(pre + "HPF_DEC", "HP DEC", t, [](TrackParameters& x) -> float& { return x.hpf_decay; }, 0.01f, 2.5f, 0.05f, fmtMs));
+
+        add(trackFloat(pre + "HPF", "HP CUT", t, [](TrackParameters& x) -> float& { return x.hpf_cutoff; }, 0.0f, 0.98f, 0.02f, fmtHpf));
         add(trackFloat(pre + "LVL", "LEVEL", t, [](TrackParameters& x) -> float& { return x.level; }, 0.0f, 1.0f, 0.02f, fmtPct));
         add(trackFloat(pre + "PAN", "PAN", t, [](TrackParameters& x) -> float& { return x.pan; }, -1.0f, 1.0f, 0.05f, fmtPan));
         add(trackFloat(pre + "DLY", "DLY SND", t, [](TrackParameters& x) -> float& { return x.delay_send; }, 0.0f, 1.0f, 0.02f, fmtPct));
