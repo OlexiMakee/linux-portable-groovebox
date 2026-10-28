@@ -725,7 +725,19 @@ static void testInputRouterAndStepEditor() {
     TEST_ASSERT(audio.getStep(0, 0).enabled == true && audio.getStep(0, 0).note == 48, "REC Piano Roll sets C note 48 on Sampler track");
 
     // Тестування чанкового парсера WAV та відтворення семплу доріжки
-    bool load_ok = audio.sampler().loadWavFile("res/samples/drums/01_tr808/bd.wav", audio.sampler().trackSample(0));
+    static const char* kTestWavCandidates[] = {
+        "/storage/roms/groovebox/samples/drums/01_tr808/bd.wav",
+        "/storage/dev/groovebox/res/samples/drums/01_tr808/bd.wav",
+        "res/samples/drums/01_tr808/bd.wav",
+        "../res/samples/drums/01_tr808/bd.wav"
+    };
+    bool load_ok = false;
+    for (const char* kp : kTestWavCandidates) {
+        if (audio.sampler().loadWavFile(kp, audio.sampler().trackSample(0))) {
+            load_ok = true;
+            break;
+        }
+    }
     TEST_ASSERT(load_ok && audio.sampler().trackSample(0).loaded, "Chunk-based WAV parser loads 01_tr808/bd.wav successfully");
 
     // Перевірка синтезу аудіо: переконуємося, що семплер виводить ненульовий звук
