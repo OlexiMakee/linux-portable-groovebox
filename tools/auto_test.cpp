@@ -259,6 +259,18 @@ static void testSequencerOperations() {
     TEST_ASSERT(audio.getStepChordNote(0, 0, 2) == 55, "Chord voice 3 is 55 (G3)");
     TEST_ASSERT(audio.getStepChordNote(0, 0, 3) == 59, "Chord voice 4 is 59 (B3)");
 
+    // 5. Gate length discrete 1..128 steps
+    auto step0 = audio.getStep(0, 0);
+    step0.gate_len = 4.0f;
+    audio.setStep(0, 0, step0);
+    TEST_ASSERT(audio.getStep(0, 0).gate_len == 4.0f, "Step gate length set to 4 discrete steps");
+
+    // 6. HPF та LFO Multiplier параметри в ParamRegistry
+    const Param* hpf_p = ParamRegistry::instance().find("TRK.HPF");
+    TEST_ASSERT(hpf_p != nullptr, "TRK.HPF parameter registered in registry");
+    const Param* lfo_mult = ParamRegistry::instance().find("LFO1.MULT");
+    TEST_ASSERT(lfo_mult != nullptr, "LFO1.MULT parameter registered in registry");
+
     audio.stop();
 }
 
@@ -309,27 +321,20 @@ static void testInputRouterAndStepEditor() {
     app.step_inspector_open = false;
 
     current_in = InputState{};
-    current_in.btn_a = true;
-    current_in.a_pressed = true;
+    current_in.btn_x = true;
+    current_in.x_pressed = true;
     ctx.now_ms = 2000;
-    router.processInput(ctx); // press
-    current_in.a_pressed = false;
+    router.processInput(ctx); // press X opens step editor
+    current_in.x_pressed = false;
+    TEST_ASSERT(app.step_inspector_open == true, "Pressing X in sequencer opens Step Editor");
 
-    // t=2250: Hold (>=200ms) відкриває Step Editor
-    ctx.now_ms = 2250;
+    // Закриття Step Editor по кнопці B
+    current_in = InputState{};
+    current_in.btn_b = true;
+    current_in.b_pressed = true;
+    ctx.now_ms = 2100;
     router.processInput(ctx);
-    TEST_ASSERT(app.step_inspector_open == true, "Holding A in sequencer opens Step Editor");
-
-    // t=2400..2600: продовжуємо утримувати A у відкритому Step Editor
-    ctx.now_ms = 2500;
-    router.processInput(ctx);
-    ctx.now_ms = 2600;
-    router.processInput(ctx);
-
-    // Перевіряємо, що автоповтор PARAM.DEC НЕ спрацював під час утримання A!
-    auto st = audio.getStep(app.cursor_row, app.cursor_step);
-    TEST_ASSERT(st.note == 36 || st.note == 48 || st.note == 60, "Holding A in Step Editor DOES NOT accidentally decrement parameter values");
-    app.step_inspector_open = false; // закриваємо після тесту
+    TEST_ASSERT(app.step_inspector_open == false, "Pressing B in Step Editor closes it");
 
     // 3. Тестування плавного горизонтального скролу сітки
     SeqView seq_v;
@@ -353,6 +358,30 @@ static void testInputRouterAndStepEditor() {
     TEST_ASSERT(app.rec_mode == true, "SEQ.REC_TOGGLE enables rec_mode");
     ActionRegistry::instance().run("SEQ.REC_TOGGLE", ctx);
     TEST_ASSERT(app.rec_mode == false, "SEQ.REC_TOGGLE disables rec_mode back to SEQ");
+
+    // 4b. Тестування поліфонії 4 нот у Piano Roll та попередження про ліміт
+    app.rec_mode = true;
+    app.selected_track = 0;
+    app.cursor_step = 0;
+    app.rec_octave = 3;
+    audio.clearStep(0, 0);
+
+    for (int l = 0; l < 4; ++l) {
+        app.rec_cursor_lane = l;
+        ActionRegistry::instance().run("SEQ.TRIG", ctx);
+    }
+    auto poly_st = audio.getStep(0, 0);
+    TEST_ASSERT(poly_st.enabled == true, "Piano roll creates enabled chord step");
+    int poly_cnt = 0;
+    for (int i = 0; i < 4; ++i) if (poly_st.chord_notes[i] != 255) poly_cnt++;
+    TEST_ASSERT(poly_cnt == 4, "Piano roll packs 4 chord voices into step");
+
+    // Спроба додати 5-й голос
+    app.rec_cursor_lane = 5;
+    ActionRegistry::instance().run("SEQ.TRIG", ctx);
+    TEST_ASSERT(app.last_action == "VOICE LIMIT: MAX 4", "Attempting 5th note triggers VOICE LIMIT: MAX 4 alert");
+    audio.clearStep(0, 0); // Очищаємо після тесту щоб не впливати на наступні тести
+    app.rec_mode = false;
 
     // 5. Тестування швидких комбінацій SELECT
     ActionRegistry::instance().run("TAB.SEL_L2", ctx);
