@@ -255,15 +255,33 @@ void InputRouter::processInput(UiContext& ctx) {
         else if (in.down_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.DOWN", ctx);
         else if (in.left_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.PARENT", ctx);
         else if (in.right_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.CONFIRM", ctx);
-        else if (in.a_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.CONFIRM", ctx);
-        else if (in.b_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.CLOSE", ctx);
+        else if (in.a_pressed) {
+            ActionRegistry::instance().run("SAMPLE_BROWSER.CONFIRM", ctx);
+            consumed_[static_cast<int>(Button::kA)] = true;
+            consumed_[static_cast<int>(Button::kB)] = true;
+        } else if (in.b_pressed) {
+            ActionRegistry::instance().run("SAMPLE_BROWSER.CLOSE", ctx);
+            consumed_[static_cast<int>(Button::kA)] = true;
+            consumed_[static_cast<int>(Button::kB)] = true;
+        }
+        is_down_[static_cast<int>(Button::kA)] = in.btn_a;
+        is_down_[static_cast<int>(Button::kB)] = in.btn_b;
         return;
     }
     if (ctx.app.engine_menu_open) {
         if (in.up_pressed) ActionRegistry::instance().run("NAV.UP", ctx);
         else if (in.down_pressed) ActionRegistry::instance().run("NAV.DOWN", ctx);
-        else if (in.a_pressed) ActionRegistry::instance().run("ENGINE.MENU_CONFIRM", ctx);
-        else if (in.b_pressed) ActionRegistry::instance().run("ENGINE.MENU_CLOSE", ctx);
+        else if (in.a_pressed) {
+            ActionRegistry::instance().run("ENGINE.MENU_CONFIRM", ctx);
+            consumed_[static_cast<int>(Button::kA)] = true;
+            consumed_[static_cast<int>(Button::kB)] = true;
+        } else if (in.b_pressed) {
+            ActionRegistry::instance().run("ENGINE.MENU_CLOSE", ctx);
+            consumed_[static_cast<int>(Button::kA)] = true;
+            consumed_[static_cast<int>(Button::kB)] = true;
+        }
+        is_down_[static_cast<int>(Button::kA)] = in.btn_a;
+        is_down_[static_cast<int>(Button::kB)] = in.btn_b;
         return;
     }
 
@@ -314,6 +332,12 @@ void InputRouter::processInput(UiContext& ctx) {
             hold_fired_[idx] = false;
             consumed_[idx] = false;
 
+            // Блокуємо витік кнопок A/B під час кулдауну після закриття модалок
+            if (ctx.now_ms < ctx.app.modal_cooldown_until_ms && (ev.id == Button::kA || ev.id == Button::kB)) {
+                consumed_[idx] = true;
+                continue;
+            }
+
             // Якщо для кнопки є жест Tap або Hold — чекаємо, інакше викликаємо Press одразу!
             bool has_tap_or_hold = (keymap_.lookup(view, layer, ev.id, Gesture::kTap) != nullptr) ||
                                    (keymap_.lookup(view, layer, ev.id, Gesture::kHold) != nullptr);
@@ -344,6 +368,10 @@ void InputRouter::processInput(UiContext& ctx) {
 
         // Автоповтор та довге утримання для параметрів A / B (крім SEQ та STEP EDITOR)
         if (ev.is_down && (ev.id == Button::kA || ev.id == Button::kB) && view != ViewId::kSeq && view != ViewId::kInspect) {
+            if (ctx.now_ms < ctx.app.modal_cooldown_until_ms) {
+                consumed_[idx] = true;
+                continue;
+            }
             uint32_t elapsed = ctx.now_ms - press_time_ms_[idx];
             if (elapsed >= 250) {
                 // Якщо утримуємо A або B на виборі ENGINE у SYNTH — відкриваємо селектор рушіїв

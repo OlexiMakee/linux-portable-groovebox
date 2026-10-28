@@ -489,6 +489,7 @@ ActionRegistry::ActionRegistry() {
     }});
     add(Action{"ENGINE.MENU_CLOSE", "CLOSE", [](UiContext& c) {
         c.app.engine_menu_open = false;
+        c.app.modal_cooldown_until_ms = c.now_ms + 300;
         c.app.last_action = "ENGINE CLOSED";
     }});
     add(Action{"ENGINE.MENU_CONFIRM", "APPLY", [](UiContext& c) {
@@ -496,6 +497,7 @@ ActionRegistry::ActionRegistry() {
         if (c.app.engine_menu_is_add) {
             c.app.engine_menu_is_add = false;
             c.app.engine_menu_open = false;
+            c.app.modal_cooldown_until_ms = c.now_ms + 300;
             int new_idx = c.audio.addTrack(eng);
             if (new_idx >= 0) {
                 c.app.cursor_row = new_idx;
@@ -511,6 +513,7 @@ ActionRegistry::ActionRegistry() {
         tp.engine = eng;
         c.audio.setTrackParams(c.app.selected_track, tp);
         c.app.engine_menu_open = false;
+        c.app.modal_cooldown_until_ms = c.now_ms + 300;
         c.app.last_action = std::string("ENGINE: ") + getEngineTypeName(tp.engine);
         if (eng == EngineType::kSampleOneShot || eng == EngineType::kSliceSampler) {
             ActionRegistry::instance().run("SAMPLE_BROWSER.OPEN", c);
@@ -635,6 +638,7 @@ ActionRegistry::ActionRegistry() {
             c.audio.setTrackParams(t, tp);
             c.audio.triggerNote(t, 48, 0.90f);
             c.app.sample_browser_open = false;
+            c.app.modal_cooldown_until_ms = c.now_ms + 300;
             c.app.last_action = "LOADED: " + stem;
         } else {
             c.app.last_action = "ERR: LOAD FAILED";
@@ -650,11 +654,13 @@ ActionRegistry::ActionRegistry() {
             refreshSampleBrowser(c);
         } else {
             c.app.sample_browser_open = false;
+            c.app.modal_cooldown_until_ms = c.now_ms + 300;
             c.app.last_action = "BROWSER CLOSED";
         }
     }});
     add(Action{"SAMPLE_BROWSER.CLOSE", "CLOSE", [=](UiContext& c) {
         c.app.sample_browser_open = false;
+        c.app.modal_cooldown_until_ms = c.now_ms + 300;
         c.app.last_action = "BROWSER CLOSED";
     }});
     add(Action{"ARP.COMMIT", "APPLY", [](UiContext& c) {

@@ -99,6 +99,7 @@ struct AppModel {
     std::string sample_browser_dir;
     std::vector<std::string> sample_browser_items;
     int sample_browser_sel = 0;
+    uint32_t modal_cooldown_until_ms = 0; // кулдаун після закриття модалок проти випадкового витоку кнопок A/B
 
     // Короткий статус останньої дії (для HUD)
     std::string last_action = "READY";
