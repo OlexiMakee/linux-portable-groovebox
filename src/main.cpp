@@ -82,6 +82,29 @@ int main(int argc, char* argv[]) {
     uint32_t last_step_ms = SDL_GetTicks();
     int rendered_frames = 0;
 
+    auto step_sequencer = [&]() {
+        if (!app.transport_playing) return;
+        const uint32_t prev_step = app.current_step;
+        app.current_step = (app.current_step + 1) % app.pattern_length;
+        if (app.current_step == 0 && prev_step == app.pattern_length - 1 && app.seq_submode == groovebox::SeqSubmode::kSong) {
+            app.song_play_repeat++;
+            if (app.song_play_repeat >= app.song_chain[app.song_play_step].repeats) {
+                app.song_play_repeat = 0;
+                int next_step = (app.song_play_step + 1) % 16;
+                for (int attempts = 0; attempts < 16; ++attempts) {
+                    if (app.song_chain[next_step].enabled) break;
+                    next_step = (next_step + 1) % 16;
+                }
+                app.song_play_step = next_step;
+                app.song_cursor_row = next_step;
+                auto& s = app.song_chain[next_step];
+                app.pattern_mgr.switchPatternNow(s.bank, s.pattern, audio_engine, app.bpm);
+            }
+        }
+        audio_engine.triggerSequencerStep(app.current_step);
+        ui_dirty = true;
+    };
+
     // Запуск MIDI-рушія з PLL-синхронізацією 24 PPQN для зовнішнього секвенсора (Digitakt II)
     groovebox::MidiEngine midi_engine;
     midi_engine.start(
@@ -93,16 +116,18 @@ int main(int argc, char* argv[]) {
             app.transport_playing = playing;
             if (playing && reset_to_start) {
                 app.current_step = 0;
+                if (app.seq_submode == groovebox::SeqSubmode::kSong) {
+                    app.song_play_step = 0;
+                    app.song_play_repeat = 0;
+                    auto& s = app.song_chain[0];
+                    app.pattern_mgr.switchPatternNow(s.bank, s.pattern, audio_engine, app.bpm);
+                }
                 audio_engine.triggerSequencerStep(0);
             }
             ui_dirty = true;
         },
         [&]() {
-            if (app.transport_playing) {
-                app.current_step = (app.current_step + 1) % app.pattern_length;
-                audio_engine.triggerSequencerStep(app.current_step);
-                ui_dirty = true;
-            }
+            step_sequencer();
         },
         [&](int channel, uint8_t cc, float norm_val) {
             auto tp = audio_engine.getTrackParams(channel);
@@ -184,9 +209,7 @@ int main(int argc, char* argv[]) {
             const uint32_t step_interval_ms = static_cast<uint32_t>(60000.0f / (app.bpm * 4.0f));
             if (app.transport_playing && (now_ms - last_step_ms >= step_interval_ms)) {
                 last_step_ms = now_ms;
-                app.current_step = (app.current_step + 1) % app.pattern_length;
-                audio_engine.triggerSequencerStep(app.current_step);
-                ui_dirty = true;
+                step_sequencer();
             }
         }
 
