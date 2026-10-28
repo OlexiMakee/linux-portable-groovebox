@@ -28,6 +28,7 @@ struct SynthParams {
     std::atomic<float> stick_ry{0.0f};        // -0.45 .. +0.45 (raw right stick Y)
     std::atomic<float> delay_feedback{0.42f}; // Стерео-ділей фідбек
     std::atomic<float> delay_mix{0.25f};      // Рівень повернення стерео-ділею
+    std::atomic<float> delay_width{1.0f};     // -1.0 .. +1.0 (0 = mono, >0 = ping-pong L->R, <0 = ping-pong R->L)
     std::atomic<float> reverb_decay{0.50f};   // Рівень реверберації
     std::atomic<float> reverb_mix{0.20f};     // Повернення реверберації
     std::atomic<float> chorus_rate{0.80f};    // Частота хоруса (0.1..5.0 Гц)
@@ -117,6 +118,18 @@ public:
 
     // Повне скидання звуку (Panic / Kill all voices + clear delay)
     void panic();
+
+    // Соло треку (ексклюзивне соло з відновленням попередньої маски м'ютів)
+    void toggleSoloTrack(int track);
+    bool isSoloed(int track) const { return soloed_track_ == track; }
+
+    // Поточна позиція відтворення семпла для UI-візуалізатора хвилі (0.0 .. 1.0)
+    float trackPlayhead(int track) const {
+        if (track >= 0 && track < kMaxTracks) {
+            return track_playhead_[track].load(std::memory_order_relaxed);
+        }
+        return 0.0f;
+    }
 
     // Тригер ноти для конкретного голосу/рядка (row = 0..15)
     void triggerVoice(int row, int midi_note, float velocity = 0.9f, float plock_cutoff = -1.0f, bool slide = false, float gate_len = 0.60f);
@@ -208,6 +221,7 @@ private:
         float phase2 = 0.0f;
         float phase3 = 0.0f;
         float phase4 = 0.0f;
+        bool loop_forward = true;
         AdsrEnvelope amp_adsr{};
         AdsrEnvelope filter_adsr{};
         AdsrEnvelope mod_env1{};
@@ -390,6 +404,10 @@ private:
 
     std::array<std::atomic<float>, 256> scope_ring_{};
     std::atomic<uint32_t> scope_write_idx_{0};
+
+    std::array<std::atomic<float>, kMaxTracks> track_playhead_{};
+    std::array<bool, kMaxTracks> prev_mute_mask_{};
+    int soloed_track_ = -1;
 
     SamplerEngine local_sampler_;
     SamplerEngine* sampler_ptr_ = nullptr;

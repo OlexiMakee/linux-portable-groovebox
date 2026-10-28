@@ -492,6 +492,30 @@ void AudioEngine::panic() {
     for (auto& t : track_vu_) t.store(0.0f, std::memory_order_relaxed);
 }
 
+void AudioEngine::toggleSoloTrack(int track) {
+    if (track < 0 || track >= kMaxTracks) return;
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (soloed_track_ == track) {
+        // Unsolo: відновлюємо попередню маску м'ютів
+        for (int i = 0; i < kMaxTracks; ++i) {
+            tracks_[i].muted = prev_mute_mask_[i];
+        }
+        soloed_track_ = -1;
+    } else {
+        if (soloed_track_ == -1) {
+            // Зберігаємо поточну маску м'ютів перед переходом у режим соло
+            for (int i = 0; i < kMaxTracks; ++i) {
+                prev_mute_mask_[i] = tracks_[i].muted;
+            }
+        }
+        // Вмикаємо соло для обраного треку, усі інші глушимо
+        for (int i = 0; i < kMaxTracks; ++i) {
+            tracks_[i].muted = (i != track);
+        }
+        soloed_track_ = track;
+    }
+}
+
 uint32_t AudioEngine::getRowLength(int row) const {
     int r = std::clamp(row, 0, kTotalRows - 1);
     return row_lengths_[r].load(std::memory_order_relaxed);
@@ -590,7 +614,17 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
             v.amp_adsr.trigger(0.001f, 0.99f, 1.0f, sr);
             v.filter_adsr.trigger(0.001f, 0.99f, 1.0f, sr);
         } else if (tracks_[t].engine == EngineType::kSampleOneShot || tracks_[t].engine == EngineType::kSliceSampler) {
-            v.phase1 = 0.0f;
+            const auto& sb = (tracks_[t].engine == EngineType::kSampleOneShot) ? sampler().trackSample(t) : sampler().recordedSample();
+            float total_f = (sb.loaded && sb.lengthFrames() > 0) ? static_cast<float>(sb.lengthFrames()) : 1000.0f;
+            float start_f = std::clamp(tracks_[t].sample.start, 0.0f, 0.999f) * total_f;
+            float end_f = std::clamp(tracks_[t].sample.end, tracks_[t].sample.start + 0.001f, 1.0f) * total_f;
+            if (tracks_[t].sample.loop_mode == SampleLoopMode::kReverse) {
+                v.phase1 = end_f - 1.0f;
+                v.loop_forward = false;
+            } else {
+                v.phase1 = start_f;
+                v.loop_forward = true;
+            }
             v.amp_adsr.trigger(tracks_[t].attack, tracks_[t].decay, tracks_[t].sustain, sr);
             v.filter_adsr.trigger(tracks_[t].attack * 0.6f, tracks_[t].decay, tracks_[t].sustain, sr);
         } else {
@@ -1160,18 +1194,56 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                 if (tp.engine == EngineType::kSampleOneShot) {
                     const auto& sb = sampler().trackSample(t);
                     if (sb.loaded && sb.lengthFrames() > 0) {
-                        float note_pitch = static_cast<float>(v.note_num) - 48.0f + (tp.p[1] - 0.5f) * 48.0f;
+                        float total_f = static_cast<float>(sb.lengthFrames());
+                        float start_f = std::clamp(tp.sample.start, 0.0f, 0.999f) * total_f;
+                        float loop_f = std::clamp(tp.sample.loop_point, 0.0f, 0.999f) * total_f;
+                        float end_f = std::clamp(tp.sample.end, 0.001f, 1.0f) * total_f;
+                        if (end_f <= start_f) end_f = std::min(total_f, start_f + 10.0f);
+                        if (loop_f >= end_f) loop_f = start_f;
+
+                        float note_pitch = static_cast<float>(v.note_num) - 48.0f + tp.sample.tune + (tp.p[1] - 0.5f) * 48.0f;
                         float pitch_ratio = std::pow(2.0f, note_pitch / 12.0f);
                         float step = pitch_ratio * (static_cast<float>(sb.sample_rate) * inv_sr);
-                        uint32_t f0 = static_cast<uint32_t>(v.phase1);
-                        if (f0 + 1 < sb.lengthFrames()) {
-                            float frac = v.phase1 - static_cast<float>(f0);
-                            raw = sb.data_l[f0] + frac * (sb.data_l[f0 + 1] - sb.data_l[f0]);
+
+                        uint32_t f0 = static_cast<uint32_t>(std::clamp(v.phase1, 0.0f, total_f - 1.0f));
+                        uint32_t f1 = std::min(f0 + 1, sb.lengthFrames() - 1);
+                        float frac = v.phase1 - static_cast<float>(f0);
+                        raw = sb.data_l[f0] + frac * (sb.data_l[f1] - sb.data_l[f0]);
+
+                        if (tp.sample.loop_mode == SampleLoopMode::kOff) {
                             v.phase1 += step;
-                        } else {
-                            raw = 0.0f;
-                            v.active = false;
+                            if (v.phase1 >= end_f || v.phase1 >= total_f - 1.0f) {
+                                raw = 0.0f;
+                                v.active = false;
+                            }
+                        } else if (tp.sample.loop_mode == SampleLoopMode::kForward) {
+                            v.phase1 += step;
+                            if (v.phase1 >= end_f) {
+                                float loop_len = std::max(10.0f, end_f - loop_f);
+                                v.phase1 = loop_f + std::fmod(v.phase1 - loop_f, loop_len);
+                            }
+                        } else if (tp.sample.loop_mode == SampleLoopMode::kReverse) {
+                            v.phase1 -= step;
+                            if (v.phase1 <= loop_f) {
+                                float loop_len = std::max(10.0f, end_f - loop_f);
+                                v.phase1 = end_f - std::fmod(loop_f - v.phase1, loop_len);
+                            }
+                        } else if (tp.sample.loop_mode == SampleLoopMode::kPingPong) {
+                            if (v.loop_forward) {
+                                v.phase1 += step;
+                                if (v.phase1 >= end_f) {
+                                    v.phase1 = std::max(loop_f, end_f - (v.phase1 - end_f));
+                                    v.loop_forward = false;
+                                }
+                            } else {
+                                v.phase1 -= step;
+                                if (v.phase1 <= loop_f) {
+                                    v.phase1 = std::min(end_f, loop_f + (loop_f - v.phase1));
+                                    v.loop_forward = true;
+                                }
+                            }
                         }
+                        track_playhead_[t].store(v.phase1 / total_f, std::memory_order_relaxed);
                     } else {
                         raw = 0.0f;
                     }
@@ -1180,13 +1252,16 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                     int s_idx = std::clamp(static_cast<int>(tp.p[1] * (sampler().sliceCount() - 1) + 0.5f), 0, sampler().sliceCount() - 1);
                     SlicePoint pt = sampler().getSlice(s_idx);
                     if (sb.loaded && pt.length_frames > 0) {
-                        float pitch_ratio = std::pow(2.0f, (tp.p[2] - 0.5f) * 4.0f);
+                        float pitch_ratio = std::pow(2.0f, (tp.sample.tune / 12.0f) + (tp.p[2] - 0.5f) * 4.0f);
                         float step = pitch_ratio * (static_cast<float>(sb.sample_rate) * inv_sr);
                         uint32_t cur_f = pt.start_frame + static_cast<uint32_t>(v.phase1);
                         if (v.phase1 < static_cast<float>(pt.length_frames) && cur_f + 1 < sb.lengthFrames()) {
                             float frac = v.phase1 - static_cast<float>(static_cast<uint32_t>(v.phase1));
                             raw = sb.data_l[cur_f] + frac * (sb.data_l[cur_f + 1] - sb.data_l[cur_f]);
                             v.phase1 += step;
+                            if (sb.lengthFrames() > 0) {
+                                track_playhead_[t].store(static_cast<float>(cur_f) / sb.lengthFrames(), std::memory_order_relaxed);
+                            }
                         } else {
                             raw = 0.0f;
                             v.active = false;
@@ -1442,9 +1517,25 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                 wet_dly_r = fx_state.delay_r[r_idx];
 
                 float fbk = std::clamp(fx_p.delay_feedback, 0.0f, 0.95f);
-                fx_state.delay_l[fx_state.delay_idx] = s_l + wet_dly_r * fbk;
-                fx_state.delay_r[fx_state.delay_idx] = s_r + wet_dly_l * fbk;
+                float w = std::clamp(fx_p.delay_width, -1.0f, 1.0f);
+                float abs_w = std::abs(w);
+                float fb_l = (1.0f - abs_w) * wet_dly_l + abs_w * wet_dly_r;
+                float fb_r = (1.0f - abs_w) * wet_dly_r + abs_w * wet_dly_l;
+                float in_l = (w >= 0.0f) ? s_l : s_l * (1.0f - abs_w);
+                float in_r = (w <= 0.0f) ? s_r : s_r * (1.0f - abs_w);
+
+                fx_state.delay_l[fx_state.delay_idx] = in_l + fb_l * fbk;
+                fx_state.delay_r[fx_state.delay_idx] = in_r + fb_r * fbk;
                 fx_state.delay_idx = (fx_state.delay_idx + 1) % fx_state.delay_l.size();
+
+                float mono_tap = 0.5f * (wet_dly_l + wet_dly_r);
+                if (w >= 0.0f) {
+                    wet_dly_l = (1.0f - abs_w) * mono_tap + abs_w * wet_dly_l;
+                    wet_dly_r = (1.0f - abs_w) * mono_tap + abs_w * wet_dly_r;
+                } else {
+                    wet_dly_l = (1.0f - abs_w) * mono_tap + abs_w * wet_dly_r;
+                    wet_dly_r = (1.0f - abs_w) * mono_tap + abs_w * wet_dly_l;
+                }
             }
 
             // Parallel Reverb
@@ -1550,13 +1641,25 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             mix_r = (drive_lp_r_ * norm_gain) * drv_amt + mix_r * (1.0f - drv_amt);
         }
 
-        // Майстер стерео пінг-понг ділей
+        // Майстер стерео пінг-понг ділей з регулюванням ширини стерео
         uint32_t read_idx = (delay_idx_ + delay_buf_l_.size() - delay_len) % delay_buf_l_.size();
         float d_l = delay_buf_l_[read_idx];
         float d_r = delay_buf_r_[read_idx];
-        delay_buf_l_[delay_idx_] = std::clamp(send_l + d_r * dly_fb, -0.95f, 0.95f);
-        delay_buf_r_[delay_idx_] = std::clamp(send_r + d_l * dly_fb, -0.95f, 0.95f);
+
+        float w = std::clamp(params_.delay_width.load(std::memory_order_relaxed), -1.0f, 1.0f);
+        float abs_w = std::abs(w);
+        float fb_l = (1.0f - abs_w) * d_l + abs_w * d_r;
+        float fb_r = (1.0f - abs_w) * d_r + abs_w * d_l;
+        float in_l = (w >= 0.0f) ? send_l : send_l * (1.0f - abs_w);
+        float in_r = (w <= 0.0f) ? send_r : send_r * (1.0f - abs_w);
+
+        delay_buf_l_[delay_idx_] = std::clamp(in_l + fb_l * dly_fb, -0.95f, 0.95f);
+        delay_buf_r_[delay_idx_] = std::clamp(in_r + fb_r * dly_fb, -0.95f, 0.95f);
         delay_idx_ = (delay_idx_ + 1) % delay_buf_l_.size();
+
+        float mono_tap = 0.5f * (d_l + d_r);
+        float out_d_l = (w >= 0.0f) ? ((1.0f - abs_w) * mono_tap + abs_w * d_l) : ((1.0f - abs_w) * mono_tap + abs_w * d_r);
+        float out_d_r = (w >= 0.0f) ? ((1.0f - abs_w) * mono_tap + abs_w * d_r) : ((1.0f - abs_w) * mono_tap + abs_w * d_l);
 
         // Справжня алгоритмічна стерео реверберація Freeverb (8 Comb + 4 Allpass)
         float room_size = std::clamp(rev_dec * 0.28f + 0.70f, 0.0f, 0.98f);
@@ -1574,8 +1677,8 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
         float rv_l = out_comb_l * 0.18f;
         float rv_r = out_comb_r * 0.18f;
 
-        float m_l = mix_l + d_l * dly_mix + rv_l * rev_mix;
-        float m_r = mix_r + d_r * dly_mix + rv_r * rev_mix;
+        float m_l = mix_l + out_d_l * dly_mix + rv_l * rev_mix;
+        float m_r = mix_r + out_d_r * dly_mix + rv_r * rev_mix;
 
         // 1. Master Output GAIN / OVER
         float mg = std::clamp(local_mfx.gain_over, -1.0f, 1.0f);

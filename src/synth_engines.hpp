@@ -382,6 +382,34 @@ inline constexpr float kDelayDivMultiplier[] = {
     0.0625f, 0.125f, 0.25f, 0.5f, 0.75f, 1.0f, 2.0f, 4.0f
 };
 
+// Режими зациклення семплера (Digitakt style: OFF, FWD, REV, PING-PONG)
+enum class SampleLoopMode : uint8_t {
+    kOff = 0,     // Однократний запуск (One-shot)
+    kForward,     // Зациклення вперед (Forward Loop)
+    kReverse,     // Зациклення назад (Reverse Loop)
+    kPingPong,    // Зациклення вперед-назад (Ping-Pong Loop)
+    kCount
+};
+
+inline constexpr const char* getSampleLoopModeName(SampleLoopMode mode) {
+    switch (mode) {
+        case SampleLoopMode::kOff: return "OFF";
+        case SampleLoopMode::kForward: return "FWD";
+        case SampleLoopMode::kReverse: return "REV";
+        case SampleLoopMode::kPingPong: return "P-PONG";
+        default: return "OFF";
+    }
+}
+
+// Конфігурація відтворення семпла (Digitakt-style sample playback & looping)
+struct SampleConfig {
+    SampleLoopMode loop_mode = SampleLoopMode::kOff;
+    float start = 0.0f;       // 0.0 .. 1.0 (START point)
+    float loop_point = 0.0f;  // 0.0 .. 1.0 (LOOP point)
+    float end = 1.0f;         // 0.0 .. 1.0 (END point, default 100%)
+    float tune = 0.0f;        // -24.0 .. +24.0 semitones
+};
+
 // Індивідуальні ефекти на кожну доріжку (Per-Track FX Insert Chain)
 // Послідовність роутингу:
 // Bitcrusher -> SRR -> Distortion (Metal Zone) -> Chorus -> [PRE: SC-Comp] -> (Delay || Reverb) -> [POST: SC-Comp] -> Sends
@@ -402,10 +430,11 @@ struct TrackFxParameters {
     float chorus_rate = 0.8f;     // 0.1 .. 8.0 Hz
     float chorus_depth = 0.5f;    // 0.0 .. 1.0
 
-    // 5. Parallel Delay (Elektron proportional note divisions)
+    // 5. Parallel Delay (Elektron proportional note divisions & stereo ping-pong width)
     int delay_div = 2;            // 0: 1/64, 1: 1/32, 2: 1/16, 3: 1/8, 4: 3/16, 5: 1/4, 6: 1/2, 7: 1/1
     float delay_feedback = 0.35f; // 0.0 .. 0.95
     float delay_mix = 0.0f;       // 0.0 .. 1.0 (parallel wet level)
+    float delay_width = 1.0f;     // -1.0 .. +1.0 (0 = mono, >0 = ping-pong L->R, <0 = ping-pong R->L)
 
     // 6. Parallel Reverb
     ReverbEngine rev_engine = ReverbEngine::kPlate;
@@ -500,6 +529,9 @@ struct TrackParameters {
 
     // Індивідуальні ефекти доріжки (Per-Track Insert FX Chain)
     TrackFxParameters fx{};
+
+    // Digitakt-style sample engine parameters
+    SampleConfig sample{};
 };
 
 inline constexpr const char* kParamNames[static_cast<int>(EngineType::kCount)][kParamsPerTrack] = {
