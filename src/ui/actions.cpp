@@ -512,6 +512,7 @@ ActionRegistry::ActionRegistry() {
 
     // ---------------- Перемикання вкладок ----------------
     add(Action{"TAB.L1", "TAB.L1", [](UiContext& c) {
+        closeAllModals(c.app);
         if (c.app.active_view != ViewId::kSeq) {
             c.app.active_view = ViewId::kSeq;
         } else {
@@ -519,6 +520,7 @@ ActionRegistry::ActionRegistry() {
         }
     }});
     add(Action{"TAB.L2", "TAB.L2", [](UiContext& c) {
+        closeAllModals(c.app);
         c.app.active_view = ViewId::kSynth;
         const int act = c.audio.getActiveRowCount();
         if (c.app.cursor_row < act) {
@@ -526,6 +528,7 @@ ActionRegistry::ActionRegistry() {
         }
     }});
     add(Action{"TAB.R2", "MIX/FX", [](UiContext& c) {
+        closeAllModals(c.app);
         if (c.app.active_view == ViewId::kMix) {
             c.app.active_view = ViewId::kFx;
             c.app.last_action = "VIEW: FX";
@@ -535,10 +538,12 @@ ActionRegistry::ActionRegistry() {
         }
     }});
     add(Action{"TAB.R1", "SAMPLE", [](UiContext& c) {
+        closeAllModals(c.app);
         c.app.active_view = ViewId::kSample;
         c.app.last_action = "VIEW: SAMPLE";
     }});
     add(Action{"TAB.G", "SYS", [](UiContext& c) {
+        closeAllModals(c.app);
         if (c.app.active_view != ViewId::kSys) {
             c.app.previous_view = c.app.active_view;
             c.app.active_view = ViewId::kSys;
@@ -549,14 +554,23 @@ ActionRegistry::ActionRegistry() {
 
     // Швидкі комбінації SELECT + Shoulder (альтернативні екрани)
     add(Action{"TAB.SEL_L1", "INSPECT", [](UiContext& c) {
+        if (c.app.active_view != ViewId::kSeq) {
+            c.app.last_action = "INSPECT: SEQ ONLY";
+            return;
+        }
         c.app.step_inspector_open = !c.app.step_inspector_open;
         c.app.last_action = c.app.step_inspector_open ? "INSPECT OPEN" : "INSPECT CLOSED";
     }});
     add(Action{"TAB.SEL_L2", "ARP", [](UiContext& c) {
+        if (c.app.active_view != ViewId::kSeq) {
+            c.app.last_action = "ARP: SEQ ONLY";
+            return;
+        }
         c.app.arp_modal_open = !c.app.arp_modal_open;
         c.app.last_action = c.app.arp_modal_open ? "ARP OPENED" : "ARP CLOSED";
     }});
     add(Action{"TAB.SEL_R2", "SAMPLE", [](UiContext& c) {
+        closeAllModals(c.app);
         if (c.app.active_view == ViewId::kSample) {
             c.app.active_view = c.app.previous_view;
             c.app.last_action = "SAMPLE CLOSED";
@@ -567,6 +581,7 @@ ActionRegistry::ActionRegistry() {
         }
     }});
     add(Action{"TAB.SEL_R1", "PERF", [](UiContext& c) {
+        closeAllModals(c.app);
         if (c.app.active_view == ViewId::kPerf) {
             c.app.active_view = c.app.previous_view;
             c.app.last_action = "PERF CLOSED";
@@ -578,16 +593,13 @@ ActionRegistry::ActionRegistry() {
     }});
 
     add(Action{"VIEW.BACK", "BACK", [](UiContext& c) {
-        if (c.app.sample_browser_open) {
-            c.app.sample_browser_open = false;
-            c.app.last_action = "BROWSER CLOSED";
-        } else if (c.app.arp_modal_open) {
-            c.app.arp_modal_open = false;
-        } else if (c.app.engine_menu_open) {
-            c.app.engine_menu_open = false;
-        } else if (c.app.step_inspector_open) {
-            c.app.step_inspector_open = false;
-        } else if (c.app.active_view == ViewId::kSys || c.app.active_view == ViewId::kSample || c.app.active_view == ViewId::kPerf) {
+        if (c.app.project_modal_open || c.app.sample_browser_open || c.app.engine_menu_open ||
+            c.app.step_inspector_open || c.app.arp_modal_open) {
+            closeAllModals(c.app);
+            c.app.last_action = "MODAL CLOSED";
+            return;
+        }
+        if (c.app.active_view == ViewId::kSys || c.app.active_view == ViewId::kSample || c.app.active_view == ViewId::kPerf) {
             c.app.active_view = c.app.previous_view;
         }
     }});
@@ -650,6 +662,10 @@ ActionRegistry::ActionRegistry() {
     }});
 
     add(Action{"ARP.OPEN", "ARP", [](UiContext& c) {
+        if (c.app.active_view != ViewId::kSeq) {
+            c.app.last_action = "ARP: SEQ ONLY";
+            return;
+        }
         c.app.arp_modal_open = true;
         c.app.last_action = "ARP OPENED";
     }});
@@ -658,13 +674,27 @@ ActionRegistry::ActionRegistry() {
         c.app.last_action = "ARP CLOSED";
     }});
     add(Action{"ARP.TOGGLE", "ARP", [](UiContext& c) {
+        if (c.app.active_view != ViewId::kSeq) {
+            c.app.last_action = "ARP: SEQ ONLY";
+            return;
+        }
         c.app.arp_modal_open = !c.app.arp_modal_open;
         c.app.last_action = c.app.arp_modal_open ? "ARP OPENED" : "ARP CLOSED";
     }});
     add(Action{"ENGINE.MENU_OPEN", "ENGINES", [](UiContext& c) {
+        if (c.app.active_view != ViewId::kSeq && c.app.active_view != ViewId::kSynth) {
+            c.app.last_action = "ENGINE: SEQ/SYNTH ONLY";
+            return;
+        }
         c.app.engine_menu_open = true;
         c.app.engine_menu_sel = static_cast<int>(c.audio.getTrackParams(c.app.selected_track).engine);
         c.app.last_action = "ENGINE SELECTOR";
+    }});
+    add(Action{"ENGINE.MENU_UP", "UP", [](UiContext& c) {
+        c.app.engine_menu_sel = (c.app.engine_menu_sel - 1 + static_cast<int>(EngineType::kCount)) % static_cast<int>(EngineType::kCount);
+    }});
+    add(Action{"ENGINE.MENU_DOWN", "DOWN", [](UiContext& c) {
+        c.app.engine_menu_sel = (c.app.engine_menu_sel + 1) % static_cast<int>(EngineType::kCount);
     }});
     add(Action{"ENGINE.MENU_CLOSE", "CLOSE", [](UiContext& c) {
         c.app.engine_menu_open = false;
@@ -861,6 +891,10 @@ ActionRegistry::ActionRegistry() {
         c.app.last_action = ok ? "PROJECT SAVED" : "ERR: SAVE FAILED";
     }});
     add(Action{"PROJECT.SAVE_AS_OPEN", "SAVE AS", [](UiContext& c) {
+        if (c.app.active_view != ViewId::kSys) {
+            c.app.last_action = "PROJ: SYS ONLY";
+            return;
+        }
         c.app.project_modal_open = true;
         c.app.project_modal_is_save = true;
         c.app.project_files = PatternManager::listProjectFiles();
@@ -869,6 +903,10 @@ ActionRegistry::ActionRegistry() {
         c.app.last_action = "SAVE AS MODAL";
     }});
     add(Action{"PROJECT.LOAD_OPEN", "LOAD PROJ", [](UiContext& c) {
+        if (c.app.active_view != ViewId::kSys) {
+            c.app.last_action = "PROJ: SYS ONLY";
+            return;
+        }
         c.app.project_modal_open = true;
         c.app.project_modal_is_save = false;
         c.app.project_files = PatternManager::listProjectFiles();
@@ -889,6 +927,7 @@ ActionRegistry::ActionRegistry() {
             std::string full_path = PatternManager::projectsDirectory() + "/" + fname;
             bool ok = c.app.pattern_mgr.saveProject(full_path, c.audio, c.app.bpm);
             c.app.project_modal_open = false;
+            c.app.modal_cooldown_until_ms = c.now_ms + 300;
             c.app.last_action = ok ? ("SAVED: " + fname) : "ERR: SAVE FAILED";
         } else {
             if (!c.app.project_files.empty() && c.app.project_modal_sel < static_cast<int>(c.app.project_files.size())) {
@@ -896,12 +935,19 @@ ActionRegistry::ActionRegistry() {
                 std::string full_path = PatternManager::projectsDirectory() + "/" + fname;
                 bool ok = c.app.pattern_mgr.loadProject(full_path, c.audio, c.app.bpm);
                 c.app.project_modal_open = false;
+                c.app.modal_cooldown_until_ms = c.now_ms + 300;
                 c.app.last_action = ok ? ("LOADED: " + fname) : "ERR: LOAD FAILED";
             }
         }
     }});
     add(Action{"PROJECT.MODAL_CLOSE", "CANCEL", [](UiContext& c) {
         c.app.project_modal_open = false;
+        c.app.modal_cooldown_until_ms = c.now_ms + 300;
+        c.app.last_action = "MODAL CLOSED";
+    }});
+    add(Action{"PROJECT.MODAL_CANCEL", "CANCEL", [](UiContext& c) {
+        c.app.project_modal_open = false;
+        c.app.modal_cooldown_until_ms = c.now_ms + 300;
         c.app.last_action = "MODAL CLOSED";
     }});
     add(Action{"PROJECT.MODAL_UP", "UP", [](UiContext& c) {

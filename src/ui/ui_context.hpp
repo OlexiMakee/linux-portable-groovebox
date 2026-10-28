@@ -18,15 +18,18 @@ class UiShell;
 
 // Ідентифікатори вікон (views). Назви — у viewName(); порядок вкладок задається в layout.cpp
 enum class ViewId : uint8_t {
-    kSeq = 0,  // SEQ     — матричний секвенсор
-    kSynth,    // SYNTH   — таблиця параметрів інструмента обраного треку
-    kPerf,     // PERF    — жива гра (педи, октави, макроси)
-    kFx,       // FX      — send-ефекти та вихідна шина
-    kMix,      // MIX     — мікшер треків + MASTER
-    kSample,   // SAMPLE  — станція семплювання, візуалізація хвилі та лупер
-    kSys,      // SYS     — системні налаштування
-    kArp,      // ARP     — параметри подвійного арпеджиратора та евклідового генератора
-    kInspect,  // INSPECT — інспектор кроку (popup поверх SEQ, поки затиснута A)
+    kSeq = 0,       // SEQ     — матричний секвенсор
+    kSynth,         // SYNTH   — таблиця параметрів інструмента обраного треку
+    kPerf,          // PERF    — жива гра (педи, октави, макроси)
+    kFx,            // FX      — send-ефекти та вихідна шина
+    kMix,           // MIX     — мікшер треків + MASTER
+    kSample,        // SAMPLE  — станція семплювання, візуалізація хвилі та лупер
+    kSys,           // SYS     — системні налаштування
+    kArp,           // ARP     — параметри подвійного арпеджиратора
+    kInspect,       // INSPECT — інспектор кроку
+    kProjectModal,  // PROJECT — модальне вікно Save As / Load Project
+    kSampleBrowser, // BROWSER — пул семплів та файлова система
+    kEngineMenu,    // ENGINE  — меню вибору типу звукового рушія
     kCount
 };
 
@@ -35,7 +38,7 @@ inline constexpr ViewId kScope = ViewId::kSample;
 inline constexpr int kViewCount = static_cast<int>(ViewId::kCount);
 
 inline constexpr const char* kViewNames[kViewCount] = {
-    "SEQ", "SYNTH", "PERF", "FX", "MIX", "SAMPLE", "SYS", "ARP", "INSPECT"
+    "SEQ", "SYNTH", "PERF", "FX", "MIX", "SAMPLE", "SYS", "ARP", "INSPECT", "PROJECT", "BROWSER", "ENGINE"
 };
 
 enum class SeqSubmode : uint8_t {
@@ -147,6 +150,23 @@ struct AppModel {
     std::vector<std::string> project_files;
     int project_modal_sel = 0;
 };
+
+inline ViewId activeViewId(const AppModel& app) {
+    if (app.project_modal_open) return ViewId::kProjectModal;
+    if (app.sample_browser_open) return ViewId::kSampleBrowser;
+    if (app.engine_menu_open) return ViewId::kEngineMenu;
+    if (app.step_inspector_open) return ViewId::kInspect;
+    if (app.arp_modal_open) return ViewId::kArp;
+    return app.active_view;
+}
+
+inline void closeAllModals(AppModel& app) {
+    app.project_modal_open = false;
+    app.sample_browser_open = false;
+    app.engine_menu_open = false;
+    app.step_inspector_open = false;
+    app.arp_modal_open = false;
+}
 
 // Контекст, який отримують усі Param / Action / View (DIP: залежність від абстракції контексту)
 struct UiContext {

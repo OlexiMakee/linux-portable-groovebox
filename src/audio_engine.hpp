@@ -65,6 +65,7 @@ public:
 
     void updateRouting(int card_index, bool is_usb_48k, bool headphones_plugged);
     void adjustMasterVolume(float delta);
+    float getMasterVolume() const { return params_.master_volume.load(std::memory_order_relaxed); }
 
     // Оверрайд аудіовиходу: Auto (USB за наявності) <-> Force Internal (RK817)
     void toggleOutputOverride();
