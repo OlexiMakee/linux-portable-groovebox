@@ -125,10 +125,22 @@ Param engineParam(int idx) {
                 int p_idx = std::clamp(static_cast<int>(tp.p[0] * (c.audio.dx7().patchCount() - 1) + 0.5f), 0, c.audio.dx7().patchCount() - 1);
                 return c.audio.dx7().getPatch(p_idx).name;
             }
+            if (idx == 1) {
+                char b[16]; std::snprintf(b, sizeof(b), "%d%%", static_cast<int>(tp.p[1] * 100.0f + 0.5f)); return std::string(b);
+            }
             if (idx == 4) {
                 int a = std::clamp(static_cast<int>(tp.p[4] * 31.99f) + 1, 1, 32);
                 return "ALGO " + std::to_string(a);
             }
+            if (idx == 5) {
+                int fb = std::clamp(static_cast<int>(tp.p[5] * 7.99f), 0, 7);
+                return "FB " + std::to_string(fb);
+            }
+        }
+        if ((tp.engine == EngineType::kSampleOneShot && idx == 1) ||
+            (tp.engine == EngineType::kSliceSampler && idx == 2)) {
+            int st = static_cast<int>(std::round((tp.p[idx] - 0.5f) * 48.0f));
+            char b[16]; std::snprintf(b, sizeof(b), "%+d ST", st); return std::string(b);
         }
         return fmt127(tp.p[idx]);
     };
@@ -136,15 +148,33 @@ Param engineParam(int idx) {
     p.step = [=](UiContext& c, int dir, bool coarse) {
         const int t = trk(c, kSelectedTrack);
         auto tp = c.audio.getTrackParams(t);
-        if (tp.engine == EngineType::kDx7 && idx == 0) {
-            int total = c.audio.dx7().patchCount();
-            if (total > 0) {
-                int cur = std::clamp(static_cast<int>(tp.p[0] * (total - 1) + 0.5f), 0, total - 1);
-                int next = std::clamp(cur + dir, 0, total - 1);
-                tp.p[0] = static_cast<float>(next) / static_cast<float>(total - 1);
+        if (tp.engine == EngineType::kDx7) {
+            if (idx == 0) {
+                int total = c.audio.dx7().patchCount();
+                if (total > 0) {
+                    int cur = std::clamp(static_cast<int>(tp.p[0] * (total - 1) + 0.5f), 0, total - 1);
+                    int next = std::clamp(cur + dir, 0, total - 1);
+                    tp.p[0] = static_cast<float>(next) / static_cast<float>(total - 1);
+                    c.audio.setTrackParams(t, tp);
+                    return;
+                }
+            } else if (idx == 4) {
+                int cur = std::clamp(static_cast<int>(tp.p[4] * 31.0f + 0.5f), 0, 31);
+                tp.p[4] = static_cast<float>(std::clamp(cur + dir, 0, 31)) / 31.0f;
+                c.audio.setTrackParams(t, tp);
+                return;
+            } else if (idx == 5) {
+                int cur = std::clamp(static_cast<int>(tp.p[5] * 7.0f + 0.5f), 0, 7);
+                tp.p[5] = static_cast<float>(std::clamp(cur + dir, 0, 7)) / 7.0f;
                 c.audio.setTrackParams(t, tp);
                 return;
             }
+        } else if ((tp.engine == EngineType::kSampleOneShot && idx == 1) ||
+                   (tp.engine == EngineType::kSliceSampler && idx == 2)) {
+            int st = std::clamp(static_cast<int>(std::round((tp.p[idx] - 0.5f) * 48.0f)) + dir * (coarse ? 12 : 1), -24, 24);
+            tp.p[idx] = (static_cast<float>(st) + 24.0f) / 48.0f;
+            c.audio.setTrackParams(t, tp);
+            return;
         }
         c.audio.adjustTrackParam(t, idx, dir * (coarse ? 0.10f : 0.02f));
     };

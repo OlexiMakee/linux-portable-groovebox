@@ -261,11 +261,11 @@ inline constexpr const char* kParamNames[static_cast<int>(EngineType::kCount)][k
     // kChordPad
     {"CUTOFF", "RESO", "CHORD", "DECAY", "DETUNE", "ENV MOD"},
     // kSampleOneShot (SAMPLER)
-    {"SAMPLE", "PITCH", "DECAY", "FILTER", "DRIVE", "START"},
+    {"SAMPLE", "TUNE", "DECAY", "START", "DRIVE", "REVERSE"},
     // kSliceSampler
-    {"SAMPLE", "SLICE", "PITCH", "DECAY", "FILTER", "REVERSE"},
+    {"SAMPLE", "SLICE", "TUNE", "DECAY", "FILTER", "REVERSE"},
     // kDx7
-    {"PRESET", "CUTOFF", "BRIGHT", "DECAY", "ALGO", "FEEDBCK"},
+    {"PRESET", "DETUNE", "BRIGHT", "DECAY", "ALGO", "FEEDBCK"},
     // kMidiOut
     {"CHANNEL", "CC A", "CC B", "CC C", "CC D", "PROGRAM"}
 };

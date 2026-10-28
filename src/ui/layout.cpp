@@ -78,11 +78,22 @@ void setupAppLayout(UiShell& shell) {
                         {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
                     };
                 case EngineType::kSampleOneShot:
+                    return {
+                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.P2", "TRK.RND"}},
+                        {"SMPL",  {"TRK.P3", "TRK.P4", "TRK.P5", "TRK.P6"}},
+                        {"COLOR", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.GLIDE"}},
+                        {"LPF",   {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
+                        {"HPF",   {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
+                        {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
+                        {"LFO1",  {"LFO1.WAVE", "LFO1.RATE", "LFO1.MULT", "LFO1.DEPTH", "LFO1.DEST", "LFO1.MODE"}},
+                        {"LFO2",  {"LFO2.WAVE", "LFO2.RATE", "LFO2.MULT", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
+                        {"SEND",  {"TRK.DLY", "TRK.REV", "TRK.PAN", "TRK.LVL"}}
+                    };
                 case EngineType::kSliceSampler:
                     return {
-                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.RND"}},
-                        {"SMPL",  {"TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5"}},
-                        {"COLOR", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.P6"}},
+                        {"INST",  {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.P3", "TRK.RND"}},
+                        {"SMPL",  {"TRK.P2", "TRK.P4", "TRK.P5", "TRK.P6"}},
+                        {"COLOR", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.GLIDE"}},
                         {"LPF",   {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
                         {"HPF",   {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
                         {"ENV",   {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}},
