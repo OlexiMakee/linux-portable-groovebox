@@ -162,6 +162,35 @@ Keymap::Keymap() {
     bind(ViewId::kArp, Layer::kSelect, Button::kR3,      Gesture::kPress, "ARP.RANDOMIZE");
     bind(ViewId::kArp, Layer::kSelect, Button::kA,       Gesture::kPress, "ARP.COMMIT");
     bind(ViewId::kArp, Layer::kSelect, Button::kB,       Gesture::kPress, "ARP.CLOSE");
+
+    // =========================================================================
+    // 11. МОДАЛЬНЕ ВІКНО ПРОЄКТІВ (ViewId::kProjectModal)
+    // =========================================================================
+    bind(ViewId::kProjectModal, Layer::kBase, Button::kDpadUp,    Gesture::kPress, "PROJECT.MODAL_UP");
+    bind(ViewId::kProjectModal, Layer::kBase, Button::kDpadDown,  Gesture::kPress, "PROJECT.MODAL_DOWN");
+    bind(ViewId::kProjectModal, Layer::kBase, Button::kA,         Gesture::kPress, "PROJECT.MODAL_CONFIRM");
+    bind(ViewId::kProjectModal, Layer::kBase, Button::kB,         Gesture::kPress, "PROJECT.MODAL_CANCEL");
+    bind(ViewId::kProjectModal, Layer::kSelect, Button::kB,       Gesture::kPress, "PROJECT.MODAL_CANCEL");
+
+    // =========================================================================
+    // 12. СЕМПЛ БРАУЗЕР (ViewId::kSampleBrowser)
+    // =========================================================================
+    bind(ViewId::kSampleBrowser, Layer::kBase, Button::kDpadUp,    Gesture::kPress, "SAMPLE_BROWSER.UP");
+    bind(ViewId::kSampleBrowser, Layer::kBase, Button::kDpadDown,  Gesture::kPress, "SAMPLE_BROWSER.DOWN");
+    bind(ViewId::kSampleBrowser, Layer::kBase, Button::kDpadLeft,  Gesture::kPress, "SAMPLE_BROWSER.PARENT");
+    bind(ViewId::kSampleBrowser, Layer::kBase, Button::kDpadRight, Gesture::kPress, "SAMPLE_BROWSER.CONFIRM");
+    bind(ViewId::kSampleBrowser, Layer::kBase, Button::kA,         Gesture::kPress, "SAMPLE_BROWSER.CONFIRM");
+    bind(ViewId::kSampleBrowser, Layer::kBase, Button::kB,         Gesture::kPress, "SAMPLE_BROWSER.CLOSE");
+    bind(ViewId::kSampleBrowser, Layer::kSelect, Button::kB,       Gesture::kPress, "SAMPLE_BROWSER.CLOSE");
+
+    // =========================================================================
+    // 13. СЕЛЕКТОР ЗВУКОВОГО РУШІЯ (ViewId::kEngineMenu)
+    // =========================================================================
+    bind(ViewId::kEngineMenu, Layer::kBase, Button::kDpadUp,    Gesture::kPress, "ENGINE.MENU_UP");
+    bind(ViewId::kEngineMenu, Layer::kBase, Button::kDpadDown,  Gesture::kPress, "ENGINE.MENU_DOWN");
+    bind(ViewId::kEngineMenu, Layer::kBase, Button::kA,         Gesture::kPress, "ENGINE.MENU_CONFIRM");
+    bind(ViewId::kEngineMenu, Layer::kBase, Button::kB,         Gesture::kPress, "ENGINE.MENU_CLOSE");
+    bind(ViewId::kEngineMenu, Layer::kSelect, Button::kB,       Gesture::kPress, "ENGINE.MENU_CLOSE");
 }
 
 void Keymap::bind(KeyBinding b) {
@@ -237,48 +266,7 @@ void InputRouter::dispatch(UiContext& ctx, ViewId view, Layer layer, Button btn,
 void InputRouter::processInput(UiContext& ctx) {
     const auto& in = ctx.in;
 
-    // Перехоплення модальних вікон (Семпл-браузер та Селектор рушіїв)
-    if (ctx.app.sample_browser_open) {
-        if (in.up_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.UP", ctx);
-        else if (in.down_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.DOWN", ctx);
-        else if (in.left_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.PARENT", ctx);
-        else if (in.right_pressed) ActionRegistry::instance().run("SAMPLE_BROWSER.CONFIRM", ctx);
-        else if (in.a_pressed) {
-            ActionRegistry::instance().run("SAMPLE_BROWSER.CONFIRM", ctx);
-            consumed_[static_cast<int>(Button::kA)] = true;
-            consumed_[static_cast<int>(Button::kB)] = true;
-        } else if (in.b_pressed) {
-            ActionRegistry::instance().run("SAMPLE_BROWSER.CLOSE", ctx);
-            consumed_[static_cast<int>(Button::kA)] = true;
-            consumed_[static_cast<int>(Button::kB)] = true;
-        }
-        is_down_[static_cast<int>(Button::kA)] = in.btn_a;
-        is_down_[static_cast<int>(Button::kB)] = in.btn_b;
-        return;
-    }
-    if (ctx.app.engine_menu_open) {
-        if (in.up_pressed) ActionRegistry::instance().run("NAV.UP", ctx);
-        else if (in.down_pressed) ActionRegistry::instance().run("NAV.DOWN", ctx);
-        else if (in.a_pressed) {
-            ActionRegistry::instance().run("ENGINE.MENU_CONFIRM", ctx);
-            consumed_[static_cast<int>(Button::kA)] = true;
-            consumed_[static_cast<int>(Button::kB)] = true;
-        } else if (in.b_pressed) {
-            ActionRegistry::instance().run("ENGINE.MENU_CLOSE", ctx);
-            consumed_[static_cast<int>(Button::kA)] = true;
-            consumed_[static_cast<int>(Button::kB)] = true;
-        }
-        is_down_[static_cast<int>(Button::kA)] = in.btn_a;
-        is_down_[static_cast<int>(Button::kB)] = in.btn_b;
-        return;
-    }
-
-    ViewId view = ctx.app.active_view;
-    if (ctx.app.step_inspector_open) {
-        view = ViewId::kInspect;
-    } else if (ctx.app.arp_modal_open) {
-        view = ViewId::kArp;
-    }
+    const ViewId view = activeViewId(ctx.app);
     const Layer layer = activeLayer(ctx);
 
     // Масив поточного фізичного стану кнопок
@@ -353,8 +341,8 @@ void InputRouter::processInput(UiContext& ctx) {
             }
         }
 
-        // Автоповтор та довге утримання для параметрів A / B (крім SEQ та STEP EDITOR)
-        if (ev.is_down && (ev.id == Button::kA || ev.id == Button::kB) && view != ViewId::kSeq && view != ViewId::kInspect) {
+        // Автоповтор та довге утримання для параметрів A / B (крім SEQ та модальних вікон)
+        if (ev.is_down && (ev.id == Button::kA || ev.id == Button::kB) && view != ViewId::kSeq && !isModalView(view)) {
             if (ctx.now_ms < ctx.app.modal_cooldown_until_ms) {
                 consumed_[idx] = true;
                 continue;

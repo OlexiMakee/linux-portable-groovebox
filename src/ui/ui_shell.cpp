@@ -215,9 +215,10 @@ void UiShell::renderHud(Canvas& cv, const UiContext& ctx) {
         widgets::iconStop(cv, 60, hud_y + 3, palette::kAccentOrange);
     }
 
-    char bpm_buf[16];
-    std::snprintf(bpm_buf, sizeof(bpm_buf), "%3.0f BPM", ctx.app.bpm);
-    cv.text(70, hud_y + 3, bpm_buf, palette::kTextMain);
+    char bpm_buf[24];
+    const int vol_pct = static_cast<int>(std::round(ctx.audio.getMasterVolume() * 100.0f));
+    std::snprintf(bpm_buf, sizeof(bpm_buf), "%3.0f BPM %d%%", ctx.app.bpm, vol_pct);
+    cv.text(68, hud_y + 3, bpm_buf, palette::kTextMain);
 
     const char* hp_str = ctx.in.headphones_plugged ? "[HP]" : "[SPK]";
     cv.text(148, hud_y + 3, hp_str, ctx.in.headphones_plugged ? palette::kAccentCyan : palette::kTextDim);
@@ -229,16 +230,25 @@ void UiShell::renderHud(Canvas& cv, const UiContext& ctx) {
         cv.text(174, hud_y + 3, "[SEL]", palette::kParamTrig);
     }
 
-    // Рядок 2: Фокус активного вікна/параметра
-    IView* cur_v = ctx.app.step_inspector_open ? findView(ViewId::kInspect) : (ctx.app.arp_modal_open ? findView(ViewId::kArp) : findView(ctx.app.active_view));
-    std::string f_id = cur_v ? cur_v->focusId(ctx) : "GROOVEBOX";
+    // Рядок 2: Фокус активного вікна/параметра або модального екрана
+    const ViewId active_v_id = activeViewId(ctx.app);
+    std::string f_id;
+    if (ctx.app.project_modal_open) {
+        f_id = ctx.app.project_modal_is_save ? "PROJECT: SAVE AS" : "PROJECT: LOAD";
+    } else if (ctx.app.sample_browser_open) {
+        f_id = "SAMPLE BROWSER";
+    } else if (ctx.app.engine_menu_open) {
+        f_id = "SELECT SYNTH ENGINE";
+    } else {
+        IView* cur_v = findView(active_v_id);
+        f_id = cur_v ? cur_v->focusId(ctx) : "GROOVEBOX";
+    }
     cv.textClip(60, hud_y + 13, f_id, 34, palette::kAccentOrange);
 
     // Рядок 3: Підказки стіків L3/R3 та останній статус
-    const ViewId active_v_id = ctx.app.step_inspector_open ? ViewId::kInspect : (ctx.app.arp_modal_open ? ViewId::kArp : ctx.app.active_view);
-    const bool is_arp = (active_v_id == ViewId::kArp || ctx.app.arp_modal_open);
-    const char* l3_label = is_arp ? "L3:CLOSE" : "L3:ARP";
-    const char* r3_label = is_arp ? "R3:RND" : (active_v_id == ViewId::kSynth ? "R3:INIT" : (active_v_id == ViewId::kSeq ? "" : "R3:INIT"));
+    const bool is_arp = (active_v_id == ViewId::kArp);
+    const char* l3_label = is_arp ? "L3:CLOSE" : (active_v_id == ViewId::kSeq ? "L3:ARP" : "");
+    const char* r3_label = is_arp ? "R3:RND" : (active_v_id == ViewId::kSynth ? "R3:INIT" : "");
     ColorRGB l3_col = ctx.in.l3 ? palette::kParamTrig : (ctx.audio.getFillMode() ? palette::kLevelWarnClip : palette::kAccentCyan);
     ColorRGB r3_col = ctx.in.r3 ? palette::kParamTrig : palette::kAccentOrange;
 
@@ -378,9 +388,6 @@ void UiShell::render(
             ColorRGB col = sel ? palette::kAccentCyan : (is_dir ? palette::kAccentOrange : palette::kTextMain);
             cv.text(bx + 8, iy + 3, item, col);
         }
-
-        cv.line(bx + 2, by + bh - 14, bx + bw - 3, by + bh - 14, palette::kGridDim);
-        cv.text(bx + 6, by + bh - 10, "[A] SELECT  [B] CLOSE  [<] PARENT", palette::kTextDim);
     }
 
     // Модальне вікно збереження / завантаження проектів (Save As / Load Project)
@@ -424,9 +431,6 @@ void UiShell::render(
                 cv.text(bx + 8, iy + 3, item, sel ? palette::kAccentCyan : palette::kTextMain);
             }
         }
-
-        cv.line(bx + 2, by + bh - 14, bx + bw - 3, by + bh - 14, palette::kGridDim);
-        cv.text(bx + 6, by + bh - 10, "[A] CONFIRM  [B] CANCEL  [UP/DN] SELECT", palette::kTextDim);
     }
 
     // 4. Нижній інформаційний рядок (HUD)

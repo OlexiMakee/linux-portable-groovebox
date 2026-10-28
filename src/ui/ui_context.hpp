@@ -151,6 +151,11 @@ struct AppModel {
     int project_modal_sel = 0;
 };
 
+inline bool isModalView(ViewId v) {
+    return v == ViewId::kProjectModal || v == ViewId::kSampleBrowser ||
+           v == ViewId::kEngineMenu || v == ViewId::kInspect || v == ViewId::kArp;
+}
+
 inline ViewId activeViewId(const AppModel& app) {
     if (app.project_modal_open) return ViewId::kProjectModal;
     if (app.sample_browser_open) return ViewId::kSampleBrowser;
