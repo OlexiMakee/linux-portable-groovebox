@@ -964,9 +964,11 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
     const float drv_tone  = params_.drive_tone.load(std::memory_order_relaxed);
 
     std::array<TrackParameters, kMaxTracks> local_tracks;
+    MasterFxParameters local_mfx;
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         local_tracks = tracks_;
+        local_mfx = master_fx_;
     }
 
     auto computeLfo = [](const LfoParameters& lfo, float& phase, float dt, float rate_mod, float depth_mod) -> float {
@@ -1572,8 +1574,132 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
         float rv_l = out_comb_l * 0.18f;
         float rv_r = out_comb_r * 0.18f;
 
-        mix_l = std::clamp((mix_l + d_l * dly_mix + rv_l * rev_mix) * master_vol, -0.98f, 0.98f);
-        mix_r = std::clamp((mix_r + d_r * dly_mix + rv_r * rev_mix) * master_vol, -0.98f, 0.98f);
+        float m_l = mix_l + d_l * dly_mix + rv_l * rev_mix;
+        float m_r = mix_r + d_r * dly_mix + rv_r * rev_mix;
+
+        // 1. Master Output GAIN / OVER
+        float mg = std::clamp(local_mfx.gain_over, -1.0f, 1.0f);
+        if (mg <= 0.0f) {
+            float atten = std::clamp(1.0f + mg, 0.0f, 1.0f);
+            m_l *= (atten * atten);
+            m_r *= (atten * atten);
+        } else {
+            float drive = 1.0f + mg * 4.0f;
+            float comp = 1.0f / std::sqrt(1.0f + mg * 3.0f);
+            m_l = std::tanh(m_l * drive) * comp;
+            m_r = std::tanh(m_r * drive) * comp;
+        }
+
+        // 2. Master Sidechain Compressor
+        float sc_in = (local_mfx.sc_source == 0)
+                          ? (std::fabs(m_l) + std::fabs(m_r)) * 0.5f
+                          : std::fabs(last_track_sample_[std::clamp(local_mfx.sc_source - 1, 0, kMaxTracks - 1)]);
+        float m_atk = std::exp(-1.0f / (std::clamp(local_mfx.sc_attack, 0.001f, 0.100f) * static_cast<float>(sample_rate)));
+        float m_rel = std::exp(-1.0f / (std::clamp(local_mfx.sc_release, 0.020f, 1.000f) * static_cast<float>(sample_rate)));
+        if (sc_in > mst_sc_env_) {
+            mst_sc_env_ = sc_in + m_atk * (mst_sc_env_ - sc_in);
+        } else {
+            mst_sc_env_ = sc_in + m_rel * (mst_sc_env_ - sc_in);
+        }
+        float m_thresh_lin = std::pow(10.0f, local_mfx.sc_thresh / 20.0f);
+        if (local_mfx.sc_thresh < -0.1f && mst_sc_env_ > m_thresh_lin && m_thresh_lin > 0.0001f) {
+            float over_db = 20.0f * std::log10(mst_sc_env_ / m_thresh_lin);
+            float gr_db = over_db * (1.0f - 1.0f / std::max(1.0f, local_mfx.sc_ratio));
+            mst_sc_gain_ = std::pow(10.0f, -gr_db / 20.0f);
+        } else {
+            mst_sc_gain_ = 1.0f;
+        }
+        m_l *= mst_sc_gain_;
+        m_r *= mst_sc_gain_;
+
+        // 3. Master HPF (12 dB 2-pole or 24 dB 4-pole)
+        if (local_mfx.hpf_cutoff > 0.005f) {
+            float f_hpf = std::clamp(2.0f * std::sin(3.14159265f * (20.0f * std::pow(800.0f, local_mfx.hpf_cutoff)) * inv_sr), 0.005f, 0.88f);
+            // Stage 1 (12 dB/oct)
+            mst_hpf1_low_l_ += f_hpf * mst_hpf1_band_l_;
+            float high1_l = m_l - mst_hpf1_low_l_ - 1.414f * mst_hpf1_band_l_;
+            mst_hpf1_band_l_ += f_hpf * high1_l;
+            m_l = high1_l;
+
+            mst_hpf1_low_r_ += f_hpf * mst_hpf1_band_r_;
+            float high1_r = m_r - mst_hpf1_low_r_ - 1.414f * mst_hpf1_band_r_;
+            mst_hpf1_band_r_ += f_hpf * high1_r;
+            m_r = high1_r;
+
+            // Stage 2 (24 dB/oct if enabled)
+            if (local_mfx.hpf_slope_24) {
+                mst_hpf2_low_l_ += f_hpf * mst_hpf2_band_l_;
+                float high2_l = m_l - mst_hpf2_low_l_ - 1.414f * mst_hpf2_band_l_;
+                mst_hpf2_band_l_ += f_hpf * high2_l;
+                m_l = high2_l;
+
+                mst_hpf2_low_r_ += f_hpf * mst_hpf2_band_r_;
+                float high2_r = m_r - mst_hpf2_low_r_ - 1.414f * mst_hpf2_band_r_;
+                mst_hpf2_band_r_ += f_hpf * high2_r;
+                m_r = high2_r;
+            }
+        }
+
+        // 4. Master Parametric Bell EQ Filter
+        if (std::fabs(local_mfx.bell_gain) > 0.05f) {
+            float f0 = std::clamp(40.0f * std::pow(400.0f, local_mfx.bell_freq), 20.0f, 18000.0f);
+            float gain_lin = std::pow(10.0f, local_mfx.bell_gain / 40.0f);
+            float w0 = 2.0f * 3.14159265f * f0 * inv_sr;
+            float alpha = std::sin(w0) / (2.0f * std::clamp(local_mfx.bell_q, 0.2f, 10.0f));
+            float cosw0 = std::cos(w0);
+
+            float b0 = 1.0f + alpha * gain_lin;
+            float b1 = -2.0f * cosw0;
+            float b2 = 1.0f - alpha * gain_lin;
+            float a0 = 1.0f + alpha / gain_lin;
+            float a1 = -2.0f * cosw0;
+            float a2 = 1.0f - alpha / gain_lin;
+
+            float inv_a0 = 1.0f / a0;
+            float b0_n = b0 * inv_a0, b1_n = b1 * inv_a0, b2_n = b2 * inv_a0;
+            float a1_n = a1 * inv_a0, a2_n = a2 * inv_a0;
+
+            float y_l = b0_n * m_l + mst_bell_x1_l_;
+            mst_bell_x1_l_ = b1_n * m_l - a1_n * y_l + mst_bell_x2_l_;
+            mst_bell_x2_l_ = b2_n * m_l - a2_n * y_l;
+            m_l = y_l;
+
+            float y_r = b0_n * m_r + mst_bell_x1_r_;
+            mst_bell_x1_r_ = b1_n * m_r - a1_n * y_r + mst_bell_x2_r_;
+            mst_bell_x2_r_ = b2_n * m_r - a2_n * y_r;
+            m_r = y_r;
+        }
+
+        // 5. Master LPF (12 dB 2-pole or 24 dB 4-pole)
+        if (local_mfx.lpf_cutoff < 0.995f) {
+            float f_lpf = std::clamp(2.0f * std::sin(3.14159265f * (20.0f * std::pow(1000.0f, local_mfx.lpf_cutoff)) * inv_sr), 0.02f, 0.88f);
+            // Stage 1 (12 dB/oct)
+            mst_lpf1_low_l_ += f_lpf * mst_lpf1_band_l_;
+            float high1_l = m_l - mst_lpf1_low_l_ - 1.414f * mst_lpf1_band_l_;
+            mst_lpf1_band_l_ += f_lpf * high1_l;
+            m_l = mst_lpf1_low_l_;
+
+            mst_lpf1_low_r_ += f_lpf * mst_lpf1_band_r_;
+            float high1_r = m_r - mst_lpf1_low_r_ - 1.414f * mst_lpf1_band_r_;
+            mst_lpf1_band_r_ += f_lpf * high1_r;
+            m_r = mst_lpf1_low_r_;
+
+            // Stage 2 (24 dB/oct if enabled)
+            if (local_mfx.lpf_slope_24) {
+                mst_lpf2_low_l_ += f_lpf * mst_lpf2_band_l_;
+                float high2_l = m_l - mst_lpf2_low_l_ - 1.414f * mst_lpf2_band_l_;
+                mst_lpf2_band_l_ += f_lpf * high2_l;
+                m_l = mst_lpf2_low_l_;
+
+                mst_lpf2_low_r_ += f_lpf * mst_lpf2_band_r_;
+                float high2_r = m_r - mst_lpf2_low_r_ - 1.414f * mst_lpf2_band_r_;
+                mst_lpf2_band_r_ += f_lpf * high2_r;
+                m_r = mst_lpf2_low_r_;
+            }
+        }
+
+        mix_l = std::clamp(m_l * master_vol, -0.98f, 0.98f);
+        mix_r = std::clamp(m_r * master_vol, -0.98f, 0.98f);
 
         max_l = std::max(max_l, std::fabs(mix_l));
         max_r = std::max(max_r, std::fabs(mix_r));

@@ -68,6 +68,14 @@ public:
     float getMasterVolume() const { return params_.master_volume.load(std::memory_order_relaxed); }
     void setBpm(float bpm) { bpm_.store(bpm, std::memory_order_relaxed); }
     float getBpm() const { return bpm_.load(std::memory_order_relaxed); }
+    MasterFxParameters getMasterFx() const {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        return master_fx_;
+    }
+    void setMasterFx(const MasterFxParameters& mfx) {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        master_fx_ = mfx;
+    }
 
     // Оверрайд аудіовиходу: Auto (USB за наявності) <-> Force Internal (RK817)
     void toggleOutputOverride();
@@ -344,6 +352,21 @@ private:
     std::array<TrackFxState, kMaxTracks> track_fx_{};
     std::array<float, kMaxTracks> last_track_sample_{};
     void initTrackFx(uint32_t sample_rate);
+
+    // Стан шини мастерингу
+    MasterFxParameters master_fx_{};
+    float mst_sc_env_ = 0.0f;
+    float mst_sc_gain_ = 1.0f;
+    float mst_hpf1_low_l_ = 0.0f, mst_hpf1_band_l_ = 0.0f;
+    float mst_hpf1_low_r_ = 0.0f, mst_hpf1_band_r_ = 0.0f;
+    float mst_hpf2_low_l_ = 0.0f, mst_hpf2_band_l_ = 0.0f;
+    float mst_hpf2_low_r_ = 0.0f, mst_hpf2_band_r_ = 0.0f;
+    float mst_bell_x1_l_ = 0.0f, mst_bell_x2_l_ = 0.0f, mst_bell_y1_l_ = 0.0f, mst_bell_y2_l_ = 0.0f;
+    float mst_bell_x1_r_ = 0.0f, mst_bell_x2_r_ = 0.0f, mst_bell_y1_r_ = 0.0f, mst_bell_y2_r_ = 0.0f;
+    float mst_lpf1_low_l_ = 0.0f, mst_lpf1_band_l_ = 0.0f;
+    float mst_lpf1_low_r_ = 0.0f, mst_lpf1_band_r_ = 0.0f;
+    float mst_lpf2_low_l_ = 0.0f, mst_lpf2_band_l_ = 0.0f;
+    float mst_lpf2_low_r_ = 0.0f, mst_lpf2_band_r_ = 0.0f;
 
     NetAudioStreamer net_streamer_;
 

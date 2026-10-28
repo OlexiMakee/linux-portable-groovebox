@@ -427,6 +427,30 @@ struct TrackFxParameters {
     float send_chorus = 0.0f;     // 0.0 .. 1.0
 };
 
+// Параметри шини мастерингу (Mastering Tab [R2]snd<MSTR>mix)
+struct MasterFxParameters {
+    // 1. Output GAIN / OVER
+    float gain_over = 0.0f;       // -1.0 .. +1.0 (-24 dB .. +24 dB, 0.0 = 0 dB clean)
+
+    // 2. Master Sidechain Compressor
+    int sc_source = 0;            // 0 = Master/Self (Bus Comp), 1..16 = TRK 1 (Kick) .. TRK 16
+    float sc_thresh = 0.0f;       // -48.0 .. 0.0 dB (0.0 = OFF)
+    float sc_ratio = 2.0f;        // 1.0 .. 20.0
+    float sc_attack = 0.010f;     // 0.001 .. 0.100s
+    float sc_release = 0.150f;    // 0.020 .. 1.000s
+
+    // 3. Master HPF & LPF with 12 dB / 24 dB slope
+    float hpf_cutoff = 0.0f;      // 0.0 .. 1.0 (20 Hz .. 16 kHz, 0.0 = OFF)
+    bool hpf_slope_24 = false;    // false = 12 dB/oct (2-pole), true = 24 dB/oct (4-pole)
+    float lpf_cutoff = 1.0f;      // 0.0 .. 1.0 (20 Hz .. 20 kHz, 1.0 = OFF)
+    bool lpf_slope_24 = false;    // false = 12 dB/oct (2-pole), true = 24 dB/oct (4-pole)
+
+    // 4. Parametric Bell EQ Filter
+    float bell_freq = 0.50f;      // 0.0 .. 1.0 (40 Hz .. 16 kHz, ~1 kHz default)
+    float bell_gain = 0.0f;       // -18.0 .. +18.0 dB (0.0 dB = neutral)
+    float bell_q = 1.0f;          // 0.3 .. 8.0 (Q factor, 1.0 = standard musical bell)
+};
+
 struct TrackParameters {
     char name[16] = "";
     EngineType engine = EngineType::kVaMono;
