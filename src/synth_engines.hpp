@@ -314,7 +314,7 @@ struct SequencerStep {
     uint8_t note = 48;           // MIDI нота 1 (базова нота акорду 0..127)
     std::array<uint8_t, 4> chord_notes = {48, 255, 255, 255}; // До 4 нот у акорді (255 = вимкнено)
     float velocity = 0.90f;      // 0.0 .. 1.0 (єдине velocity для всіх нот акорду)
-    float gate_len = 0.60f;      // 0.1 .. 1.0+ (довжина кроку, усуває нескінченний сустейн)
+    float gate_len = 1.0f;       // 1 .. 128 кроків (дискретна довжина у кроках секвенсора)
     uint8_t probability = 100;   // Elektron Probability: 0% .. 100%
     TrigCondition condition = TrigCondition::kNone; // Elektron Trig Condition
     bool has_plock = false;      // Чи зафіксовано P-Lock

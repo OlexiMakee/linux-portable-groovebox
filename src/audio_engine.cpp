@@ -491,7 +491,7 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
         }
         voices_[row].active = true;
         voices_[row].note_num = static_cast<uint8_t>(midi_note);
-        voices_[row].gate_samples_left = static_cast<int32_t>(0.125f * std::clamp(gate_len, 0.1f, 2.0f) * static_cast<float>(active_sample_rate_.load()));
+        voices_[row].gate_samples_left = static_cast<int32_t>(0.125f * std::clamp(gate_len, 0.1f, 128.0f) * static_cast<float>(active_sample_rate_.load()));
         return;
     }
 
@@ -508,9 +508,9 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
         midi_note = std::clamp(midi_note + tracks_[t].transpose, 1, 127);
     }
 
-    // Тривалість 1 кроку секвенсора (~125мс на 120 BPM)
+    // Тривалість кроку секвенсора з урахуванням дискретної довжини (1..128 кроків, 1 крок = ~125мс)
     float step_sec = 0.125f;
-    v.gate_samples_left = static_cast<int32_t>(step_sec * std::clamp(gate_len, 0.1f, 2.0f) * sr);
+    v.gate_samples_left = static_cast<int32_t>(step_sec * std::clamp(gate_len, 0.1f, 128.0f) * sr);
 
     if (tracks_[t].engine == EngineType::kAcid303 && slide && v.amp_adsr.isActive()) {
         // Roland TB-303 Legato Slide: нова цільова нота, без скидання фази чи огинаючої!

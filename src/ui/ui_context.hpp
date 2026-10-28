@@ -59,7 +59,8 @@ struct AppModel {
     int seq_scroll_step = 0;// плавний горизонтальний скрол секвенсера по кроку
     bool rec_mode = false;  // Режим розгортання доріжки (Piano Roll / Drum Lanes)
     int rec_cursor_lane = 0;// 0..7 (Drum Lanes) або 0..11 (Piano Roll Semitones)
-    int rec_octave = 3;     // Октава піанорола 1..6 (C1..C6)
+    int rec_octave = 3;     // Октава піанорола 1..8 (C1..C8)
+    uint32_t voice_limit_alert_until_ms = 0; // Показ червоного попередження "VOICE LIMIT: MAX 4"
 
     // Режим перформансу (жива гра на педах/інструментах)
     int perf_octave = 3;    // Октава живої гри C2..C6
