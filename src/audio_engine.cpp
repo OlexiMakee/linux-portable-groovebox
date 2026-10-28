@@ -964,6 +964,9 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
 
     float max_l = 0.0f;
     float max_r = 0.0f;
+    float max_dly_send = 0.0f;
+    float max_rev_send = 0.0f;
+    float max_chr_send = 0.0f;
     std::array<float, kMaxTracks> trk_peak{};
     uint32_t sc_idx = scope_write_idx_.load(std::memory_order_relaxed);
     const uint32_t delay_len = (sample_rate == 48000u) ? 12000u : 8000u; // ~250ms tempo delay
@@ -1248,6 +1251,9 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
 
         max_l = std::max(max_l, std::fabs(mix_l));
         max_r = std::max(max_r, std::fabs(mix_r));
+        max_dly_send = std::max(max_dly_send, (std::fabs(send_l) + std::fabs(send_r)) * 0.5f);
+        max_rev_send = std::max(max_rev_send, (std::fabs(rev_l) + std::fabs(rev_r)) * 0.5f);
+        max_chr_send = std::max(max_chr_send, chr_mix * (std::fabs(mix_l) + std::fabs(mix_r)) * 0.5f);
 
         if ((i & 1u) == 0u) {
             scope_ring_[sc_idx & 255u].store((mix_l + mix_r) * 0.5f, std::memory_order_relaxed);
@@ -1269,6 +1275,10 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
     vu_l_.store(next_l, std::memory_order_relaxed);
     vu_r_.store(next_r, std::memory_order_relaxed);
     peak_hold_.store(std::max({next_l, next_r, peak_hold_.load(std::memory_order_relaxed) * 0.96f}), std::memory_order_relaxed);
+
+    send_delay_peak_.store(std::max(max_dly_send, send_delay_peak_.load(std::memory_order_relaxed) * 0.88f), std::memory_order_relaxed);
+    send_reverb_peak_.store(std::max(max_rev_send, send_reverb_peak_.load(std::memory_order_relaxed) * 0.88f), std::memory_order_relaxed);
+    send_chorus_peak_.store(std::max(max_chr_send, send_chorus_peak_.load(std::memory_order_relaxed) * 0.88f), std::memory_order_relaxed);
 
     for (int t = 0; t < kMaxTracks; ++t) {
         float prev_t = track_vu_[t].load(std::memory_order_relaxed);
@@ -1470,6 +1480,9 @@ AudioEngineTelemetry AudioEngine::getTelemetry() const {
     for (uint32_t i = 0; i < 256; ++i) {
         t.scope_samples[i] = scope_ring_[(r_idx + i) & 255u].load(std::memory_order_relaxed);
     }
+    t.send_delay = send_delay_peak_.load(std::memory_order_relaxed);
+    t.send_reverb = send_reverb_peak_.load(std::memory_order_relaxed);
+    t.send_chorus = send_chorus_peak_.load(std::memory_order_relaxed);
     return t;
 }
 

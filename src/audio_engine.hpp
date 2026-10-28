@@ -50,6 +50,9 @@ struct AudioEngineTelemetry {
     std::array<float, kMaxTracks> track_levels{};
     std::array<std::string, kMaxTracks> track_names{};
     std::array<float, 256> scope_samples{};
+    float send_delay = 0.0f;
+    float send_reverb = 0.0f;
+    float send_chorus = 0.0f;
 };
 
 class AudioEngine {
@@ -304,6 +307,9 @@ private:
     std::atomic<float> vu_l_{0.0f};
     std::atomic<float> vu_r_{0.0f};
     std::atomic<float> peak_hold_{0.0f};
+    std::atomic<float> send_delay_peak_{0.0f};
+    std::atomic<float> send_reverb_peak_{0.0f};
+    std::atomic<float> send_chorus_peak_{0.0f};
 
     std::array<std::atomic<float>, 256> scope_ring_{};
     std::atomic<uint32_t> scope_write_idx_{0};
