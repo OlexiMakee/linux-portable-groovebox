@@ -485,6 +485,12 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
     if (tracks_[t].lfo2.mode == LfoMode::kTrig) {
         track_lfo2_phase_[t] = 0.0f;
     }
+    if (tracks_[t].lfo3.mode == LfoMode::kTrig) {
+        track_lfo3_phase_[t] = 0.0f;
+    }
+    if (tracks_[t].lfo4.mode == LfoMode::kTrig) {
+        track_lfo4_phase_[t] = 0.0f;
+    }
 
     if (tracks_[t].engine == EngineType::kMidiOut) {
         int ch = std::clamp(static_cast<int>(tracks_[t].p[0] * 15.99f), 0, 15);
@@ -543,6 +549,8 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
             v.amp_adsr.trigger(tracks_[t].attack, tracks_[t].decay, tracks_[t].sustain, sr);
             v.filter_adsr.trigger(tracks_[t].attack * 0.6f, tracks_[t].decay, tracks_[t].sustain, sr);
         }
+        v.mod_env1.trigger(tracks_[t].env1.attack, tracks_[t].env1.decay, tracks_[t].env1.sustain, sr);
+        v.mod_env2.trigger(tracks_[t].env2.attack, tracks_[t].env2.decay, tracks_[t].env2.sustain, sr);
     }
 }
 
@@ -906,10 +914,12 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
         local_tracks = tracks_;
     }
 
-    auto computeLfo = [](LfoParameters& lfo, float& phase, float dt) -> float {
-        if (lfo.depth <= 0.001f) return 0.0f;
+    auto computeLfo = [](LfoParameters& lfo, float& phase, float dt, float rate_mod, float depth_mod) -> float {
+        float eff_depth = std::clamp(lfo.depth + depth_mod, 0.0f, 1.0f);
+        if (eff_depth <= 0.001f) return 0.0f;
         float mult = (lfo.multiplier > 0) ? static_cast<float>(lfo.multiplier) : 1.0f;
-        float rate_hz = (0.05f + lfo.rate * 19.95f) * mult;
+        float eff_rate = std::clamp(lfo.rate + rate_mod, 0.0f, 1.0f);
+        float rate_hz = (0.05f + eff_rate * 19.95f) * mult;
         phase += rate_hz * dt;
         if (phase >= 1.0f) phase -= std::floor(phase);
         float p = phase;
@@ -935,27 +945,80 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                 raw = 0.0f;
                 break;
         }
-        return raw * lfo.depth * 0.40f;
+        return raw * eff_depth * 0.40f;
     };
 
     float dt_block = inv_sr * static_cast<float>(frames);
-    std::array<float, kMaxTracks> lfo1_val{};
-    std::array<float, kMaxTracks> lfo2_val{};
+    std::array<std::array<float, static_cast<size_t>(ModTarget::kCount)>, kMaxTracks> block_mod{};
+
+    // 1. Аналогові стіки (Mode 1 & Mode 2 для обох стіків)
     for (int t = 0; t < active_rows_count_; ++t) {
-        lfo1_val[t] = computeLfo(local_tracks[t].lfo1, track_lfo1_phase_[t], dt_block);
-        lfo2_val[t] = computeLfo(local_tracks[t].lfo2, track_lfo2_phase_[t], dt_block);
+        const auto& tp = local_tracks[t];
+        auto addStk = [&](ModTarget tgt, float amt, float raw) {
+            if (tgt != ModTarget::kNone && tgt < ModTarget::kCount && amt > 0.001f) {
+                block_mod[t][static_cast<size_t>(tgt)] += raw * amt;
+            }
+        };
+        // Left stick Mode 1 & 2
+        addStk(tp.stick_l_m1.dest_x, tp.stick_l_m1.amount_x, raw_lx);
+        addStk(tp.stick_l_m1.dest_y, tp.stick_l_m1.amount_y, raw_ly);
+        addStk(tp.stick_l_m2.dest_x, tp.stick_l_m2.amount_x, raw_lx);
+        addStk(tp.stick_l_m2.dest_y, tp.stick_l_m2.amount_y, raw_ly);
+        // Right stick Mode 1 & 2
+        addStk(tp.stick_r_m1.dest_x, tp.stick_r_m1.amount_x, raw_rx);
+        addStk(tp.stick_r_m1.dest_y, tp.stick_r_m1.amount_y, raw_ry);
+        addStk(tp.stick_r_m2.dest_x, tp.stick_r_m2.amount_x, raw_rx);
+        addStk(tp.stick_r_m2.dest_y, tp.stick_r_m2.amount_y, raw_ry);
     }
 
-    auto getTrackMod = [&](int trk, StickDest dest) -> float {
-        const auto& tp = local_tracks[trk];
-        float val = 0.0f;
-        if (tp.stick_left_x == dest) val += raw_lx;
-        if (tp.stick_left_y == dest) val += raw_ly;
-        if (tp.stick_right_x == dest) val += raw_rx;
-        if (tp.stick_right_y == dest) val += raw_ry;
-        if (tp.lfo1.dest == dest) val += lfo1_val[trk];
-        if (tp.lfo2.dest == dest) val += lfo2_val[trk];
-        return val;
+    // 2. 4 LFO з підтримкою крос-модуляції швидкості та глибини
+    for (int t = 0; t < active_rows_count_; ++t) {
+        auto& tp = local_tracks[t];
+        auto evalLfo = [&](LfoParameters& lfo, float& phase, ModTarget r_tgt, ModTarget d_tgt) {
+            float r_mod = block_mod[t][static_cast<size_t>(r_tgt)];
+            float d_mod = block_mod[t][static_cast<size_t>(d_tgt)];
+            float val = computeLfo(lfo, phase, dt_block, r_mod, d_mod);
+            if (lfo.dest != ModTarget::kNone && lfo.dest < ModTarget::kCount) {
+                block_mod[t][static_cast<size_t>(lfo.dest)] += val;
+            }
+        };
+        evalLfo(tp.lfo1, track_lfo1_phase_[t], ModTarget::kLfo1Rate, ModTarget::kLfo1Depth);
+        evalLfo(tp.lfo2, track_lfo2_phase_[t], ModTarget::kLfo2Rate, ModTarget::kLfo2Depth);
+        evalLfo(tp.lfo3, track_lfo3_phase_[t], ModTarget::kLfo3Rate, ModTarget::kLfo3Depth);
+        evalLfo(tp.lfo4, track_lfo4_phase_[t], ModTarget::kLfo4Rate, ModTarget::kLfo4Depth);
+    }
+
+    // 3. 2 ADSR огинаючі модуляцій
+    for (int t = 0; t < active_rows_count_; ++t) {
+        const auto& tp = local_tracks[t];
+        const int base_v = t * kVoicesPerTrack;
+        float e1_sum = 0.0f;
+        float e2_sum = 0.0f;
+        int active_v_cnt = 0;
+        for (int vi = 0; vi < kVoicesPerTrack; ++vi) {
+            auto& v = voices_[base_v + vi];
+            if (v.active) {
+                e1_sum += v.mod_env1.process();
+                e2_sum += v.mod_env2.process();
+                active_v_cnt++;
+            }
+        }
+        if (active_v_cnt > 0) {
+            float inv_c = 1.0f / static_cast<float>(active_v_cnt);
+            if (tp.env1.dest != ModTarget::kNone && tp.env1.dest < ModTarget::kCount) {
+                block_mod[t][static_cast<size_t>(tp.env1.dest)] += (e1_sum * inv_c) * tp.env1.amount;
+            }
+            if (tp.env2.dest != ModTarget::kNone && tp.env2.dest < ModTarget::kCount) {
+                block_mod[t][static_cast<size_t>(tp.env2.dest)] += (e2_sum * inv_c) * tp.env2.amount;
+            }
+        }
+        // Зберігаємо зміщення для візуалізації в UI
+        live_mod_offsets_[t] = block_mod[t];
+    }
+
+    auto getTrackMod = [&](int trk, ModTarget dest) -> float {
+        if (dest == ModTarget::kNone || dest >= ModTarget::kCount) return 0.0f;
+        return block_mod[trk][static_cast<size_t>(dest)];
     };
 
     if (reverb_sample_rate_ != sample_rate) {
@@ -1019,6 +1082,8 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                         }
                         v.amp_adsr.release(tp.release, static_cast<float>(sample_rate));
                         v.filter_adsr.release(tp.release, static_cast<float>(sample_rate));
+                        v.mod_env1.release(tp.env1.release, static_cast<float>(sample_rate));
+                        v.mod_env2.release(tp.env2.release, static_cast<float>(sample_rate));
                     }
                 }
 
@@ -1179,7 +1244,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             } // end vi loop
 
             // Per-track Model:Cycles / Model:Samples GAIN / OVERDRIVE curve
-            float g = tp.gain_over;
+            float g = std::clamp(tp.gain_over + getTrackMod(t, ModTarget::kGainOver), -1.0f, 1.0f);
             float out_s = trk_sum;
             if (g <= 0.0f) {
                 // Чисте плавне затухання до 0: 0.0 = 100% (0 dB), -1.0 = тиша
@@ -1499,6 +1564,17 @@ AudioEngineTelemetry AudioEngine::getTelemetry() const {
     t.send_reverb = send_reverb_peak_.load(std::memory_order_relaxed);
     t.send_chorus = send_chorus_peak_.load(std::memory_order_relaxed);
     return t;
+}
+
+float AudioEngine::getLiveModOffset(int track, ModTarget target) const {
+    if (track < 0 || track >= kMaxTracks) return 0.0f;
+    size_t idx = static_cast<size_t>(target);
+    if (idx >= static_cast<size_t>(ModTarget::kCount)) return 0.0f;
+    return live_mod_offsets_[track][idx];
+}
+
+float AudioEngine::getLiveModValue(int track, ModTarget target, float base_val) const {
+    return std::clamp(base_val + getLiveModOffset(track, target), 0.0f, 1.0f);
 }
 
 } // namespace groovebox

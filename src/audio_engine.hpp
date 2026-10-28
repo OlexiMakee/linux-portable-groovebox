@@ -151,6 +151,10 @@ public:
 
     AudioEngineTelemetry getTelemetry() const;
 
+    // Отримання поточного значення модуляції для таргету треку (для UI повзунків та анімації)
+    float getLiveModOffset(int track, ModTarget target) const;
+    float getLiveModValue(int track, ModTarget target, float base_val) const;
+
     // Публічний метод рендерингу аудіоблоку (для тестів, експорту та офлайн-обробки)
     void renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_t sample_rate);
 
@@ -196,6 +200,8 @@ private:
         float phase4 = 0.0f;
         AdsrEnvelope amp_adsr{};
         AdsrEnvelope filter_adsr{};
+        AdsrEnvelope mod_env1{};
+        AdsrEnvelope mod_env2{};
         float pitch_env = 0.0f;
         float velocity = 1.0f;
         float svf_low = 0.0f;
@@ -218,6 +224,9 @@ private:
 
     std::array<float, kMaxTracks> track_lfo1_phase_{};
     std::array<float, kMaxTracks> track_lfo2_phase_{};
+    std::array<float, kMaxTracks> track_lfo3_phase_{};
+    std::array<float, kMaxTracks> track_lfo4_phase_{};
+    mutable std::array<std::array<float, static_cast<size_t>(ModTarget::kCount)>, kMaxTracks> live_mod_offsets_{};
 
     // Стерео пінг-понг ділей буфер (до 0.5 сек на 48k)
     std::vector<float> delay_buf_l_;

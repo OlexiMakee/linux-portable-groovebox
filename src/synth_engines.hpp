@@ -136,44 +136,150 @@ struct AdsrEnvelope {
     bool isActive() const { return stage != AdsrStage::kIdle; }
 };
 
-enum class StickDest : uint8_t {
-    kCutoff = 0,
-    kResonance,
-    kEnvMod,
-    kFmIndex,
-    kHpfCutoff,
-    kLfo1Rate,
-    kLfo1Depth,
-    kLfo2Rate,
-    kLfo2Depth,
-    kDelaySend,
-    kDelayTime,
-    kDelayFeedback,
-    kReverbSend,
-    kPan,
-    kLevel,
+enum class ModTarget : uint8_t {
+    kNone = 0,
+    kCutoff,        // LPF Cutoff
+    kResonance,     // LPF Resonance
+    kEnvMod,        // LPF Env Mod
+    kLpfDecay,      // LPF Decay
+    kHpfCutoff,     // HPF Cutoff
+    kHpfResonance,  // HPF Resonance
+    kHpfEnv,        // HPF Env Mod
+    kHpfDecay,      // HPF Decay
+    kGainOver,      // Gain / Overdrive
+    kPitch,         // Pitch / Tune
+    kGlide,         // Glide Time
+    kParam1,        // Param 1 (Macro / Cutoff / Presets)
+    kParam2,        // Param 2
+    kParam3,        // Param 3
+    kParam4,        // Param 4
+    kParam5,        // Param 5
+    kParam6,        // Param 6
+    kAmpAttack,     // Amp Attack
+    kAmpDecay,      // Amp Decay
+    kAmpSustain,    // Amp Sustain
+    kAmpRelease,    // Amp Release
+    kPan,           // Pan
+    kLevel,         // Volume Level
+    kDelaySend,     // Delay Send
+    kReverbSend,    // Reverb Send
+    kLfo1Rate,      // LFO1 Rate
+    kLfo1Depth,     // LFO1 Depth
+    kLfo2Rate,      // LFO2 Rate
+    kLfo2Depth,     // LFO2 Depth
+    kLfo3Rate,      // LFO3 Rate
+    kLfo3Depth,     // LFO3 Depth
+    kLfo4Rate,      // LFO4 Rate
+    kLfo4Depth,     // LFO4 Depth
+    kEnv1Attack,    // Env1 Attack
+    kEnv1Decay,     // Env1 Decay
+    kEnv1Sustain,   // Env1 Sustain
+    kEnv1Release,   // Env1 Release
+    kEnv2Attack,    // Env2 Attack
+    kEnv2Decay,     // Env2 Decay
+    kEnv2Sustain,   // Env2 Sustain
+    kEnv2Release,   // Env2 Release
     kCount
 };
 
-inline constexpr const char* getStickDestShortName(StickDest dest) {
-    switch (dest) {
-        case StickDest::kCutoff:        return "CUT";
-        case StickDest::kResonance:     return "RES";
-        case StickDest::kEnvMod:        return "ENV";
-        case StickDest::kFmIndex:       return "FM";
-        case StickDest::kHpfCutoff:     return "HPF";
-        case StickDest::kLfo1Rate:      return "MOD1";
-        case StickDest::kLfo1Depth:     return "DEP1";
-        case StickDest::kLfo2Rate:      return "MOD2";
-        case StickDest::kLfo2Depth:     return "DEP2";
-        case StickDest::kDelaySend:     return "D.SND";
-        case StickDest::kDelayTime:     return "D.TIM";
-        case StickDest::kDelayFeedback: return "D.FBK";
-        case StickDest::kReverbSend:    return "REV";
-        case StickDest::kPan:           return "PAN";
-        case StickDest::kLevel:         return "VOL";
-        default:                        return "OFF";
+using StickDest = ModTarget;
+
+inline constexpr const char* getModTargetShortName(ModTarget target) {
+    switch (target) {
+        case ModTarget::kCutoff:       return "CUT";
+        case ModTarget::kResonance:    return "RES";
+        case ModTarget::kEnvMod:       return "ENV";
+        case ModTarget::kLpfDecay:     return "L.DEC";
+        case ModTarget::kHpfCutoff:    return "HPF";
+        case ModTarget::kHpfResonance: return "H.RES";
+        case ModTarget::kHpfEnv:       return "H.ENV";
+        case ModTarget::kHpfDecay:     return "H.DEC";
+        case ModTarget::kGainOver:     return "GAIN";
+        case ModTarget::kPitch:        return "PTCH";
+        case ModTarget::kGlide:        return "GLID";
+        case ModTarget::kParam1:       return "P1";
+        case ModTarget::kParam2:       return "P2";
+        case ModTarget::kParam3:       return "P3";
+        case ModTarget::kParam4:       return "P4";
+        case ModTarget::kParam5:       return "P5";
+        case ModTarget::kParam6:       return "P6";
+        case ModTarget::kAmpAttack:    return "ATK";
+        case ModTarget::kAmpDecay:     return "DEC";
+        case ModTarget::kAmpSustain:   return "SUS";
+        case ModTarget::kAmpRelease:   return "REL";
+        case ModTarget::kPan:          return "PAN";
+        case ModTarget::kLevel:        return "VOL";
+        case ModTarget::kDelaySend:    return "D.SND";
+        case ModTarget::kReverbSend:   return "REV";
+        case ModTarget::kLfo1Rate:     return "L1.RTE";
+        case ModTarget::kLfo1Depth:    return "L1.DEP";
+        case ModTarget::kLfo2Rate:     return "L2.RTE";
+        case ModTarget::kLfo2Depth:    return "L2.DEP";
+        case ModTarget::kLfo3Rate:     return "L3.RTE";
+        case ModTarget::kLfo3Depth:    return "L3.DEP";
+        case ModTarget::kLfo4Rate:     return "L4.RTE";
+        case ModTarget::kLfo4Depth:    return "L4.DEP";
+        case ModTarget::kEnv1Attack:   return "E1.ATK";
+        case ModTarget::kEnv1Decay:    return "E1.DEC";
+        case ModTarget::kEnv1Sustain:  return "E1.SUS";
+        case ModTarget::kEnv1Release:  return "E1.REL";
+        case ModTarget::kEnv2Attack:   return "E2.ATK";
+        case ModTarget::kEnv2Decay:    return "E2.DEC";
+        case ModTarget::kEnv2Sustain:  return "E2.SUS";
+        case ModTarget::kEnv2Release:  return "E2.REL";
+        default:                       return "OFF";
     }
+}
+
+inline constexpr const char* getModTargetLongName(ModTarget target) {
+    switch (target) {
+        case ModTarget::kCutoff:       return "LPF Cutoff";
+        case ModTarget::kResonance:    return "LPF Resonance";
+        case ModTarget::kEnvMod:       return "LPF Env Mod";
+        case ModTarget::kLpfDecay:     return "LPF Decay";
+        case ModTarget::kHpfCutoff:    return "HPF Cutoff";
+        case ModTarget::kHpfResonance: return "HPF Resonance";
+        case ModTarget::kHpfEnv:       return "HPF Env Mod";
+        case ModTarget::kHpfDecay:     return "HPF Decay";
+        case ModTarget::kGainOver:     return "Gain / Overdrive";
+        case ModTarget::kPitch:        return "Pitch / Tune";
+        case ModTarget::kGlide:        return "Glide Time";
+        case ModTarget::kParam1:       return "Param 1 (Macro)";
+        case ModTarget::kParam2:       return "Param 2";
+        case ModTarget::kParam3:       return "Param 3";
+        case ModTarget::kParam4:       return "Param 4";
+        case ModTarget::kParam5:       return "Param 5";
+        case ModTarget::kParam6:       return "Param 6";
+        case ModTarget::kAmpAttack:    return "Amp Attack";
+        case ModTarget::kAmpDecay:     return "Amp Decay";
+        case ModTarget::kAmpSustain:   return "Amp Sustain";
+        case ModTarget::kAmpRelease:   return "Amp Release";
+        case ModTarget::kPan:          return "Track Pan";
+        case ModTarget::kLevel:        return "Track Level";
+        case ModTarget::kDelaySend:    return "Delay Send";
+        case ModTarget::kReverbSend:   return "Reverb Send";
+        case ModTarget::kLfo1Rate:     return "LFO 1 Rate";
+        case ModTarget::kLfo1Depth:    return "LFO 1 Depth";
+        case ModTarget::kLfo2Rate:     return "LFO 2 Rate";
+        case ModTarget::kLfo2Depth:    return "LFO 2 Depth";
+        case ModTarget::kLfo3Rate:     return "LFO 3 Rate";
+        case ModTarget::kLfo3Depth:    return "LFO 3 Depth";
+        case ModTarget::kLfo4Rate:     return "LFO 4 Rate";
+        case ModTarget::kLfo4Depth:    return "LFO 4 Depth";
+        case ModTarget::kEnv1Attack:   return "Env 1 Attack";
+        case ModTarget::kEnv1Decay:    return "Env 1 Decay";
+        case ModTarget::kEnv1Sustain:  return "Env 1 Sustain";
+        case ModTarget::kEnv1Release:  return "Env 1 Release";
+        case ModTarget::kEnv2Attack:   return "Env 2 Attack";
+        case ModTarget::kEnv2Decay:    return "Env 2 Decay";
+        case ModTarget::kEnv2Sustain:  return "Env 2 Sustain";
+        case ModTarget::kEnv2Release:  return "Env 2 Release";
+        default:                       return "Off (None)";
+    }
+}
+
+inline constexpr const char* getStickDestShortName(ModTarget dest) {
+    return getModTargetShortName(dest);
 }
 
 enum class LfoWave : uint8_t {
@@ -213,11 +319,27 @@ struct LfoParameters {
     LfoWave wave = LfoWave::kTriangle;
     float rate = 0.25f;        // 0.0 .. 1.0 (пропорційна шкала 1..128)
     float depth = 0.0f;       // 0.0 .. 1.0
-    StickDest dest = StickDest::kCutoff;
+    ModTarget dest = ModTarget::kCutoff;
     LfoMode mode = LfoMode::kTrig;
     uint8_t multiplier = 1;   // 1, 2, 4, 8, 16, 32, 64 (Elektron Digitakt style)
     float phase = 0.0f;
     float value = 0.0f;
+};
+
+struct ModEnvParameters {
+    float attack = 0.01f;   // 10ms
+    float decay = 0.30f;    // 300ms
+    float sustain = 0.0f;   // 0.0 .. 1.0
+    float release = 0.10f;  // 100ms
+    float amount = 0.0f;    // -1.0 .. +1.0 (bipolar depth)
+    ModTarget dest = ModTarget::kNone;
+};
+
+struct StickAxisConfig {
+    ModTarget dest_x = ModTarget::kNone;
+    float amount_x = 0.50f; // 0.0 .. 1.0 (0% .. 100%)
+    ModTarget dest_y = ModTarget::kNone;
+    float amount_y = 0.50f; // 0.0 .. 1.0 (0% .. 100%)
 };
 
 struct TrackParameters {
@@ -244,12 +366,28 @@ struct TrackParameters {
     bool muted = false;
     int transpose = 0;      // -24 .. +24 півтонів (транспозиція треку)
     float glide = 0.065f;   // 5..500 мс час легато-слайду (TB-303 класика = 65 мс)
-    StickDest stick_left_x = StickDest::kCutoff;
-    StickDest stick_left_y = StickDest::kResonance;
-    StickDest stick_right_x = StickDest::kLfo1Rate;
-    StickDest stick_right_y = StickDest::kLfo2Rate;
-    LfoParameters lfo1{.wave = LfoWave::kTriangle, .rate = 0.25f, .depth = 0.0f, .dest = StickDest::kCutoff, .mode = LfoMode::kTrig, .multiplier = 1};
-    LfoParameters lfo2{.wave = LfoWave::kSine, .rate = 0.40f, .depth = 0.0f, .dest = StickDest::kResonance, .mode = LfoMode::kFree, .multiplier = 1};
+
+    // Конфігурація аналогових стіків (Mode 1 & Mode 2 для обох стіків)
+    StickAxisConfig stick_l_m1{ModTarget::kCutoff, 0.50f, ModTarget::kResonance, 0.50f};
+    StickAxisConfig stick_l_m2{ModTarget::kEnvMod, 0.50f, ModTarget::kHpfCutoff, 0.50f};
+    StickAxisConfig stick_r_m1{ModTarget::kLfo1Rate, 0.50f, ModTarget::kLfo1Depth, 0.50f};
+    StickAxisConfig stick_r_m2{ModTarget::kLfo2Rate, 0.50f, ModTarget::kLfo2Depth, 0.50f};
+
+    // Сумісність для існуючого коду
+    ModTarget stick_left_x = ModTarget::kCutoff;
+    ModTarget stick_left_y = ModTarget::kResonance;
+    ModTarget stick_right_x = ModTarget::kLfo1Rate;
+    ModTarget stick_right_y = ModTarget::kLfo2Rate;
+
+    // 4 призначувані LFO на трек
+    LfoParameters lfo1{.wave = LfoWave::kTriangle, .rate = 0.25f, .depth = 0.0f, .dest = ModTarget::kCutoff, .mode = LfoMode::kTrig, .multiplier = 1};
+    LfoParameters lfo2{.wave = LfoWave::kSine, .rate = 0.40f, .depth = 0.0f, .dest = ModTarget::kResonance, .mode = LfoMode::kFree, .multiplier = 1};
+    LfoParameters lfo3{.wave = LfoWave::kSaw, .rate = 0.50f, .depth = 0.0f, .dest = ModTarget::kNone, .mode = LfoMode::kTrig, .multiplier = 1};
+    LfoParameters lfo4{.wave = LfoWave::kSquare, .rate = 0.20f, .depth = 0.0f, .dest = ModTarget::kNone, .mode = LfoMode::kFree, .multiplier = 1};
+
+    // 2 призначувані ADSR огинаючі на трек
+    ModEnvParameters env1{.attack = 0.01f, .decay = 0.30f, .sustain = 0.0f, .release = 0.10f, .amount = 0.0f, .dest = ModTarget::kNone};
+    ModEnvParameters env2{.attack = 0.01f, .decay = 0.25f, .sustain = 0.2f, .release = 0.15f, .amount = 0.0f, .dest = ModTarget::kNone};
 };
 
 inline constexpr const char* kParamNames[static_cast<int>(EngineType::kCount)][kParamsPerTrack] = {
