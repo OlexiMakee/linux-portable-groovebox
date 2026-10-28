@@ -292,7 +292,7 @@ static void testInputRouterAndStepEditor() {
     uint32_t now_ms = 1000;
     UiContext ctx{app, audio, nullptr, current_in, hw, tel, midi, now_ms, &shell};
 
-    // 1. Тестування автоповтору D-Pad
+    // 1. Тестування автоповтору D-Pad (поріг утримання >= 850мс, крок 120мс)
     current_in = InputState{};
     current_in.dpad_right = true;
     current_in.right_pressed = true;
@@ -301,20 +301,23 @@ static void testInputRouterAndStepEditor() {
     int initial_step = app.cursor_step;
     router.processInput(ctx); // t=1000: edge press
     current_in.right_pressed = false;
+    int step_after_press = app.cursor_step;
+    TEST_ASSERT(step_after_press == initial_step + 1, "Single edge press advances cursor by exactly 1 step");
 
-    // t=1100: утримання до 220мс (не повинно повторюватись)
-    ctx.now_ms = 1100;
+    // t=1500: утримання 500мс (< 850мс, не повинно повторюватись)
+    ctx.now_ms = 1500;
     router.processInput(ctx);
+    TEST_ASSERT(app.cursor_step == step_after_press, "No repeat before 850ms hold threshold");
 
-    // t=1230: утримання > 220мс (автоповтор повинен спрацювати)
-    ctx.now_ms = 1230;
+    // t=1900: утримання 900мс >= 850мс (автоповтор спрацьовує)
+    ctx.now_ms = 1900;
     router.processInput(ctx);
+    TEST_ASSERT(app.cursor_step == step_after_press + 1, "First repeat triggered after 850ms hold");
 
-    // t=1310: наступний автоповтор через 75мс
-    ctx.now_ms = 1310;
+    // t=2030: наступний автоповтор через 130мс (>= 120мс)
+    ctx.now_ms = 2030;
     router.processInput(ctx);
-
-    TEST_ASSERT(app.cursor_step > initial_step, "D-Pad repeat smoothly advances sequencer step cursor on hold");
+    TEST_ASSERT(app.cursor_step == step_after_press + 2, "Second repeat triggered after 120ms interval");
 
     // 2. Тестування утримання кнопки A (Step Editor Open без зміни значень)
     app.active_view = ViewId::kSeq;

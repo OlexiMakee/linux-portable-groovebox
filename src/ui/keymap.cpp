@@ -181,26 +181,10 @@ const std::string* Keymap::lookup(ViewId view, Layer layer, Button button, Gestu
             return &b.action_id;
         }
     }
-    // 2. Якщо жест Tap/Hold не знайдено для кнопки, дивимось чи є звичайний Press
-    if (gesture != Gesture::kPress) {
-        for (const auto& b : bindings_) {
-            if (b.view == view && b.layer == layer && b.button == button && b.gesture == Gesture::kPress) {
-                return &b.action_id;
-            }
-        }
-    }
-    // 3. Fallback: глобальна прив'язка (ViewId::kCount) для цього шару
+    // 2. Fallback: глобальна прив'язка (ViewId::kCount) для цього шару та жесту
     for (const auto& b : bindings_) {
         if (b.view == ViewId::kCount && b.layer == layer && b.button == button && b.gesture == gesture) {
             return &b.action_id;
-        }
-    }
-    // 4. Fallback: глобальний Press
-    if (gesture != Gesture::kPress) {
-        for (const auto& b : bindings_) {
-            if (b.view == ViewId::kCount && b.layer == layer && b.button == button && b.gesture == Gesture::kPress) {
-                return &b.action_id;
-            }
         }
     }
     return nullptr;
@@ -366,8 +350,8 @@ void InputRouter::processInput(UiContext& ctx) {
                         ev.id == Button::kDpadLeft || ev.id == Button::kDpadRight);
         if (ev.is_down && is_dpad) {
             uint32_t elapsed = ctx.now_ms - press_time_ms_[idx];
-            if (elapsed >= 220) {
-                if (ctx.now_ms - repeat_last_ms_[idx] >= 75) {
+            if (elapsed >= 850) {
+                if (ctx.now_ms - repeat_last_ms_[idx] >= 120) {
                     repeat_last_ms_[idx] = ctx.now_ms;
                     dispatch(ctx, view, layer, ev.id, Gesture::kPress);
                 }
@@ -381,7 +365,7 @@ void InputRouter::processInput(UiContext& ctx) {
                 continue;
             }
             uint32_t elapsed = ctx.now_ms - press_time_ms_[idx];
-            if (elapsed >= 250) {
+            if (elapsed >= 850) {
                 // Якщо утримуємо A або B на виборі ENGINE у SYNTH — відкриваємо селектор рушіїв
                 bool on_engine = (view == ViewId::kSynth && ctx.app.grid_row[static_cast<int>(ViewId::kSynth)] == 0 && ctx.app.grid_col[static_cast<int>(ViewId::kSynth)] == 0);
                 if (on_engine) {
@@ -390,7 +374,7 @@ void InputRouter::processInput(UiContext& ctx) {
                         ActionRegistry::instance().run("ENGINE.MENU_OPEN", ctx);
                     }
                 } else {
-                    if (ctx.now_ms - repeat_last_ms_[idx] >= 60) {
+                    if (ctx.now_ms - repeat_last_ms_[idx] >= 120) {
                         repeat_last_ms_[idx] = ctx.now_ms;
                         dispatch(ctx, view, layer, ev.id, Gesture::kPress);
                     }
@@ -398,9 +382,9 @@ void InputRouter::processInput(UiContext& ctx) {
             }
         }
 
-        // Відпускання кнопки
+        // Відпускання кнопки (викликає kTap ЛИШЕ якщо для кнопки явно налаштовано Tap або Hold)
         if (ev.released_edge) {
-            if (!hold_fired_[idx] && !consumed_[idx]) {
+            if (!hold_fired_[idx] && !consumed_[idx] && keymap_.hasTapOrHold(view, layer, ev.id)) {
                 dispatch(ctx, view, layer, ev.id, Gesture::kTap);
             }
             if (ev.id == Button::kL3 && hold_fired_[idx]) {
