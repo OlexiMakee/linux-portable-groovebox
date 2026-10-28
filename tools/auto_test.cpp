@@ -226,6 +226,8 @@ static void testAudioDspEngines() {
 
     // Звучання з повністю відкритим LPF і вимкненим HPF
     audio.triggerNote(0, 60, 0.90f);
+    int16_t settle_buf[512 * 2];
+    audio.renderBlock(settle_buf, 512, 32000);
     int16_t open_buf[512 * 2];
     audio.renderBlock(open_buf, 512, 32000);
     int64_t energy_open = 0;
@@ -236,6 +238,7 @@ static void testAudioDspEngines() {
     filter_tp.lpf_cutoff = 0.15f;
     audio.setTrackParams(0, filter_tp);
     audio.triggerNote(0, 60, 0.90f);
+    audio.renderBlock(settle_buf, 512, 32000);
     int16_t closed_buf[512 * 2];
     audio.renderBlock(closed_buf, 512, 32000);
     int64_t energy_lpf_closed = 0;
@@ -250,6 +253,7 @@ static void testAudioDspEngines() {
     filter_tp.hpf_cutoff = 0.70f;
     audio.setTrackParams(0, filter_tp);
     audio.triggerNote(0, 36, 0.90f); // Низька басова нота C2 (65.4 Гц)
+    audio.renderBlock(settle_buf, 512, 32000); // Даємо огинаючій вийти на стаціонарний рівень (sustain)
     int16_t hpf_buf[512 * 2];
     audio.renderBlock(hpf_buf, 512, 32000);
     int64_t energy_hpf = 0;
@@ -259,6 +263,7 @@ static void testAudioDspEngines() {
     filter_tp.hpf_cutoff = 0.0f; // без HPF (чистий бас проходить)
     audio.setTrackParams(0, filter_tp);
     audio.triggerNote(0, 36, 0.90f);
+    audio.renderBlock(settle_buf, 512, 32000); // Даємо вийти на стаціонарний рівень (sustain)
     int16_t full_bass_buf[512 * 2];
     audio.renderBlock(full_bass_buf, 512, 32000);
     int64_t energy_full_bass = 0;
