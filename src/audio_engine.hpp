@@ -181,6 +181,7 @@ public:
     const Dx7Engine& dx7() const { return dx7_engine_; }
 
     AudioEngineTelemetry getTelemetry() const;
+    uint32_t sampleRate() const { return active_sample_rate_.load(std::memory_order_relaxed); }
 
     // Отримання поточного значення модуляції для таргету треку (для UI повзунків та анімації)
     float getLiveModOffset(int track, ModTarget target) const;

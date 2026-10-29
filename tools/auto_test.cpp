@@ -1007,6 +1007,31 @@ static void testInputRouterAndStepEditor() {
     test_sampler.sliceToDrumSlots(0.0f, 1.0f);
     TEST_ASSERT(test_sampler.drumSlot(0).loaded == true, "sliceToDrumSlots successfully generates loaded drum slot 1");
     TEST_ASSERT(test_sampler.drumSlot(0).lengthFrames() > 0, "Drum slot 1 contains non-zero frame length");
+
+    // Тестування Digitakt II USB OTG Hot-Plug Automation
+    HardwareMonitor dt_hw_mon;
+    dt_hw_mon.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    dt_hw_mon.toggleMockDigitakt();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    HardwareSnapshot snap_plugged = dt_hw_mon.getSnapshot();
+    TEST_ASSERT(snap_plugged.digitakt_connected == true, "Mock Digitakt II detected on USB bus");
+    TEST_ASSERT(snap_plugged.active_audio_card == 1, "Active audio card switches to USB Digitakt II");
+
+    audio.updateRouting(snap_plugged.active_audio_card, snap_plugged.digitakt_connected, false);
+    TEST_ASSERT(audio.sampleRate() == 48000, "AudioEngine switches sample rate to 48000 Hz for Digitakt II");
+
+    dt_hw_mon.toggleMockDigitakt();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    HardwareSnapshot snap_unplugged = dt_hw_mon.getSnapshot();
+    TEST_ASSERT(snap_unplugged.digitakt_connected == false, "Digitakt II hot-unplug detected");
+    TEST_ASSERT(snap_unplugged.active_audio_card == activeProfile().internal_card, "Active audio card reverts to internal DAC");
+
+    audio.updateRouting(snap_unplugged.active_audio_card, snap_unplugged.digitakt_connected, false);
+    TEST_ASSERT(audio.sampleRate() == static_cast<uint32_t>(activeProfile().internal_rate), "AudioEngine reverts sample rate to native internal DAC rate");
+
+    dt_hw_mon.stop();
 }
 
 static void testViewsRendering() {
