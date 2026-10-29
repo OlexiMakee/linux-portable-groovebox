@@ -69,7 +69,7 @@ void setupAppLayout(UiShell& shell) {
             switch (tp.engine) {
                 case EngineType::kDx7:
                     return {
-                        {"INST",   {"TRK.ENGINE", "TRK.PRESET", "TRK.P1"}},
+                        {"INST",   {"TRK.ENGINE", "DX7.BANK", "TRK.PRESET", "TRK.P1", "TRK.GAIN_OVER"}},
                         {"DX7",    {"TRK.P5", "TRK.P6", "TRK.P3", "TRK.P4", "TRK.P2"}},
                         {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
                         {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
@@ -100,14 +100,18 @@ void setupAppLayout(UiShell& shell) {
                         {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL", "TRK.LVL"}}
                     };
                 case EngineType::kSampleOneShot:
-                case EngineType::kSliceSampler:
+                case EngineType::kSliceSampler: {
+                    std::vector<std::string> play_row = (tp.sample.play_mode == SampleEngineMode::kSlicer)
+                        ? std::vector<std::string>{"SMP.GRID", "SMP.SLICE", "SMP.START", "SMP.END", "SMP.LOOP"}
+                        : std::vector<std::string>{"SMP.LOOP", "SMP.START", "SMP.LOOP_PT", "SMP.END", "SMP.SLICE"};
                     return {
                         {"INST",   {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "SMP.PLAY_MODE", "SMP.TUNE", "TRK.GAIN_OVER"}},
-                        {"PLAY",   {"SMP.LOOP", "SMP.START", "SMP.LOOP_PT", "SMP.END", "SMP.SLICE"}},
+                        {"PLAY",   play_row},
                         {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
                         {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
                         {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL", "TRK.LVL"}}
                     };
+                }
                 case EngineType::kMidiOut:
                     return {
                         {"INST",   {"TRK.ENGINE", "TRK.PRESET", "TRK.P1", "TRK.P6"}},

@@ -396,6 +396,9 @@ ParamRegistry::ParamRegistry() {
                 if (buf.loaded && !buf.name.empty() && buf.name != "EMPTY") return buf.name;
                 return c.audio.getTrackName(t);
             }
+            if (tp.engine == EngineType::kDx7) {
+                return "LOAD .SYX";
+            }
             return "---";
         };
         p.norm = [](const UiContext& c) {
@@ -405,10 +408,23 @@ ParamRegistry::ParamRegistry() {
         p.step = [](UiContext& c, int, bool) {
             const int t = trk(c, -1);
             auto tp = c.audio.getTrackParams(t);
-            if (tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler) {
+            if (tp.engine == EngineType::kSampleOneShot || tp.engine == EngineType::kSliceSampler || tp.engine == EngineType::kDx7) {
                 c.app.sample_browser_target_track = t;
                 ActionRegistry::instance().run("SAMPLE_BROWSER.OPEN", c);
             }
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "DX7.BANK";
+        p.label = "BANK";
+        p.value = [](const UiContext&) { return "LOAD .SYX"; };
+        p.norm = [](const UiContext&) { return 0.5f; };
+        p.step = [](UiContext& c, int, bool) {
+            c.app.sample_browser_target_track = trk(c, -1);
+            c.app.browser_context = AppModel::BrowserContext::kDx7;
+            ActionRegistry::instance().run("SAMPLE_BROWSER.OPEN", c);
         };
         add(std::move(p));
     }
@@ -436,22 +452,60 @@ ParamRegistry::ParamRegistry() {
     }
     {
         Param p;
-        p.id = "SMP.SLICE";
-        p.label = "SLICE";
+        p.id = "SMP.GRID";
+        p.label = "GRID";
         p.value = [](const UiContext& c) {
             auto tp = c.audio.getTrackParams(trk(c, -1));
-            char b[16];
-            std::snprintf(b, sizeof(b), "SL %d/16", tp.sample.slice_index + 1);
-            return std::string(b);
+            int grid = std::clamp(tp.sample.slice_grid_count, 8, 128);
+            return std::to_string(grid) + " SLICES";
         };
         p.norm = [](const UiContext& c) {
             auto tp = c.audio.getTrackParams(trk(c, -1));
-            return std::clamp(static_cast<float>(tp.sample.slice_index) / 15.0f, 0.0f, 1.0f);
+            int grid = std::clamp(tp.sample.slice_grid_count, 8, 128);
+            for (size_t i = 0; i < kSliceGridSizes.size(); ++i) {
+                if (kSliceGridSizes[i] == grid) return static_cast<float>(i) / (kSliceGridSizes.size() - 1);
+            }
+            return 0.25f;
         };
         p.step = [](UiContext& c, int dir, bool) {
             const int t = trk(c, -1);
             auto tp = c.audio.getTrackParams(t);
-            tp.sample.slice_index = std::clamp(tp.sample.slice_index + dir, 0, 15);
+            int cur_idx = 1; // default 16
+            for (size_t i = 0; i < kSliceGridSizes.size(); ++i) {
+                if (kSliceGridSizes[i] == tp.sample.slice_grid_count) {
+                    cur_idx = static_cast<int>(i);
+                    break;
+                }
+            }
+            int n = static_cast<int>(kSliceGridSizes.size());
+            int next_idx = std::clamp(cur_idx + dir, 0, n - 1);
+            tp.sample.slice_grid_count = kSliceGridSizes[next_idx];
+            tp.sample.slice_index = std::clamp(tp.sample.slice_index, 0, tp.sample.slice_grid_count - 1);
+            c.audio.setTrackParams(t, tp);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SMP.SLICE";
+        p.label = "SLICE";
+        p.value = [](const UiContext& c) {
+            auto tp = c.audio.getTrackParams(trk(c, -1));
+            int grid = std::clamp(tp.sample.slice_grid_count, 8, 128);
+            char b[16];
+            std::snprintf(b, sizeof(b), "SL %d/%d", std::min(tp.sample.slice_index + 1, grid), grid);
+            return std::string(b);
+        };
+        p.norm = [](const UiContext& c) {
+            auto tp = c.audio.getTrackParams(trk(c, -1));
+            int grid = std::max(2, std::clamp(tp.sample.slice_grid_count, 8, 128));
+            return std::clamp(static_cast<float>(tp.sample.slice_index) / static_cast<float>(grid - 1), 0.0f, 1.0f);
+        };
+        p.step = [](UiContext& c, int dir, bool) {
+            const int t = trk(c, -1);
+            auto tp = c.audio.getTrackParams(t);
+            int grid = std::clamp(tp.sample.slice_grid_count, 8, 128);
+            tp.sample.slice_index = std::clamp(tp.sample.slice_index + dir, 0, grid - 1);
             c.audio.setTrackParams(t, tp);
         };
         add(std::move(p));

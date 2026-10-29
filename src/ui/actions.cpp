@@ -1240,26 +1240,60 @@ ActionRegistry::ActionRegistry() {
         c.app.last_action = "TARGET: " + std::string(getModTargetShortName(tgt));
     }});
 
-    // ---------------- Семпл-браузер (пул семплів та доступ до ФС) ----------------
-    auto getSamplesRootPath = []() -> std::string {
-        static const char* kCandidates[] = {
-            "/storage/roms/groovebox/samples",
-            "/storage/dev/groovebox/res/samples",
-            "res/samples",
-            "../res/samples"
-        };
-        for (const char* p : kCandidates) {
-            std::error_code ec;
-            if (fs::exists(p, ec) && fs::is_directory(p, ec)) {
-                return std::string(p);
+    // ---------------- Семпл-браузер (пул семплів, лупів та DX7 банків) ----------------
+    auto getBrowserRootPath = [](AppModel::BrowserContext ctx) -> std::string {
+        if (ctx == AppModel::BrowserContext::kLoops) {
+            static const char* kLoopCandidates[] = {
+                "/storage/roms/groovebox/loops",
+                "/storage/dev/groovebox/res/loops",
+                "res/loops",
+                "../res/loops",
+                "/storage/roms/groovebox/samples",
+                "res/samples"
+            };
+            for (const char* p : kLoopCandidates) {
+                std::error_code ec;
+                if (fs::exists(p, ec) && fs::is_directory(p, ec)) return std::string(p);
             }
+            return "res/loops";
+        } else if (ctx == AppModel::BrowserContext::kDx7) {
+            static const char* kDx7Candidates[] = {
+                "/storage/roms/groovebox/dx7",
+                "/storage/dev/groovebox/res/dx7",
+                "res/dx7",
+                "../res/dx7"
+            };
+            for (const char* p : kDx7Candidates) {
+                std::error_code ec;
+                if (fs::exists(p, ec) && fs::is_directory(p, ec)) return std::string(p);
+            }
+            return "res/dx7";
+        } else {
+            static const char* kOneShotCandidates[] = {
+                "/storage/roms/groovebox/oneshots",
+                "/storage/roms/groovebox/samples/drums",
+                "/storage/roms/groovebox/samples",
+                "/storage/dev/groovebox/res/oneshots",
+                "/storage/dev/groovebox/res/samples/drums",
+                "/storage/dev/groovebox/res/samples",
+                "res/oneshots",
+                "res/samples/drums",
+                "res/samples",
+                "../res/oneshots",
+                "../res/samples/drums"
+            };
+            for (const char* p : kOneShotCandidates) {
+                std::error_code ec;
+                if (fs::exists(p, ec) && fs::is_directory(p, ec)) return std::string(p);
+            }
+            return "res/samples";
         }
-        return "res/samples";
     };
 
-    auto refreshSampleBrowser = [getSamplesRootPath](UiContext& c) {
+    auto refreshSampleBrowser = [getBrowserRootPath](UiContext& c) {
         c.app.sample_browser_items.clear();
-        std::string root = getSamplesRootPath();
+        std::string root = getBrowserRootPath(c.app.browser_context);
+        c.app.sample_browser_root = root;
         if (c.app.sample_browser_dir.empty()) {
             c.app.sample_browser_dir = root;
         }
@@ -1269,22 +1303,24 @@ ActionRegistry::ActionRegistry() {
             c.app.sample_browser_items.push_back("[..] PARENT DIR");
         }
         std::vector<std::string> dirs;
-        std::vector<std::string> wavs;
+        std::vector<std::string> files;
+        const std::string target_ext = (c.app.browser_context == AppModel::BrowserContext::kDx7) ? ".syx" : ".wav";
+
         for (const auto& entry : fs::directory_iterator(c.app.sample_browser_dir, ec)) {
             if (entry.is_directory(ec)) {
                 dirs.push_back("[DIR] " + entry.path().filename().string());
             } else if (entry.is_regular_file(ec)) {
                 std::string ext = entry.path().extension().string();
                 std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                if (ext == ".wav") {
-                    wavs.push_back(entry.path().filename().string());
+                if (ext == target_ext) {
+                    files.push_back(entry.path().filename().string());
                 }
             }
         }
         std::sort(dirs.begin(), dirs.end());
-        std::sort(wavs.begin(), wavs.end());
+        std::sort(files.begin(), files.end());
         for (auto& d : dirs) c.app.sample_browser_items.push_back(std::move(d));
-        for (auto& w : wavs) c.app.sample_browser_items.push_back(std::move(w));
+        for (auto& f : files) c.app.sample_browser_items.push_back(std::move(f));
 
         if (c.app.sample_browser_items.empty()) {
             c.app.sample_browser_items.push_back("(EMPTY DIRECTORY)");
@@ -1293,7 +1329,7 @@ ActionRegistry::ActionRegistry() {
     };
 
     auto auditionCurrentBrowserItem = [](UiContext& c) {
-        if (c.app.sample_browser_items.empty()) return;
+        if (c.app.sample_browser_items.empty() || c.app.browser_context == AppModel::BrowserContext::kDx7) return;
         int sel = std::clamp(c.app.sample_browser_sel, 0, static_cast<int>(c.app.sample_browser_items.size()) - 1);
         const std::string& item = c.app.sample_browser_items[sel];
         if (item.rfind("[DIR] ", 0) == 0 || item.rfind("[..]", 0) == 0 || item[0] == '(') {
@@ -1309,10 +1345,21 @@ ActionRegistry::ActionRegistry() {
     add(Action{"SAMPLE_BROWSER.OPEN", "SAMPLES", [=](UiContext& c) {
         c.app.sample_browser_open = true;
         c.app.sample_browser_target_track = c.app.selected_track;
-        c.app.sample_browser_dir = getSamplesRootPath();
+        const auto tp = c.audio.getTrackParams(c.app.selected_track);
+        if (tp.engine == EngineType::kDx7) {
+            c.app.browser_context = AppModel::BrowserContext::kDx7;
+        } else if (tp.engine == EngineType::kSampleOneShot && tp.sample.play_mode == SampleEngineMode::kSlicer) {
+            c.app.browser_context = AppModel::BrowserContext::kLoops;
+        } else {
+            c.app.browser_context = AppModel::BrowserContext::kOneShots;
+        }
+        c.app.sample_browser_dir = getBrowserRootPath(c.app.browser_context);
+        c.app.sample_browser_root = c.app.sample_browser_dir;
         c.app.sample_browser_sel = 0;
         refreshSampleBrowser(c);
-        c.app.last_action = "SAMPLE BROWSER";
+        c.app.last_action = (c.app.browser_context == AppModel::BrowserContext::kDx7)
+                            ? "DX7 BANKS"
+                            : (c.app.browser_context == AppModel::BrowserContext::kLoops ? "SLICER LOOPS" : "ONE-SHOTS");
     }});
     add(Action{"SAMPLE_BROWSER.UP", "UP", [=](UiContext& c) {
         const int n = static_cast<int>(c.app.sample_browser_items.size());
@@ -1349,12 +1396,29 @@ ActionRegistry::ActionRegistry() {
         if (item[0] == '(') return;
         std::string full_path = c.app.sample_browser_dir + "/" + item;
         int t = c.app.sample_browser_target_track;
+
+        if (c.app.browser_context == AppModel::BrowserContext::kDx7) {
+            if (c.audio.dx7().loadCartridgeFile(full_path)) {
+                std::string stem = fs::path(full_path).stem().string();
+                c.app.sample_browser_open = false;
+                c.app.modal_cooldown_until_ms = c.now_ms + 300;
+                c.app.last_action = "DX7 BANK: " + stem;
+            } else {
+                c.app.last_action = "ERR: DX7 LOAD FAIL";
+            }
+            return;
+        }
+
         if (c.audio.sampler().loadWavFile(full_path, c.audio.sampler().trackSample(t))) {
             std::string stem = fs::path(full_path).stem().string();
             std::transform(stem.begin(), stem.end(), stem.begin(), ::toupper);
             c.audio.setTrackName(t, stem);
             auto tp = c.audio.getTrackParams(t);
             tp.engine = EngineType::kSampleOneShot;
+            if (c.app.browser_context == AppModel::BrowserContext::kLoops) {
+                tp.sample.play_mode = SampleEngineMode::kSlicer;
+                tp.sample.slice_index = 0;
+            }
             c.audio.setTrackParams(t, tp);
             c.audio.triggerNote(t, 48, 0.90f);
             c.app.sample_browser_open = false;
@@ -1365,7 +1429,7 @@ ActionRegistry::ActionRegistry() {
         }
     }});
     add(Action{"SAMPLE_BROWSER.PARENT", "PARENT", [=](UiContext& c) {
-        std::string root = getSamplesRootPath();
+        std::string root = c.app.sample_browser_root.empty() ? getBrowserRootPath(c.app.browser_context) : c.app.sample_browser_root;
         std::error_code ec;
         if (!c.app.sample_browser_dir.empty() && !fs::equivalent(c.app.sample_browser_dir, root, ec) && c.app.sample_browser_dir != root) {
             fs::path p(c.app.sample_browser_dir);
@@ -1374,8 +1438,7 @@ ActionRegistry::ActionRegistry() {
             refreshSampleBrowser(c);
         } else {
             c.app.sample_browser_open = false;
-            c.app.modal_cooldown_until_ms = c.now_ms + 300;
-            c.app.last_action = "BROWSER CLOSED";
+            c.app.modal_cooldown_until_ms = c.now_ms + 250;
         }
     }});
     add(Action{"SAMPLE_BROWSER.CLOSE", "CLOSE", [=](UiContext& c) {
