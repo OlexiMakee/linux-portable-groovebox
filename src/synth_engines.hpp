@@ -669,4 +669,15 @@ struct SequencerStep {
     float release = -1.0f;       // P-Lock Release (-1 = дефолт доріжки)
 };
 
+// Рядок сонгмоду Elektron Song Mode
+struct SongStep {
+    uint8_t bank = 0;       // 0..7 (A..H)
+    uint8_t pattern = 0;    // 0..15 (01..16)
+    uint8_t repeats = 1;    // 1..16 (x1..x16)
+    uint16_t length = 0;    // 0 = PAT (native pattern length), 1..256 steps override
+    uint16_t bpm = 0;       // 0 = PAT (project BPM), 30..300 BPM override
+    uint16_t mute_mask = 0; // Bitmask: bit t set = Track t muted on this row
+    bool enabled = true;
+};
+
 } // namespace groovebox

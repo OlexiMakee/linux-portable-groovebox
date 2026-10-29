@@ -53,9 +53,13 @@ public:
     // Завантажити активний слот у рушій
     void applyCurrent(AudioEngine& engine, float& bpm);
 
-    // Збереження та завантаження всього проєкту на диск (128 патернів)
-    bool saveProject(const std::string& filepath, const AudioEngine& engine, float bpm);
-    bool loadProject(const std::string& filepath, AudioEngine& engine, float& bpm);
+    // Збереження та завантаження всього проєкту на диск (128 патернів + Song Chain + Master FX)
+    bool saveProject(const std::string& filepath, const AudioEngine& engine, float bpm,
+                     const std::array<SongStep, 16>* song_chain = nullptr,
+                     int song_rows_count = 1);
+    bool loadProject(const std::string& filepath, AudioEngine& engine, float& bpm,
+                     std::array<SongStep, 16>* song_chain = nullptr,
+                     int* song_rows_count = nullptr);
 
     // Шляхи та файловий менеджер проєктів
     std::string currentProjectPath() const { return current_project_path_; }
