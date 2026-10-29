@@ -747,7 +747,7 @@ static void testInputRouterAndStepEditor() {
     // 8. Тестування REC Mode: Piano Roll (мелодійний рушій) та Drum Lanes (драм-рек)
     app.rec_mode = true;
     app.selected_track = 1; // Track 2 (303 Bassline)
-    app.rec_cursor_lane = 11; // Нота C
+    app.rec_cursor_lane = 12; // Нота C (нижній рядок 13-рядкового піано-ролу)
     app.rec_octave = 3;
     app.cursor_step = 2;
     ActionRegistry::instance().run("SEQ.TRIG", ctx);
@@ -757,7 +757,7 @@ static void testInputRouterAndStepEditor() {
     auto tp_s = audio.getTrackParams(0);
     tp_s.engine = EngineType::kSampleOneShot;
     audio.setTrackParams(0, tp_s);
-    app.rec_cursor_lane = 11; // Root C (interval 0)
+    app.rec_cursor_lane = 12; // Root C (interval 0)
     app.rec_octave = 4; // C (MIDI note 48)
     app.cursor_step = 0;
     ActionRegistry::instance().run("SEQ.TRIG", ctx);

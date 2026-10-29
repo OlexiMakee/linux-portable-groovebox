@@ -210,7 +210,7 @@ ActionRegistry::ActionRegistry() {
             if ((c.app.rec_scroll_pitch / 12 != c.app.rec_octave) && (c.app.rec_scroll_pitch % 12 == 0)) {
                 c.app.rec_scroll_pitch = c.app.rec_octave * 12;
             }
-            int pitch = c.app.rec_scroll_pitch + (11 - std::clamp(c.app.rec_cursor_lane, 0, 11));
+            int pitch = c.app.rec_scroll_pitch + (12 - std::clamp(c.app.rec_cursor_lane, 0, 12));
 
             // Перевіряємо, чи ця нота вже присутня у кроці
             if (st.enabled) {
@@ -372,18 +372,18 @@ ActionRegistry::ActionRegistry() {
                 }
             }
             if (min_pitch < 128) {
-                c.app.rec_scroll_pitch = std::clamp(min_pitch - 2, 0, 127 - 11);
-                c.app.rec_cursor_lane = 11 - (min_pitch - c.app.rec_scroll_pitch);
+                c.app.rec_scroll_pitch = std::clamp(min_pitch - 2, 0, 127 - 12);
+                c.app.rec_cursor_lane = 12 - (min_pitch - c.app.rec_scroll_pitch);
                 c.app.rec_octave = std::clamp(min_pitch / 12, 1, 8);
             } else {
                 auto st = c.audio.getStep(c.app.selected_track, c.app.cursor_step);
                 if (st.enabled && st.note != 255 && st.note > 0) {
-                    c.app.rec_scroll_pitch = std::clamp(static_cast<int>(st.note) - 2, 0, 127 - 11);
-                    c.app.rec_cursor_lane = 11 - (st.note - c.app.rec_scroll_pitch);
+                    c.app.rec_scroll_pitch = std::clamp(static_cast<int>(st.note) - 2, 0, 127 - 12);
+                    c.app.rec_cursor_lane = 12 - (st.note - c.app.rec_scroll_pitch);
                     c.app.rec_octave = std::clamp(static_cast<int>(st.note / 12), 1, 8);
                 } else {
                     c.app.rec_scroll_pitch = 48;
-                    c.app.rec_cursor_lane = 11;
+                    c.app.rec_cursor_lane = 12;
                     c.app.rec_octave = 3;
                 }
             }
@@ -490,8 +490,8 @@ ActionRegistry::ActionRegistry() {
     }});
     add(Action{"SEQ.NOTE_UP", "OCT+/NOTE+", [](UiContext& c) {
         if (c.app.rec_mode) {
-            c.app.rec_scroll_pitch = std::min(127 - 11, c.app.rec_scroll_pitch + 12);
-            c.app.rec_octave = std::clamp((c.app.rec_scroll_pitch + (11 - c.app.rec_cursor_lane)) / 12, 1, 8);
+            c.app.rec_scroll_pitch = std::min(127 - 12, c.app.rec_scroll_pitch + 12);
+            c.app.rec_octave = std::clamp((c.app.rec_scroll_pitch + (12 - c.app.rec_cursor_lane)) / 12, 1, 8);
             c.app.last_action = "REC OCTAVE " + std::to_string(c.app.rec_octave);
         } else if (c.app.cursor_row < c.audio.getActiveRowCount()) {
             c.audio.adjustStepNote(c.app.cursor_row, c.app.cursor_step, +1);
@@ -500,7 +500,7 @@ ActionRegistry::ActionRegistry() {
     add(Action{"SEQ.NOTE_DOWN", "OCT-/NOTE-", [](UiContext& c) {
         if (c.app.rec_mode) {
             c.app.rec_scroll_pitch = std::max(0, c.app.rec_scroll_pitch - 12);
-            c.app.rec_octave = std::clamp((c.app.rec_scroll_pitch + (11 - c.app.rec_cursor_lane)) / 12, 1, 8);
+            c.app.rec_octave = std::clamp((c.app.rec_scroll_pitch + (12 - c.app.rec_cursor_lane)) / 12, 1, 8);
             c.app.last_action = "REC OCTAVE " + std::to_string(c.app.rec_octave);
         } else if (c.app.cursor_row < c.audio.getActiveRowCount()) {
             c.audio.adjustStepNote(c.app.cursor_row, c.app.cursor_step, -1);
