@@ -103,6 +103,7 @@ int main(int argc, char* argv[]) {
         }
 
         app.current_step = (app.current_step + 1) % eff_len;
+        app.master_tick++;
         if (app.current_step == 0 && prev_step == eff_len - 1 && app.seq_submode == groovebox::SeqSubmode::kSong) {
             app.song_play_repeat++;
             if (app.song_play_repeat >= app.song_chain[app.song_play_step].repeats) {
@@ -118,6 +119,7 @@ int main(int argc, char* argv[]) {
                 auto& s = app.song_chain[next_step];
                 float play_bpm = (s.bpm > 0) ? static_cast<float>(s.bpm) : app.bpm;
                 app.pattern_mgr.switchPatternNow(s.bank, s.pattern, audio_engine, play_bpm);
+                app.master_tick = 0; // Квантоване скидання поліметричної фази при зміні секції
 
                 // Застосування маски mutes для поточного рядка сонгмоду (Elektron Pattern Mutes)
                 for (int t = 0; t < 16; ++t) {
@@ -125,7 +127,7 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
-        audio_engine.triggerSequencerStep(app.current_step);
+        audio_engine.triggerSequencerStep(app.master_tick);
         ui_dirty = true;
     };
 
@@ -140,6 +142,7 @@ int main(int argc, char* argv[]) {
             app.transport_playing = playing;
             if (playing && reset_to_start) {
                 app.current_step = 0;
+                app.master_tick = 0;
                 if (app.seq_submode == groovebox::SeqSubmode::kSong) {
                     const int total_rows = std::clamp(app.song_rows_count, 1, 16);
                     int start_step = std::clamp(app.song_cursor_row, 0, total_rows - 1);

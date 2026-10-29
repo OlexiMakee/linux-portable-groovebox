@@ -72,6 +72,7 @@ struct AppModel {
     bool transport_playing = false;
     float bpm = 120.0f;
     uint32_t current_step = 0;
+    uint32_t master_tick = 0;
     uint32_t pattern_length = 64;
     uint32_t last_step_ms = 0;
 

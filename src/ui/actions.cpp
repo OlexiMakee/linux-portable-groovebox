@@ -623,6 +623,7 @@ ActionRegistry::ActionRegistry() {
         c.app.transport_playing = !c.app.transport_playing;
         if (c.app.transport_playing) {
             c.app.current_step = 0;
+            c.app.master_tick = 0;
             c.app.last_step_ms = c.now_ms;
             if (c.app.seq_submode == SeqSubmode::kSong) {
                 const int total_rows = std::clamp(c.app.song_rows_count, 1, 16);
