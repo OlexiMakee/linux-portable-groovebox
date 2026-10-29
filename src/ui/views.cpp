@@ -1138,10 +1138,31 @@ void SampleView::render(Canvas& cv, const UiContext& c, Rect area) const {
     const int end_px = wf_x + static_cast<int>(c.app.sample_trim_end * (wf_w - 2));
     cv.fill(st_px, wf_y + 1, std::max(2, end_px - st_px), wf_h - 2, ColorRGB{16, 28, 36});
 
-    // 8 Слайсів: вертикальні пунктирні розділювачі та підсвітка активного слайсу
+    // Слайси: вертикальні пунктирні розділювачі та підсвітка активного слайсу
     const int span_px = end_px - st_px;
     const int active_slc = c.app.sampler.activePlaybackSlice();
-    if (span_px > 24) {
+    const auto& sbuf = c.app.sampler.recordedSample();
+    const uint32_t total_frames = sbuf.lengthFrames();
+    const int num_slc = c.app.sampler.sliceCount();
+
+    if (total_frames > 64 && num_slc > 0) {
+        for (int i = 0; i < num_slc && i < 16; ++i) {
+            auto pt = c.app.sampler.getSlice(i);
+            int s_x = wf_x + static_cast<int>((static_cast<float>(pt.start_frame) / total_frames) * (wf_w - 4));
+            int s_next_x = wf_x + static_cast<int>((static_cast<float>(pt.start_frame + pt.length_frames) / total_frames) * (wf_w - 4));
+            if (i > 0) {
+                for (int py = wf_y + 2; py < wf_y + wf_h - 10; py += 4) {
+                    cv.fill(s_x, py, 1, 2, ColorRGB{45, 55, 70});
+                }
+            }
+            if (i == active_slc) {
+                cv.fill(s_x + 1, wf_y + 1, std::max(2, s_next_x - s_x - 1), wf_h - 2, ColorRGB{20, 50, 70});
+            }
+            char slbl[8];
+            std::snprintf(slbl, sizeof(slbl), "S%d", i + 1);
+            cv.text(s_x + 2, wf_y + wf_h - 9, slbl, (i == active_slc) ? palette::kAccentOrange : ColorRGB{65, 80, 100});
+        }
+    } else if (span_px > 24) {
         for (int i = 0; i < 8; ++i) {
             int s_x = st_px + (i * span_px) / 8;
             int s_next_x = st_px + ((i + 1) * span_px) / 8;
@@ -1162,9 +1183,6 @@ void SampleView::render(Canvas& cv, const UiContext& c, Rect area) const {
     // Центральна нульова вісь
     const int mid_y = wf_y + wf_h / 2;
     cv.line(wf_x + 1, mid_y, wf_x + wf_w - 2, mid_y, ColorRGB{32, 40, 52});
-
-    const auto& sbuf = c.app.sampler.recordedSample();
-    const uint32_t total_frames = sbuf.lengthFrames();
 
     if (total_frames > 64) {
         // Відмальовуємо піки хвилі з буфера

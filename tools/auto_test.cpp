@@ -987,6 +987,26 @@ static void testInputRouterAndStepEditor() {
 
     audio.triggerNote(0, 60, 0.90f, -1.0f, false, 0.60f, &retrieved_step);
     TEST_ASSERT(true, "triggerNote successfully applies expanded P-Locks to voice");
+
+    // Тестування автодетекції транзієнтів та слайсингу семплера
+    SamplerEngine test_sampler;
+    std::vector<float> syn_in_l(32000, 0.0f);
+    std::vector<float> syn_in_r(32000, 0.0f);
+    for (int beat = 0; beat < 4; ++beat) {
+        int peak_idx = beat * 7500 + 500;
+        for (int p = 0; p < 800; ++p) {
+            float env = std::exp(-static_cast<float>(p) / 120.0f);
+            syn_in_l[peak_idx + p] = 0.85f * env * std::sin(p * 0.2f);
+            syn_in_r[peak_idx + p] = 0.85f * env * std::sin(p * 0.2f);
+        }
+    }
+    test_sampler.processAudioInput(syn_in_l.data(), syn_in_r.data(), 32000);
+    test_sampler.sliceTransients(0.5f);
+    TEST_ASSERT(test_sampler.sliceCount() >= 4, "sliceTransients detects distinct energy burst transients");
+
+    test_sampler.sliceToDrumSlots(0.0f, 1.0f);
+    TEST_ASSERT(test_sampler.drumSlot(0).loaded == true, "sliceToDrumSlots successfully generates loaded drum slot 1");
+    TEST_ASSERT(test_sampler.drumSlot(0).lengthFrames() > 0, "Drum slot 1 contains non-zero frame length");
 }
 
 static void testViewsRendering() {
