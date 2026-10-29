@@ -380,6 +380,50 @@ ParamRegistry::ParamRegistry() {
         add(std::move(p));
     }
     {
+        Param p;
+        p.id = "SMP.PLAY_MODE";
+        p.label = "MODE";
+        p.value = [](const UiContext& c) {
+            auto tp = c.audio.getTrackParams(trk(c, -1));
+            return std::string(getSampleEngineModeName(tp.sample.play_mode));
+        };
+        p.norm = [](const UiContext& c) {
+            auto tp = c.audio.getTrackParams(trk(c, -1));
+            return (tp.sample.play_mode == SampleEngineMode::kSlicer) ? 1.0f : 0.0f;
+        };
+        p.step = [](UiContext& c, int, bool) {
+            const int t = trk(c, -1);
+            auto tp = c.audio.getTrackParams(t);
+            tp.sample.play_mode = (tp.sample.play_mode == SampleEngineMode::kOneShot)
+                                      ? SampleEngineMode::kSlicer
+                                      : SampleEngineMode::kOneShot;
+            c.audio.setTrackParams(t, tp);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SMP.SLICE";
+        p.label = "SLICE";
+        p.value = [](const UiContext& c) {
+            auto tp = c.audio.getTrackParams(trk(c, -1));
+            char b[16];
+            std::snprintf(b, sizeof(b), "SL %d/16", tp.sample.slice_index + 1);
+            return std::string(b);
+        };
+        p.norm = [](const UiContext& c) {
+            auto tp = c.audio.getTrackParams(trk(c, -1));
+            return std::clamp(static_cast<float>(tp.sample.slice_index) / 15.0f, 0.0f, 1.0f);
+        };
+        p.step = [](UiContext& c, int dir, bool) {
+            const int t = trk(c, -1);
+            auto tp = c.audio.getTrackParams(t);
+            tp.sample.slice_index = std::clamp(tp.sample.slice_index + dir, 0, 15);
+            c.audio.setTrackParams(t, tp);
+        };
+        add(std::move(p));
+    }
+    {
         // Digitakt-style sampler parameters (SMP.LOOP, SMP.START, SMP.LOOP_PT, SMP.END, SMP.TUNE)
         Param p;
         p.id = "SMP.LOOP";
@@ -560,11 +604,51 @@ ParamRegistry::ParamRegistry() {
         const std::string pre = (t < 0) ? "TRK." : ("T" + std::to_string(t + 1) + ".");
         add(trackFloat(pre + "LPF_CUT", "LP CUT", t, [](TrackParameters& x) -> float& { return x.lpf_cutoff; }, 0.02f, 0.98f, 0.02f, fmtLpf));
         add(trackFloat(pre + "LPF_RES", "LP RES", t, [](TrackParameters& x) -> float& { return x.lpf_resonance; }, 0.0f, 0.95f, 0.02f, fmtPct));
+        {
+            Param p;
+            p.id = pre + "LPF_POLE";
+            p.label = "LP SLP";
+            p.value = [t](const UiContext& c) {
+                int tr = trk(c, t);
+                return c.audio.getTrackParams(tr).lpf_24db ? std::string("24 DB") : std::string("12 DB");
+            };
+            p.norm = [t](const UiContext& c) {
+                int tr = trk(c, t);
+                return c.audio.getTrackParams(tr).lpf_24db ? 1.0f : 0.0f;
+            };
+            p.step = [t](UiContext& c, int, bool) {
+                int tr = trk(c, t);
+                auto tp = c.audio.getTrackParams(tr);
+                tp.lpf_24db = !tp.lpf_24db;
+                c.audio.setTrackParams(tr, tp);
+            };
+            add(std::move(p));
+        }
         add(trackFloat(pre + "LPF_ENV", "LP ENV", t, [](TrackParameters& x) -> float& { return x.lpf_env; }, -1.0f, 1.0f, 0.05f, fmtBipolarPct));
         add(trackFloat(pre + "LPF_DEC", "LP DEC", t, [](TrackParameters& x) -> float& { return x.lpf_decay; }, 0.01f, 2.5f, 0.05f, fmtMs));
 
         add(trackFloat(pre + "HPF_CUT", "HP CUT", t, [](TrackParameters& x) -> float& { return x.hpf_cutoff; }, 0.0f, 0.98f, 0.02f, fmtHpf));
         add(trackFloat(pre + "HPF_RES", "HP RES", t, [](TrackParameters& x) -> float& { return x.hpf_resonance; }, 0.0f, 0.95f, 0.02f, fmtPct));
+        {
+            Param p;
+            p.id = pre + "HPF_POLE";
+            p.label = "HP SLP";
+            p.value = [t](const UiContext& c) {
+                int tr = trk(c, t);
+                return c.audio.getTrackParams(tr).hpf_24db ? std::string("24 DB") : std::string("12 DB");
+            };
+            p.norm = [t](const UiContext& c) {
+                int tr = trk(c, t);
+                return c.audio.getTrackParams(tr).hpf_24db ? 1.0f : 0.0f;
+            };
+            p.step = [t](UiContext& c, int, bool) {
+                int tr = trk(c, t);
+                auto tp = c.audio.getTrackParams(tr);
+                tp.hpf_24db = !tp.hpf_24db;
+                c.audio.setTrackParams(tr, tp);
+            };
+            add(std::move(p));
+        }
         add(trackFloat(pre + "HPF_ENV", "HP ENV", t, [](TrackParameters& x) -> float& { return x.hpf_env; }, -1.0f, 1.0f, 0.05f, fmtBipolarPct));
         add(trackFloat(pre + "HPF_DEC", "HP DEC", t, [](TrackParameters& x) -> float& { return x.hpf_decay; }, 0.01f, 2.5f, 0.05f, fmtMs));
 
@@ -573,7 +657,7 @@ ParamRegistry::ParamRegistry() {
         add(trackFloat(pre + "PAN", "PAN", t, [](TrackParameters& x) -> float& { return x.pan; }, -1.0f, 1.0f, 0.05f, fmtPan));
         add(trackFloat(pre + "DLY", "DLY SND", t, [](TrackParameters& x) -> float& { return x.delay_send; }, 0.0f, 1.0f, 0.02f, fmtPct));
         add(trackFloat(pre + "REV", "REV SND", t, [](TrackParameters& x) -> float& { return x.reverb_send; }, 0.0f, 1.0f, 0.02f, fmtPct));
-        add(trackFloat(pre + "CHR", "CHR SND", t, [](TrackParameters& x) -> float& { return x.fx.send_chorus; }, 0.0f, 1.0f, 0.02f, fmtPct));
+        add(trackFloat(pre + "CHR", "CHR SND", t, [](TrackParameters& x) -> float& { return x.chorus_send; }, 0.0f, 1.0f, 0.02f, fmtPct));
         add(trackMute(pre + "MUTE", t));
     }
 
@@ -777,9 +861,9 @@ ParamRegistry::ParamRegistry() {
     add(globalFloat("DLY.RET", "DLY RET", [](SynthParams& s) -> std::atomic<float>& { return s.delay_mix; }, 0.0f, 1.0f, 0.02f, fmtPct));
     add(globalFloat("REV.DECAY", "REV DEC", [](SynthParams& s) -> std::atomic<float>& { return s.reverb_decay; }, 0.0f, 0.95f, 0.02f, fmtPct));
     add(globalFloat("REV.RET", "REV RET", [](SynthParams& s) -> std::atomic<float>& { return s.reverb_mix; }, 0.0f, 1.0f, 0.02f, fmtPct));
-    add(globalFloat("FX.CHR_MIX", "CHR MIX", [](SynthParams& s) -> std::atomic<float>& { return s.chorus_mix; }, 0.0f, 1.0f, 0.05f, fmtPct));
-    add(globalFloat("FX.CHR_RATE", "CHR RATE", [](SynthParams& s) -> std::atomic<float>& { return s.chorus_rate; }, 0.1f, 5.0f, 0.1f, fmtHz));
-    add(globalFloat("FX.CHR_DEP", "CHR DEP", [](SynthParams& s) -> std::atomic<float>& { return s.chorus_depth; }, 0.0f, 1.0f, 0.05f, fmtPct));
+    add(globalFloat("MST.CHR_MIX", "CHR MIX", [](SynthParams& s) -> std::atomic<float>& { return s.chorus_mix; }, 0.0f, 1.0f, 0.05f, fmtPct));
+    add(globalFloat("MST.CHR_RATE", "CHR RATE", [](SynthParams& s) -> std::atomic<float>& { return s.chorus_rate; }, 0.1f, 5.0f, 0.1f, fmtHz));
+    add(globalFloat("MST.CHR_DEP", "CHR DEP", [](SynthParams& s) -> std::atomic<float>& { return s.chorus_depth; }, 0.0f, 1.0f, 0.05f, fmtPct));
     add(globalFloat("FX.DRIVE", "OVERDRIVE", [](SynthParams& s) -> std::atomic<float>& { return s.drive_amount; }, 0.0f, 1.0f, 0.05f, fmtPct));
     add(globalFloat("FX.DRV_TONE", "DRV TONE", [](SynthParams& s) -> std::atomic<float>& { return s.drive_tone; }, 0.0f, 1.0f, 0.05f, fmtPct));
     {
@@ -954,14 +1038,82 @@ ParamRegistry::ParamRegistry() {
         };
         add(std::move(p));
     }
+    auto addBellParams = [&](int idx, auto get_freq, auto set_freq, auto get_gain, auto set_gain, auto get_q, auto set_q) {
+        std::string s_idx = std::to_string(idx);
+        std::string pre = "MST.EQ" + s_idx + "_";
+        {
+            Param p;
+            p.id = pre + "FRQ";
+            p.label = "EQ" + s_idx + " F";
+            p.value = [get_freq](const UiContext& c) {
+                float f = 20.0f * std::pow(900.0f, get_freq(c.audio.getMasterFx()));
+                return fmtHz(f);
+            };
+            p.norm = [get_freq](const UiContext& c) { return get_freq(c.audio.getMasterFx()); };
+            p.step = [get_freq, set_freq](UiContext& c, int dir, bool coarse) {
+                auto mfx = c.audio.getMasterFx();
+                set_freq(mfx, std::clamp(get_freq(mfx) + dir * (coarse ? 0.05f : 0.01f), 0.0f, 1.0f));
+                c.audio.setMasterFx(mfx);
+            };
+            add(std::move(p));
+        }
+        {
+            Param p;
+            p.id = pre + "GAIN";
+            p.label = "EQ" + s_idx + " G";
+            p.value = [get_gain](const UiContext& c) {
+                float g = get_gain(c.audio.getMasterFx());
+                char b[16]; std::snprintf(b, sizeof(b), "%+.1f dB", g);
+                return std::string(b);
+            };
+            p.norm = [get_gain](const UiContext& c) { return (get_gain(c.audio.getMasterFx()) + 18.0f) / 36.0f; };
+            p.step = [get_gain, set_gain](UiContext& c, int dir, bool coarse) {
+                auto mfx = c.audio.getMasterFx();
+                set_gain(mfx, std::clamp(get_gain(mfx) + dir * (coarse ? 3.0f : 0.5f), -18.0f, 18.0f));
+                c.audio.setMasterFx(mfx);
+            };
+            add(std::move(p));
+        }
+        {
+            Param p;
+            p.id = pre + "Q";
+            p.label = "EQ" + s_idx + " Q";
+            p.value = [get_q](const UiContext& c) {
+                float q = get_q(c.audio.getMasterFx());
+                char b[16]; std::snprintf(b, sizeof(b), "Q %.2f", q);
+                return std::string(b);
+            };
+            p.norm = [get_q](const UiContext& c) { return (get_q(c.audio.getMasterFx()) - 0.2f) / 7.8f; };
+            p.step = [get_q, set_q](UiContext& c, int dir, bool coarse) {
+                auto mfx = c.audio.getMasterFx();
+                set_q(mfx, std::clamp(get_q(mfx) + dir * (coarse ? 0.5f : 0.1f), 0.2f, 8.0f));
+                c.audio.setMasterFx(mfx);
+            };
+            add(std::move(p));
+        }
+    };
+
+    addBellParams(1,
+        [](const MasterFxParameters& m) { return m.bell_freq; }, [](MasterFxParameters& m, float v) { m.bell_freq = v; },
+        [](const MasterFxParameters& m) { return m.bell_gain; }, [](MasterFxParameters& m, float v) { m.bell_gain = v; },
+        [](const MasterFxParameters& m) { return m.bell_q; },    [](MasterFxParameters& m, float v) { m.bell_q = v; });
+
+    addBellParams(2,
+        [](const MasterFxParameters& m) { return m.bell2_freq; }, [](MasterFxParameters& m, float v) { m.bell2_freq = v; },
+        [](const MasterFxParameters& m) { return m.bell2_gain; }, [](MasterFxParameters& m, float v) { m.bell2_gain = v; },
+        [](const MasterFxParameters& m) { return m.bell2_q; },    [](MasterFxParameters& m, float v) { m.bell2_q = v; });
+
+    addBellParams(3,
+        [](const MasterFxParameters& m) { return m.bell3_freq; }, [](MasterFxParameters& m, float v) { m.bell3_freq = v; },
+        [](const MasterFxParameters& m) { return m.bell3_gain; }, [](MasterFxParameters& m, float v) { m.bell3_gain = v; },
+        [](const MasterFxParameters& m) { return m.bell3_q; },    [](MasterFxParameters& m, float v) { m.bell3_q = v; });
+
+    // Аліаси для зворотної сумісності (MST.EQ_FRQ, MST.EQ_GAIN, MST.EQ_Q)
     {
         Param p;
         p.id = "MST.EQ_FRQ";
         p.label = "EQ FRQ";
-        p.value = [](const UiContext& c) {
-            float f = 40.0f * std::pow(400.0f, c.audio.getMasterFx().bell_freq);
-            return fmtHz(f);
-        };
+        p.value = [](const UiContext& c) { return fmtHz(20.0f * std::pow(900.0f, c.audio.getMasterFx().bell_freq)); };
         p.norm = [](const UiContext& c) { return c.audio.getMasterFx().bell_freq; };
         p.step = [](UiContext& c, int dir, bool coarse) {
             auto mfx = c.audio.getMasterFx();

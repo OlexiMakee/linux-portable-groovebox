@@ -129,8 +129,21 @@ struct AppModel {
     std::array<int, kViewCount> grid_col{};
     std::array<int, kViewCount> grid_scroll{};
 
+    // Запам'ятовування останньої активної підвкладки
+    SeqSubmode last_seq_submode = SeqSubmode::kMatrix;
+    SynthSubmode last_synth_submode = SynthSubmode::kSynth;
+    MixSubmode last_mix_submode = MixSubmode::kMix;
+
     // Інспектор кроку + P-Lock зі стіка (поки затиснута A)
+    enum class InspectPage : uint8_t {
+        kMidi = 0,
+        kSyn = 1,
+        kMod = 2,
+        kFx = 3,
+        kCount = 4
+    };
     bool step_inspector_open = false;
+    InspectPage inspect_page = InspectPage::kMidi;
     bool stick_plock_tweaked = false;
     float plock_cutoff_live = -1.0f;
 
