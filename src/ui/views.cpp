@@ -1124,7 +1124,6 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
         std::snprintf(hdr, sizeof(hdr), "[+] ADD TRACK (%d/%d TRACKS ACTIVE) | [A] SELECT ENGINE", active, kTotalRows);
         cv.text(area.x + 4, area.y + 3, hdr, palette::kAccentCyan);
     } else {
-        const char* trig = !st.enabled ? "---" : (st.is_param_trig ? "P-LOCK" : "NOTE");
         std::string trk_nm = c.audio.getTrackName(cur_r);
 
         char ptn_buf[16];
@@ -1134,21 +1133,28 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
         cv.text(area.x + 4, area.y + 3, ptn_buf, palette::kCursorWhite);
         int ptn_w = static_cast<int>(std::strlen(ptn_buf)) * 6 + 6;
 
-        std::snprintf(hdr, sizeof(hdr), "R%02d [%s: %s] | ST%03d %s%d %s%s | L%u",
-                      cur_r + 1, trk_nm.c_str(), getEngineTypeName(tp.engine), c.app.cursor_step + 1,
-                      kNoteNames[st.note % 12], st.note / 12 - 1, trig,
-                      (st.slide ? " SLD" : ""),
-                      cur_len);
+        if (!st.enabled) {
+            std::snprintf(hdr, sizeof(hdr), "R%02d [%s: %s] | ST%03d --- | L%u",
+                          cur_r + 1, trk_nm.c_str(), getEngineTypeName(tp.engine), c.app.cursor_step + 1,
+                          cur_len);
+        } else {
+            const char* trig = st.is_param_trig ? "P-LOCK" : "NOTE";
+            std::snprintf(hdr, sizeof(hdr), "R%02d [%s: %s] | ST%03d %s%d %s%s | L%u",
+                          cur_r + 1, trk_nm.c_str(), getEngineTypeName(tp.engine), c.app.cursor_step + 1,
+                          kNoteNames[st.note % 12], st.note / 12 - 1, trig,
+                          (st.slide ? " SLD" : ""),
+                          cur_len);
+        }
         cv.text(area.x + 4 + ptn_w, area.y + 3, hdr, st.is_param_trig ? palette::kParamTrig : palette::kAccentOrange);
     }
 
-    const int grid_x = area.x + 28;
+    const int grid_x = area.x + 18;
     const int step_w = 8;
     const int grid_y = area.y + kHeaderH + 2;
     const int slots = active < kTotalRows ? active + 1 : active;
     const int row_h = std::clamp((area.h - kHeaderH - 4) / std::max(1, slots), 10, 20);
     const uint32_t scroll_off = static_cast<uint32_t>(c.app.seq_scroll_step);
-    const int len_x = grid_x + static_cast<int>(kStepsPerPage) * step_w + 4;
+    const int len_x = grid_x + static_cast<int>(kStepsPerPage) * step_w + 3;
 
     for (int r = 0; r < active; ++r) {
         const int t = c.audio.getRowTrack(r);
@@ -1159,14 +1165,12 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
         const uint32_t len = c.audio.getRowLength(r);
 
         if (v == 0 && r > 0) cv.line(area.x + 2, y - 1, area.x + area.w - 3, y - 1, palette::kGridDim);
-        if (is_cur) cv.fill(area.x + 2, y, 24, row_h - 1, palette::kHeaderSel);
+        if (is_cur) cv.fill(area.x + 2, y, 14, row_h - 1, palette::kHeaderSel);
 
         char lbl[8];
-        std::string trk_nm = c.audio.getTrackName(t);
-        if (trk_nm.length() > 3) trk_nm = trk_nm.substr(0, 3);
-        std::snprintf(lbl, sizeof(lbl), "%02d%s", r + 1, trk_nm.c_str());
+        std::snprintf(lbl, sizeof(lbl), "%02d", r + 1);
         const ColorRGB lc = is_cur ? palette::kAccentOrange : (trk.muted ? palette::kGridDim : palette::kTextDim);
-        cv.text(area.x + 4, y + (row_h - 5) / 2, lbl, lc);
+        cv.text(area.x + 3, y + (row_h - 5) / 2, lbl, lc);
 
         const uint32_t play = c.app.transport_playing ? (c.app.master_tick % len) : UINT32_MAX;
         const int th = row_h - 3;
@@ -1196,9 +1200,8 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
 
                 const auto sd = c.audio.getStep(r, static_cast<int>(idx));
                 if (sd.enabled) {
-                    const ColorRGB col = sd.is_param_trig ? palette::kParamTrig
-                                       : (trk.muted ? palette::kGridDim
-                                       : (t % 2 == 0 ? palette::kLevelOk : palette::kAccentCyan));
+                    const ColorRGB col = sd.is_param_trig ? ColorRGB{240, 200, 40}
+                                       : (trk.muted ? palette::kGridDim : ColorRGB{235, 45, 45});
                     cv.fill(x + 1, y + 2, step_w - 3, th - 2, col);
                     gate_tail_remaining = std::max(0, static_cast<int>(sd.gate_len + 0.5f) - 1);
                 } else if (gate_tail_remaining > 0) {
@@ -1236,6 +1239,13 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
         char ltxt[8];
         std::snprintf(ltxt, sizeof(ltxt), "%u", len);
         cv.text(len_x, y + (row_h - 5) / 2, ltxt, is_cur ? palette::kAccentOrange : palette::kGridDim);
+
+        // Довша та читабельна назва доріжки у просторі праворуч
+        const int name_x = len_x + 19;
+        std::string full_nm = c.audio.getTrackName(t);
+        if (trk.muted) full_nm += " [M]";
+        cv.textClip(name_x, y + (row_h - 5) / 2, full_nm, (area.w - (name_x - area.x) - 4) / Canvas::kCharW,
+                    trk.muted ? palette::kGridDim : (is_cur ? palette::kAccentCyan : palette::kTextMain));
     }
 
     if (active < kTotalRows) {
@@ -1250,6 +1260,21 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
 
     if (c.app.stick_plock_tweaked) {
         cv.text(area.x + 4, area.y + area.h - 8, "P-LOCK: STICK -> CUTOFF (RELEASE A TO KEEP)", palette::kParamTrig);
+    }
+
+    // Модальне вікно підтвердження видалення треку (SELECT + B Hold)
+    if (c.app.delete_track_modal_open) {
+        const int mw = 210;
+        const int mh = 48;
+        const int mx = area.x + (area.w - mw) / 2;
+        const int my = area.y + (area.h - mh) / 2;
+        cv.fill(mx, my, mw, mh, palette::kPanelBg);
+        cv.rect(mx, my, mw, mh, palette::kLevelWarnClip);
+        cv.fill(mx + 1, my + 1, mw - 2, 10, palette::kHeaderSel);
+        cv.text(mx + 4, my + 3, "DELETE TRACK?", palette::kLevelWarnClip);
+        char msg[48];
+        std::snprintf(msg, sizeof(msg), "DELETE TRACK %02d? [A] YES  [B] NO", c.app.delete_track_modal_target + 1);
+        cv.text(mx + 8, my + 24, msg, palette::kTextMain);
     }
 }
 

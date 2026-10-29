@@ -389,20 +389,17 @@ void AudioEngine::previewStep(int row, int step_idx) {
         std::lock_guard<std::mutex> lock(state_mutex_);
         st = pattern_[r][s];
     }
+    if (!st.enabled) return;
+
     uint8_t note = st.note;
-    if (!st.enabled) {
-        note = 48 + (r % 4) * 4;
-    }
-    float vel = st.enabled ? st.velocity : 0.85f;
+    float vel = st.velocity;
     float cut = st.has_plock ? st.plock_cutoff : -1.0f;
     int t = getRowTrack(r);
     triggerNote(t, note, vel, cut, st.slide, st.gate_len);
-    if (st.enabled) {
-        for (int cn = 1; cn < 4; ++cn) {
-            uint8_t extra_n = st.chord_notes[cn];
-            if (extra_n != 255 && extra_n != note) {
-                triggerNote(t, extra_n, vel, cut, st.slide, st.gate_len);
-            }
+    for (int cn = 1; cn < 4; ++cn) {
+        uint8_t extra_n = st.chord_notes[cn];
+        if (extra_n != 255 && extra_n != note) {
+            triggerNote(t, extra_n, vel, cut, st.slide, st.gate_len);
         }
     }
 }
