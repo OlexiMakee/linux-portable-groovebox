@@ -481,8 +481,8 @@ void AudioEngine::panic() {
         v.filter_adsr.reset();
         v.phase1 = v.phase2 = v.phase3 = v.phase4 = 0.0f;
         v.last_out = 0.0f;
-        v.svf_low = v.svf_band = 0.0f;
-        v.hpf_low = v.hpf_band = 0.0f;
+        v.lpf_s1 = v.lpf_s2 = v.lpf_s1_b = v.lpf_s2_b = 0.0f;
+        v.hpf_s1 = v.hpf_s2 = v.hpf_s1_b = v.hpf_s2_b = 0.0f;
         v.lpf_env_val = v.hpf_env_val = 0.0f;
         v.gate_samples_left = -1;
         v.is_legato = false;
@@ -493,6 +493,9 @@ void AudioEngine::panic() {
     for (auto& c : comb_r_) c.clear();
     for (auto& a : allpass_l_) a.clear();
     for (auto& a : allpass_r_) a.clear();
+    mst_bell_x1_l_ = mst_bell_x2_l_ = mst_bell_x1_r_ = mst_bell_x2_r_ = 0.0f;
+    mst_bell2_x1_l_ = mst_bell2_x2_l_ = mst_bell2_x1_r_ = mst_bell2_x2_r_ = 0.0f;
+    mst_bell3_x1_l_ = mst_bell3_x2_l_ = mst_bell3_x1_r_ = mst_bell3_x2_r_ = 0.0f;
     vu_l_.store(0.0f, std::memory_order_relaxed);
     vu_r_.store(0.0f, std::memory_order_relaxed);
     peak_hold_.store(0.0f, std::memory_order_relaxed);
@@ -578,7 +581,10 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
         }
         voices_[row].active = true;
         voices_[row].note_num = static_cast<uint8_t>(midi_note);
-        voices_[row].gate_samples_left = static_cast<int32_t>(0.125f * std::clamp(gate_len, 0.1f, 128.0f) * static_cast<float>(active_sample_rate_.load()));
+        float current_bpm = bpm_.load(std::memory_order_relaxed);
+        if (current_bpm < 20.0f) current_bpm = 120.0f;
+        float step_sec = 60.0f / (current_bpm * 4.0f);
+        voices_[row].gate_samples_left = static_cast<int32_t>(step_sec * std::clamp(gate_len, 0.1f, 128.0f) * static_cast<float>(active_sample_rate_.load()));
         return;
     }
 
@@ -610,8 +616,10 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
         midi_note = std::clamp(midi_note + tracks_[t].transpose, 1, 127);
     }
 
-    // Тривалість кроку секвенсора з урахуванням дискретної довжини (1..128 кроків, 1 крок = ~125мс)
-    float step_sec = 0.125f;
+    // Тривалість кроку секвенсора з урахуванням поточного темпу BPM (1 крок = 16-та нота)
+    float current_bpm = bpm_.load(std::memory_order_relaxed);
+    if (current_bpm < 20.0f) current_bpm = 120.0f;
+    float step_sec = 60.0f / (current_bpm * 4.0f);
     v.gate_samples_left = static_cast<int32_t>(step_sec * std::clamp(gate_len, 0.1f, 128.0f) * sr);
 
     // Ініціалізація огинаючих фільтрів LPF та HPF
@@ -629,6 +637,8 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
         v.current_pitch = v.target_pitch;
         v.is_legato = false;
         v.freq = midiToFreq(midi_note);
+        v.lpf_s1 = v.lpf_s2 = v.lpf_s1_b = v.lpf_s2_b = 0.0f;
+        v.hpf_s1 = v.hpf_s2 = v.hpf_s1_b = v.hpf_s2_b = 0.0f;
 
         if (tracks_[t].engine == EngineType::kDx7) {
             int p_idx = std::clamp(static_cast<int>(tracks_[t].p[0] * (dx7_engine_.patchCount() - 1) + 0.5f), 0, dx7_engine_.patchCount() - 1);
@@ -662,18 +672,18 @@ int AudioEngine::allocateVoice(int track, int midi_note) {
     if (track < 0 || track >= kMaxTracks) return 0;
     const int base = track * kVoicesPerTrack;
 
-    // 1. Якщо та ж нота вже звучить у голосі треку — перевикористовуємо її
+    // 1. Шукаємо вільний (idle) голос для справжньої поліфонії
     for (int i = 0; i < kVoicesPerTrack; ++i) {
         int r = base + i;
-        if (voices_[r].active && voices_[r].note_num == midi_note) {
+        if (!voices_[r].active || voices_[r].amp_adsr.stage == AdsrStage::kIdle) {
             return r;
         }
     }
 
-    // 2. Шукаємо вільний (idle) голос для справжньої поліфонії
+    // 2. Якщо вільних нема, але та ж нота вже звучить у голосі треку — перевикористовуємо її
     for (int i = 0; i < kVoicesPerTrack; ++i) {
         int r = base + i;
-        if (!voices_[r].active || voices_[r].amp_adsr.stage == AdsrStage::kIdle) {
+        if (voices_[r].active && voices_[r].note_num == midi_note) {
             return r;
         }
     }
@@ -1029,13 +1039,9 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
     const float drv_amt   = params_.drive_amount.load(std::memory_order_relaxed);
     const float drv_tone  = params_.drive_tone.load(std::memory_order_relaxed);
 
-    std::array<TrackParameters, kMaxTracks> local_tracks;
-    MasterFxParameters local_mfx;
-    {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        local_tracks = tracks_;
-        local_mfx = master_fx_;
-    }
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    const auto& local_tracks = tracks_;
+    const auto& local_mfx = master_fx_;
 
     auto computeLfo = [](const LfoParameters& lfo, float& phase, float dt, float rate_mod, float depth_mod) -> float {
         float eff_depth = std::clamp(lfo.depth + depth_mod, 0.0f, 1.0f);
@@ -1165,6 +1171,8 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
         float send_r = 0.0f;
         float rev_l = 0.0f;
         float rev_r = 0.0f;
+        float chr_send_l = 0.0f;
+        float chr_send_r = 0.0f;
 
         for (int t = 0; t < active_rows_count_; ++t) {
             const auto& tp = local_tracks[t];
@@ -1176,9 +1184,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             float hpf_offset = getTrackMod(t, StickDest::kHpfCutoff);
             float hpf_env_offset = getTrackMod(t, StickDest::kHpfEnv);
             float lpf_reso = std::clamp(tp.lpf_resonance + res_offset, 0.0f, 0.95f);
-            float lpf_q = std::clamp(2.0f - 1.85f * lpf_reso, 0.15f, 2.0f);
             float hpf_reso = std::clamp(tp.hpf_resonance, 0.0f, 0.95f);
-            float hpf_q = std::clamp(2.0f - 1.85f * hpf_reso, 0.15f, 2.0f);
             float trk_level = std::clamp(tp.level + getTrackMod(t, StickDest::kLevel), 0.0f, 1.0f);
             float trk_pan = std::clamp(tp.pan + getTrackMod(t, StickDest::kPan), -1.0f, 1.0f);
             float pan_l = std::clamp(1.0f - trk_pan, 0.0f, 1.0f) * 0.5f;
@@ -1394,27 +1400,66 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                 v.lpf_env_val *= v.lpf_decay_coef;
                 v.hpf_env_val *= v.hpf_decay_coef;
 
-                // Dual filter 1: 2-pole High Pass Filter (SVF) with Bipolar Decay Envelope
+                // Dual filter 1: High Pass Filter (Cytomic SVF, 12 dB or cascaded 24 dB) with Bipolar Decay Envelope
                 float eff_hpf = std::clamp(tp.hpf_cutoff + hpf_offset + (tp.hpf_env + hpf_env_offset) * v.hpf_env_val, 0.0f, 0.98f);
                 if (eff_hpf > 0.005f) {
-                    float f_hpf = std::clamp(2.0f * std::sin(3.14159265f * (20.0f * std::pow(800.0f, eff_hpf)) * inv_sr), 0.005f, 0.88f);
-                    v.hpf_low += f_hpf * v.hpf_band;
-                    float hpf_high = raw - v.hpf_low - hpf_q * v.hpf_band;
-                    v.hpf_band += f_hpf * hpf_high;
-                    v.hpf_band = std::clamp(v.hpf_band, -1.85f, 1.85f);
-                    raw = hpf_high;
+                    float f_hpf_hz = std::clamp(20.0f * std::pow(800.0f, eff_hpf), 20.0f, static_cast<float>(sample_rate) * 0.48f);
+                    float g_hpf = std::tan(3.14159265f * f_hpf_hz * inv_sr);
+                    float k_hpf = 2.0f - 1.9f * std::clamp(tp.hpf_resonance, 0.0f, 0.98f);
+                    float a1_h = 1.0f / (1.0f + g_hpf * (g_hpf + k_hpf));
+                    float a2_h = g_hpf * a1_h;
+                    float a3_h = g_hpf * a2_h;
+
+                    // Stage 1 (12 dB/oct)
+                    float v3_h1 = raw - v.hpf_s2;
+                    float v1_h1 = a1_h * v.hpf_s1 + a2_h * v3_h1;
+                    float v2_h1 = v.hpf_s2 + a2_h * v.hpf_s1 + a3_h * v3_h1;
+                    v.hpf_s1 = 2.0f * v1_h1 - v.hpf_s1;
+                    v.hpf_s2 = 2.0f * v2_h1 - v.hpf_s2;
+                    float hp1 = raw - k_hpf * v1_h1 - v2_h1;
+
+                    if (tp.hpf_24db) {
+                        // Stage 2 (4-pole 24 dB/oct)
+                        float v3_h2 = hp1 - v.hpf_s2_b;
+                        float v1_h2 = a1_h * v.hpf_s1_b + a2_h * v3_h2;
+                        float v2_h2 = v.hpf_s2_b + a2_h * v.hpf_s1_b + a3_h * v3_h2;
+                        v.hpf_s1_b = 2.0f * v1_h2 - v.hpf_s1_b;
+                        v.hpf_s2_b = 2.0f * v2_h2 - v.hpf_s2_b;
+                        raw = hp1 - k_hpf * v1_h2 - v2_h2;
+                    } else {
+                        raw = hp1;
+                    }
                 }
 
-                // Dual filter 2: 2-pole Low Pass Filter (SVF) with Bipolar Decay Envelope
+                // Dual filter 2: Low Pass Filter (Cytomic SVF, 12 dB or cascaded 24 dB) with Bipolar Decay Envelope
                 float base_cut = (v.plock_cutoff >= 0.0f) ? v.plock_cutoff : tp.lpf_cutoff;
-                float eff_lpf = std::clamp(base_cut + cut_offset + (tp.lpf_env + env_offset) * v.lpf_env_val, 0.02f, 0.98f);
-                float f_lpf = std::clamp(2.0f * std::sin(3.14159265f * (20.0f * std::pow(1000.0f, eff_lpf)) * inv_sr), 0.02f, 0.88f);
-                v.svf_low += f_lpf * v.svf_band;
-                float high = raw - v.svf_low - lpf_q * v.svf_band;
-                v.svf_band += f_lpf * high;
-                v.svf_band = std::clamp(v.svf_band, -1.85f, 1.85f);
+                float eff_lpf = std::clamp(base_cut + cut_offset + (tp.lpf_env + env_offset) * v.lpf_env_val, 0.01f, 1.0f);
+                float f_lpf_hz = std::clamp(20.0f * std::pow(1000.0f, eff_lpf), 20.0f, static_cast<float>(sample_rate) * 0.48f);
+                float g_lpf = std::tan(3.14159265f * f_lpf_hz * inv_sr);
+                float k_lpf = 2.0f - 1.9f * std::clamp(tp.lpf_resonance + res_offset, 0.0f, 0.98f);
+                float a1_l = 1.0f / (1.0f + g_lpf * (g_lpf + k_lpf));
+                float a2_l = g_lpf * a1_l;
+                float a3_l = g_lpf * a2_l;
 
-                trk_sum += v.svf_low * amp * v.velocity;
+                // Stage 1 (12 dB/oct)
+                float v3_l1 = raw - v.lpf_s2;
+                float v1_l1 = a1_l * v.lpf_s1 + a2_l * v3_l1;
+                float v2_l1 = v.lpf_s2 + a2_l * v.lpf_s1 + a3_l * v3_l1;
+                v.lpf_s1 = 2.0f * v1_l1 - v.lpf_s1;
+                v.lpf_s2 = 2.0f * v2_l1 - v.lpf_s2;
+                float lp_out = v2_l1;
+
+                if (tp.lpf_24db) {
+                    // Stage 2 (4-pole 24 dB/oct)
+                    float v3_l2 = lp_out - v.lpf_s2_b;
+                    float v1_l2 = a1_l * v.lpf_s1_b + a2_l * v3_l2;
+                    float v2_l2 = v.lpf_s2_b + a2_l * v.lpf_s1_b + a3_l * v3_l2;
+                    v.lpf_s1_b = 2.0f * v1_l2 - v.lpf_s1_b;
+                    v.lpf_s2_b = 2.0f * v2_l2 - v.lpf_s2_b;
+                    lp_out = v2_l2;
+                }
+
+                trk_sum += lp_out * amp * v.velocity;
             } // end vi loop
 
             // Per-track Model:Cycles / Model:Samples GAIN / OVERDRIVE curve
@@ -1649,12 +1694,14 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             send_r += s_r * eff_d_send;
             rev_l  += s_l * eff_r_send;
             rev_r  += s_r * eff_r_send;
+            chr_send_l += s_l * tp.chorus_send;
+            chr_send_r += s_r * tp.chorus_send;
         }
 
-        // Стерео Хорус (LFO-модульована затримка 7-18мс)
+        // Майстер стерео хорус (Send ефект шини посилу tp.chorus_send)
         if (chr_mix > 0.01f) {
-            chorus_buf_l_[chorus_idx_] = mix_l;
-            chorus_buf_r_[chorus_idx_] = mix_r;
+            chorus_buf_l_[chorus_idx_] = chr_send_l;
+            chorus_buf_r_[chorus_idx_] = chr_send_r;
             float lfo_l = (std::sin(chorus_phase_) + 1.0f) * 0.5f;
             float lfo_r = (std::cos(chorus_phase_) + 1.0f) * 0.5f;
             chorus_phase_ += chr_rate * 6.2831853f * inv_sr;
@@ -1665,8 +1712,8 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             uint32_t c_idx_l = (chorus_idx_ + chorus_buf_l_.size() - static_cast<uint32_t>(delay_samples_l)) % chorus_buf_l_.size();
             uint32_t c_idx_r = (chorus_idx_ + chorus_buf_r_.size() - static_cast<uint32_t>(delay_samples_r)) % chorus_buf_r_.size();
 
-            mix_l = mix_l * (1.0f - chr_mix * 0.5f) + chorus_buf_l_[c_idx_l] * chr_mix * 0.70f;
-            mix_r = mix_r * (1.0f - chr_mix * 0.5f) + chorus_buf_r_[c_idx_r] * chr_mix * 0.70f;
+            mix_l += chorus_buf_l_[c_idx_l] * (chr_mix * 0.70f);
+            mix_r += chorus_buf_r_[c_idx_r] * (chr_mix * 0.70f);
             chorus_idx_ = (chorus_idx_ + 1) % chorus_buf_l_.size();
         }
 
@@ -1785,9 +1832,9 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             }
         }
 
-        // 4. Master Parametric Bell EQ Filter
+        // 4. Master Parametric Bell EQ Filter 1 (Low-Mid)
         if (std::fabs(local_mfx.bell_gain) > 0.05f) {
-            float f0 = std::clamp(40.0f * std::pow(400.0f, local_mfx.bell_freq), 20.0f, 18000.0f);
+            float f0 = std::clamp(20.0f * std::pow(900.0f, local_mfx.bell_freq), 20.0f, 18000.0f);
             float gain_lin = std::pow(10.0f, local_mfx.bell_gain / 40.0f);
             float w0 = 2.0f * 3.14159265f * f0 * inv_sr;
             float alpha = std::sin(w0) / (2.0f * std::clamp(local_mfx.bell_q, 0.2f, 10.0f));
@@ -1812,6 +1859,66 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             float y_r = b0_n * m_r + mst_bell_x1_r_;
             mst_bell_x1_r_ = b1_n * m_r - a1_n * y_r + mst_bell_x2_r_;
             mst_bell_x2_r_ = b2_n * m_r - a2_n * y_r;
+            m_r = y_r;
+        }
+
+        // 4b. Master Parametric Bell EQ Filter 2 (Mid)
+        if (std::fabs(local_mfx.bell2_gain) > 0.05f) {
+            float f0 = std::clamp(20.0f * std::pow(900.0f, local_mfx.bell2_freq), 20.0f, 18000.0f);
+            float gain_lin = std::pow(10.0f, local_mfx.bell2_gain / 40.0f);
+            float w0 = 2.0f * 3.14159265f * f0 * inv_sr;
+            float alpha = std::sin(w0) / (2.0f * std::clamp(local_mfx.bell2_q, 0.2f, 10.0f));
+            float cosw0 = std::cos(w0);
+
+            float b0 = 1.0f + alpha * gain_lin;
+            float b1 = -2.0f * cosw0;
+            float b2 = 1.0f - alpha * gain_lin;
+            float a0 = 1.0f + alpha / gain_lin;
+            float a1 = -2.0f * cosw0;
+            float a2 = 1.0f - alpha / gain_lin;
+
+            float inv_a0 = 1.0f / a0;
+            float b0_n = b0 * inv_a0, b1_n = b1 * inv_a0, b2_n = b2 * inv_a0;
+            float a1_n = a1 * inv_a0, a2_n = a2 * inv_a0;
+
+            float y_l = b0_n * m_l + mst_bell2_x1_l_;
+            mst_bell2_x1_l_ = b1_n * m_l - a1_n * y_l + mst_bell2_x2_l_;
+            mst_bell2_x2_l_ = b2_n * m_l - a2_n * y_l;
+            m_l = y_l;
+
+            float y_r = b0_n * m_r + mst_bell2_x1_r_;
+            mst_bell2_x1_r_ = b1_n * m_r - a1_n * y_r + mst_bell2_x2_r_;
+            mst_bell2_x2_r_ = b2_n * m_r - a2_n * y_r;
+            m_r = y_r;
+        }
+
+        // 4c. Master Parametric Bell EQ Filter 3 (High-Mid)
+        if (std::fabs(local_mfx.bell3_gain) > 0.05f) {
+            float f0 = std::clamp(20.0f * std::pow(900.0f, local_mfx.bell3_freq), 20.0f, 18000.0f);
+            float gain_lin = std::pow(10.0f, local_mfx.bell3_gain / 40.0f);
+            float w0 = 2.0f * 3.14159265f * f0 * inv_sr;
+            float alpha = std::sin(w0) / (2.0f * std::clamp(local_mfx.bell3_q, 0.2f, 10.0f));
+            float cosw0 = std::cos(w0);
+
+            float b0 = 1.0f + alpha * gain_lin;
+            float b1 = -2.0f * cosw0;
+            float b2 = 1.0f - alpha * gain_lin;
+            float a0 = 1.0f + alpha / gain_lin;
+            float a1 = -2.0f * cosw0;
+            float a2 = 1.0f - alpha / gain_lin;
+
+            float inv_a0 = 1.0f / a0;
+            float b0_n = b0 * inv_a0, b1_n = b1 * inv_a0, b2_n = b2 * inv_a0;
+            float a1_n = a1 * inv_a0, a2_n = a2 * inv_a0;
+
+            float y_l = b0_n * m_l + mst_bell3_x1_l_;
+            mst_bell3_x1_l_ = b1_n * m_l - a1_n * y_l + mst_bell3_x2_l_;
+            mst_bell3_x2_l_ = b2_n * m_l - a2_n * y_l;
+            m_l = y_l;
+
+            float y_r = b0_n * m_r + mst_bell3_x1_r_;
+            mst_bell3_x1_r_ = b1_n * m_r - a1_n * y_r + mst_bell3_x2_r_;
+            mst_bell3_x2_r_ = b2_n * m_r - a2_n * y_r;
             m_r = y_r;
         }
 

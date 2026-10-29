@@ -31,7 +31,7 @@ inline constexpr const char* getEngineTypeName(EngineType type) {
         case EngineType::kFm2Op:         return "2-OP FM";
         case EngineType::kAcid303:       return "ACID 303";
         case EngineType::kChordPad:      return "CHORD PAD";
-        case EngineType::kSampleOneShot: return "SAMPLER";
+        case EngineType::kSampleOneShot: return "SAMPLE PLAYER";
         case EngineType::kSliceSampler:  return "LOOP SLICER";
         case EngineType::kDx7:           return "DX7 6-OP";
         case EngineType::kMidiOut:       return "MIDI OUT";
@@ -435,6 +435,21 @@ inline constexpr float kDelayDivMultiplier[] = {
     0.0625f, 0.125f, 0.25f, 0.5f, 0.75f, 1.0f, 2.0f, 4.0f
 };
 
+// Режими роботи семплера: OneShot або Slicer
+enum class SampleEngineMode : uint8_t {
+    kOneShot = 0,
+    kSlicer = 1,
+    kCount
+};
+
+inline constexpr const char* getSampleEngineModeName(SampleEngineMode m) {
+    switch (m) {
+        case SampleEngineMode::kOneShot: return "ONESHOT";
+        case SampleEngineMode::kSlicer:  return "SLICER";
+        default: return "ONESHOT";
+    }
+}
+
 // Режими зациклення семплера (Digitakt style: OFF, FWD, REV, PING-PONG)
 enum class SampleLoopMode : uint8_t {
     kOff = 0,     // Однократний запуск (One-shot)
@@ -456,11 +471,13 @@ inline constexpr const char* getSampleLoopModeName(SampleLoopMode mode) {
 
 // Конфігурація відтворення семпла (Digitakt-style sample playback & looping)
 struct SampleConfig {
+    SampleEngineMode play_mode = SampleEngineMode::kOneShot;
     SampleLoopMode loop_mode = SampleLoopMode::kOff;
     float start = 0.0f;       // 0.0 .. 1.0 (START point)
     float loop_point = 0.0f;  // 0.0 .. 1.0 (LOOP point)
     float end = 1.0f;         // 0.0 .. 1.0 (END point, default 100%)
     float tune = 0.0f;        // -24.0 .. +24.0 semitones
+    int slice_index = 0;      // 0..15 (активний слайс для SLICER режиму)
 };
 
 // Індивідуальні ефекти на кожну доріжку (Per-Track FX Insert Chain)
@@ -527,10 +544,20 @@ struct MasterFxParameters {
     float lpf_cutoff = 1.0f;      // 0.0 .. 1.0 (20 Hz .. 20 kHz, 1.0 = OFF)
     bool lpf_slope_24 = false;    // false = 12 dB/oct (2-pole), true = 24 dB/oct (4-pole)
 
-    // 4. Parametric Bell EQ Filter
-    float bell_freq = 0.50f;      // 0.0 .. 1.0 (40 Hz .. 16 kHz, ~1 kHz default)
+    // 4. Parametric Bell EQ Filter 1 (Low-Mid)
+    float bell_freq = 0.35f;      // 0.0 .. 1.0 (~250 Hz default)
     float bell_gain = 0.0f;       // -18.0 .. +18.0 dB (0.0 dB = neutral)
     float bell_q = 1.0f;          // 0.3 .. 8.0 (Q factor, 1.0 = standard musical bell)
+
+    // 5. Parametric Bell EQ Filter 2 (Mid)
+    float bell2_freq = 0.55f;     // 0.0 .. 1.0 (~1.2 kHz default)
+    float bell2_gain = 0.0f;      // -18.0 .. +18.0 dB
+    float bell2_q = 1.0f;         // 0.3 .. 8.0
+
+    // 6. Parametric Bell EQ Filter 3 (High-Mid)
+    float bell3_freq = 0.78f;     // 0.0 .. 1.0 (~5.0 kHz default)
+    float bell3_gain = 0.0f;      // -18.0 .. +18.0 dB
+    float bell3_q = 1.0f;         // 0.3 .. 8.0
 };
 
 struct TrackParameters {
@@ -546,12 +573,15 @@ struct TrackParameters {
     float pan = 0.0f;       // -1.0 (L) .. +1.0 (R)
     float delay_send = 0.0f;
     float reverb_send = 0.0f;
+    float chorus_send = 0.0f;
     float lpf_cutoff = 1.0f;     // 0.0 .. 1.0 (20 Hz .. 20 kHz, дефолт 1.0 = відкритий)
     float lpf_resonance = 0.15f; // 0.0 .. 0.95 (Q)
+    bool lpf_24db = false;       // false = 12 dB/oct (2-pole), true = 24 dB/oct (4-pole)
     float lpf_env = 0.0f;        // -1.0 .. +1.0 (біполярна огинаюча, дефолт 0.0)
     float lpf_decay = 0.35f;     // 0.01 .. 4.0s (час спаду огинаючої фільтра)
     float hpf_cutoff = 0.0f;     // 0.0 .. 1.0 (20 Hz .. 16 kHz, дефолт 0.0 = low-cut OFF)
     float hpf_resonance = 0.0f;  // 0.0 .. 0.95
+    bool hpf_24db = false;       // false = 12 dB/oct (2-pole), true = 24 dB/oct (4-pole)
     float hpf_env = 0.0f;        // -1.0 .. +1.0 (біполярна огинаюча, дефолт 0.0)
     float hpf_decay = 0.35f;     // 0.01 .. 4.0s (час спаду огинаючої фільтра)
     bool muted = false;
