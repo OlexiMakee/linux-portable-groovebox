@@ -310,7 +310,17 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
                 int px_loop  = wf_x + 1 + static_cast<int>(lp_norm * (wf_w - 2));
                 int px_end   = wf_x + 1 + static_cast<int>(end_norm * (wf_w - 2));
 
-                if (tp.sample.loop_mode != SampleLoopMode::kOff && px_end > px_loop) {
+                if (tp.sample.play_mode == SampleEngineMode::kSlicer) {
+                    const int grid = std::clamp(tp.sample.slice_grid_count, 8, 128);
+                    const int cur_sl = std::clamp(tp.sample.slice_index, 0, grid - 1);
+                    const float span_px = static_cast<float>(px_end - px_start);
+                    // Підсвітка активного слайсу
+                    int sl_x1 = px_start + static_cast<int>(span_px * cur_sl / grid);
+                    int sl_x2 = px_start + static_cast<int>(span_px * (cur_sl + 1) / grid);
+                    if (sl_x2 > sl_x1) {
+                        cv.fill(sl_x1, wf_y + 12, sl_x2 - sl_x1, wf_h - 13, ColorRGB{26, 44, 60});
+                    }
+                } else if (tp.sample.loop_mode != SampleLoopMode::kOff && px_end > px_loop) {
                     cv.fill(px_loop, wf_y + 12, px_end - px_loop, wf_h - 13, ColorRGB{20, 36, 46});
                 }
 
@@ -348,6 +358,18 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
                 // END (червоний)
                 cv.line(px_end, wf_y + 11, px_end, wf_y + wf_h - 2, palette::kLevelWarnClip);
                 cv.text(std::clamp(px_end - 3, wf_x + 2, wf_x + wf_w - 12), wf_y + 2, "E", palette::kLevelWarnClip);
+
+                // Пунктирні вертикальні роздільники сітки слайсера (8/16/32/64/128)
+                if (tp.sample.play_mode == SampleEngineMode::kSlicer) {
+                    const int grid = std::clamp(tp.sample.slice_grid_count, 8, 128);
+                    const float span_px = static_cast<float>(px_end - px_start);
+                    for (int sl = 1; sl < grid; ++sl) {
+                        int sx = px_start + static_cast<int>(span_px * sl / grid);
+                        for (int sy = wf_y + 13; sy < wf_y + wf_h - 2; sy += 3) {
+                            cv.fill(sx, sy, 1, 1, (sl % 4 == 0) ? palette::kAccentOrange : palette::kGridDim);
+                        }
+                    }
+                }
 
                 // Живий плейхед
                 float ph = c.audio.trackPlayhead(trk_idx);

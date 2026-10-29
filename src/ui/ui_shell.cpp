@@ -309,7 +309,9 @@ void UiShell::renderHud(Canvas& cv, const UiContext& ctx) {
     } else if (ctx.app.project_modal_open) {
         f_id = ctx.app.project_modal_is_save ? "PROJECT: SAVE AS" : "PROJECT: LOAD";
     } else if (ctx.app.sample_browser_open) {
-        f_id = "SAMPLE BROWSER";
+        if (ctx.app.browser_context == AppModel::BrowserContext::kLoops) f_id = "BROWSE: SLICER LOOPS";
+        else if (ctx.app.browser_context == AppModel::BrowserContext::kDx7) f_id = "BROWSE: DX7 BANKS";
+        else f_id = "BROWSE: ONE-SHOTS";
     } else if (ctx.app.engine_menu_open) {
         f_id = "SELECT SYNTH ENGINE";
     } else {
@@ -475,10 +477,19 @@ void UiShell::render(
         cv.fill(bx + 1, by + 1, bw - 2, 11, palette::kHeaderSel);
 
         std::string disp_dir = app.sample_browser_dir;
-        auto pos = disp_dir.find("samples");
-        if (pos != std::string::npos) disp_dir = disp_dir.substr(pos);
+        for (const char* token : {"oneshots", "loops", "dx7", "samples"}) {
+            auto pos = disp_dir.find(token);
+            if (pos != std::string::npos) {
+                disp_dir = disp_dir.substr(pos);
+                break;
+            }
+        }
+        const char* title = "ONE-SHOTS";
+        if (app.browser_context == AppModel::BrowserContext::kLoops) title = "SLICER LOOPS";
+        else if (app.browser_context == AppModel::BrowserContext::kDx7) title = "DX7 BANKS";
+
         char hdr[80];
-        std::snprintf(hdr, sizeof(hdr), "SAMPLE POOL: %s", disp_dir.c_str());
+        std::snprintf(hdr, sizeof(hdr), "BROWSE %s: %s", title, disp_dir.c_str());
         cv.text(bx + 4, by + 3, hdr, palette::kAccentCyan);
 
         const int max_vis = 8;

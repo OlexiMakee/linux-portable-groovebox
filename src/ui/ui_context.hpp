@@ -156,9 +156,16 @@ struct AppModel {
     int engine_menu_sel = 0;
 
     // Семпл-браузер (доступ до файлової системи)
+    enum class BrowserContext : uint8_t {
+        kOneShots = 0,
+        kLoops,
+        kDx7
+    };
     bool sample_browser_open = false;
+    BrowserContext browser_context = BrowserContext::kOneShots;
     int sample_browser_target_track = 0;
     std::string sample_browser_dir;
+    std::string sample_browser_root;
     std::vector<std::string> sample_browser_items;
     int sample_browser_sel = 0;
     uint32_t modal_cooldown_until_ms = 0; // кулдаун після закриття модалок проти випадкового витоку кнопок A/B
