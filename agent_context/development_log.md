@@ -998,3 +998,21 @@
 * **Автоматизоване тестування:**
   * Тестовий набір [auto_test.cpp](file:///Users/oleksii/Documents/XU10%20Groovebox/tools/auto_test.cpp) розширено до **199 тестів** (**199/199 PASSED [OK]**).
 
+## [2026-10-29] Milestone 33: Categorized Mod Target Picker & Dynamic Song Mode Playback Sync
+* **Класифікація та контекстний селектор цілей модуляції (src/synth_engines.hpp, src/ui/params.cpp, src/ui/ui_shell.cpp):**
+  * Створено функцію `getModTargetCategory(ModTarget)` з групуванням 40+ цілей на 5 функціональних категорій:
+    * `[FLT]`: CUT, RES, MOD, DEC, H.CUT, H.RES, H.MOD, H.DEC.
+    * `[SYN]`: GAIN, TUNE, GLID, P1, P2, P3, P4, P5, P6.
+    * `[AMP]`: ATK, DEC, SUS, REL, VOL, PAN.
+    * `[FX]`: DELAY, REVERB.
+    * `[MOD]`: L1..4.RAT, L1..4.DEP, E1..2.ATK, E1..2.DEC, E1..2.SUS, E1..2.REL.
+  * Уніфіковано відкриття модального контекстного меню: зміна будь-якого параметра `ModTarget` (LFO DEST, ENV DEST, STICK X/Y TGT) тепер відкриває модальне вікно вибору з 3-літерним бейджем категорії (`[%-3s] %-5s %s`).
+* **Динамічний запуск та зациклення Song Mode (src/main.cpp, src/ui/actions.cpp):**
+  * Зациклення кроків пісні у `step_sequencer` прив'язано до динамічної кількості створених рядків `app.song_rows_count` (1..16) замість фіксованих 16.
+  * Дія `PLAY.TOGGLE` у підрежимі `kSong` автоматично ініціалізує програвання з активного рядка курсору (`song_cursor_row`), скидає лічильник повторів `song_play_repeat = 0`, миттєво перемикає активний патерн, виставляє BPM та застосовує маску м'ютів (`mute_mask`).
+* **Автоматизоване тестування та деплой на консоль:**
+  * Додано перевірку категорій цілей модуляції, прямий виклик степінгу та запуск відтворення пісні з активного рядка.
+  * Тестовий набір [auto_test.cpp](file:///Users/oleksii/Documents/XU10%20Groovebox/tools/auto_test.cpp) розширено до **211 тестів** (**211/211 PASSED [OK]** на macOS та на Rockchip RK3326S ARM64 на MagicX XU10).
+  * Новий бінарник задеплоєно на консоль MagicX XU10 (PID 270994, 16.0% CPU, 9.8% RAM).
+
+
