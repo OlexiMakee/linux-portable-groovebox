@@ -587,10 +587,11 @@ void GridView::renderList(Canvas& cv, const UiContext& c, Rect area, bool popup)
     int row_h = kListRowH;
     int value_x = 110;
     int y0 = area.y + kHeaderH + 2;
+    const bool has_chord_roll = (popup && spec_.id == ViewId::kInspect && c.app.inspect_page == AppModel::InspectPage::kMidi);
     if (popup) {
         row_h = kPopupRowH;
         value_x = 54;
-        box.w = 236; // Ширше вікно для відображення піано-ролу акордів
+        box.w = has_chord_roll ? 236 : 210;
         box.h = std::min(area.h - 8, num_rows * row_h + 18);
         box.x = area.x + (area.w - box.w) / 2;
         box.y = area.y + 6;
@@ -600,6 +601,8 @@ void GridView::renderList(Canvas& cv, const UiContext& c, Rect area, bool popup)
         if (spec_.id == ViewId::kInspect) {
             int hx = box.x + 4;
             const int hy = box.y + 3;
+            cv.text(hx, hy, "Step Editor: ", palette::kTextDim);
+            hx += Canvas::textWidth("Step Editor: ");
             switch (c.app.inspect_page) {
                 case AppModel::InspectPage::kMidi:
                     cv.text(hx, hy, "<MIDI>", palette::kParamTrig);
@@ -633,38 +636,40 @@ void GridView::renderList(Canvas& cv, const UiContext& c, Rect area, bool popup)
         }
         y0 = box.y + 14;
 
-        // Міні-піанорол акорду праворуч (Digitakt chord mini-roll)
-        const int pr_x = box.x + 154;
-        const int pr_y = y0;
-        const int pr_w = box.w - 158;
-        const int pr_h = box.h - 18;
+        if (has_chord_roll) {
+            // Міні-піанорол акорду праворуч (Digitakt chord mini-roll)
+            const int pr_x = box.x + 154;
+            const int pr_y = y0;
+            const int pr_w = box.w - 158;
+            const int pr_h = box.h - 18;
 
-        cv.rect(pr_x, pr_y, pr_w, pr_h, palette::kGridDim);
-        cv.text(pr_x + 4, pr_y + 2, "CHORD ROLL", palette::kTextDim);
+            cv.rect(pr_x, pr_y, pr_w, pr_h, palette::kGridDim);
+            cv.text(pr_x + 4, pr_y + 2, "CHORD ROLL", palette::kTextDim);
 
-        // Отримуємо активні ноти на поточному кроці
-        const int cur_r = c.app.cursor_row;
-        const int cur_s = c.app.cursor_step;
-        const auto st = (cur_r < c.audio.getActiveRowCount()) ? c.audio.getStep(cur_r, cur_s) : SequencerStep{};
+            // Отримуємо активні ноти на поточному кроці
+            const int cur_r = c.app.cursor_row;
+            const int cur_s = c.app.cursor_step;
+            const auto st = (cur_r < c.audio.getActiveRowCount()) ? c.audio.getStep(cur_r, cur_s) : SequencerStep{};
 
-        const int base_oct = st.note / 12;
-        const int key_h = std::max(6, (pr_h - 16) / 12);
-        static constexpr bool is_black[12] = {false, true, false, true, false, false, true, false, true, false, true, false};
-        static constexpr const char* kKeyNames[12] = {"B", "A#", "A", "G#", "G", "F#", "F", "E", "D#", "D", "C#", "C"};
-        static constexpr int kKeyPitch[12] = {11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+            const int base_oct = st.note / 12;
+            const int key_h = std::max(6, (pr_h - 16) / 12);
+            static constexpr bool is_black[12] = {false, true, false, true, false, false, true, false, true, false, true, false};
+            static constexpr const char* kKeyNames[12] = {"B", "A#", "A", "G#", "G", "F#", "F", "E", "D#", "D", "C#", "C"};
+            static constexpr int kKeyPitch[12] = {11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
 
-        for (int k = 0; k < 12; ++k) {
-            int ky = pr_y + 12 + k * key_h;
-            int pitch = base_oct * 12 + kKeyPitch[k];
-            bool active = (st.note == pitch);
-            for (int cn = 1; cn < 4; ++cn) {
-                if (st.chord_notes[cn] == pitch) active = true;
+            for (int k = 0; k < 12; ++k) {
+                int ky = pr_y + 12 + k * key_h;
+                int pitch = base_oct * 12 + kKeyPitch[k];
+                bool active = (st.note == pitch);
+                for (int cn = 1; cn < 4; ++cn) {
+                    if (st.chord_notes[cn] == pitch) active = true;
+                }
+
+                ColorRGB bg = active ? palette::kAccentCyan : (is_black[k] ? ColorRGB{20, 24, 32} : ColorRGB{52, 60, 72});
+                cv.fill(pr_x + 2, ky, pr_w - 4, key_h - 1, bg);
+                ColorRGB tc = active ? palette::kBgDark : (is_black[k] ? palette::kTextDim : palette::kTextMain);
+                cv.text(pr_x + 4, ky + 1, kKeyNames[k], tc);
             }
-
-            ColorRGB bg = active ? palette::kAccentCyan : (is_black[k] ? ColorRGB{20, 24, 32} : ColorRGB{52, 60, 72});
-            cv.fill(pr_x + 2, ky, pr_w - 4, key_h - 1, bg);
-            ColorRGB tc = active ? palette::kBgDark : (is_black[k] ? palette::kTextDim : palette::kTextMain);
-            cv.text(pr_x + 4, ky + 1, kKeyNames[k], tc);
         }
     } else if (spec_.header) {
         cv.text(area.x + 4, area.y + 3, spec_.header(c), spec_.accent);
@@ -676,7 +681,7 @@ void GridView::renderList(Canvas& cv, const UiContext& c, Rect area, bool popup)
         const int r = scroll + i;
         const Param* p = rows[r].second.empty() ? nullptr : rows[r].second[0];
         if (!p) continue;
-        const int row_w = popup ? 148 : box.w - 6;
+        const int row_w = has_chord_roll ? 148 : box.w - 6;
         const Rect rr{box.x + 3, y0 + i * row_h, row_w, row_h - 1};
         widgets::listRow(cv, rr, p->labelFor(c), p->value(c), r == sel_r, p->editable(), value_x, spec_.accent);
     }

@@ -1627,44 +1627,61 @@ ParamRegistry::ParamRegistry() {
             s.note = static_cast<uint8_t>(std::clamp(s.note + dir * (coarse ? 12 : 1), 0, 127));
             s.chord_notes[0] = s.note;
         }));
+    auto adjustChordSlot = [](SequencerStep& s, int slot, int def_offset, int dir, bool coarse) {
+        if (s.chord_notes[slot] == 255) {
+            if (dir > 0) {
+                uint8_t cand = static_cast<uint8_t>(std::clamp(static_cast<int>(s.note) + def_offset, 0, 127));
+                bool dup = (cand == s.note);
+                for (int i = 1; i < 4; ++i) {
+                    if (i != slot && s.chord_notes[i] != 255 && s.chord_notes[i] == cand) dup = true;
+                }
+                if (dup) cand = static_cast<uint8_t>(std::clamp(cand + 1, 0, 127));
+                s.chord_notes[slot] = cand;
+            }
+        } else {
+            int n = static_cast<int>(s.chord_notes[slot]) + dir * (coarse ? 12 : 1);
+            if (n < 24 || n > 127) {
+                s.chord_notes[slot] = 255;
+            } else {
+                uint8_t cand = static_cast<uint8_t>(n);
+                bool dup = (cand == s.note);
+                for (int i = 1; i < 4; ++i) {
+                    if (i != slot && s.chord_notes[i] != 255 && s.chord_notes[i] == cand) {
+                        dup = true;
+                        break;
+                    }
+                }
+                if (dup) {
+                    s.chord_notes[slot] = 255; // Дублювання ноти -> видалення (OFF)
+                } else {
+                    s.chord_notes[slot] = cand;
+                }
+            }
+        }
+    };
     add(stepParam("STEP.CHORD1", "NOTE 2",
         [](const SequencerStep& s, const TrackParameters&) {
             if (s.chord_notes[1] == 255) return std::string("--- (OFF)");
             return noteName(s.chord_notes[1]) + " (" + std::to_string(s.chord_notes[1]) + ")";
         },
-        [](SequencerStep& s, const TrackParameters&, int dir, bool coarse) {
-            if (s.chord_notes[1] == 255 && dir > 0) s.chord_notes[1] = static_cast<uint8_t>(std::clamp(s.note + 4, 0, 127));
-            else if (s.chord_notes[1] != 255) {
-                int n = static_cast<int>(s.chord_notes[1]) + dir * (coarse ? 12 : 1);
-                if (n < 24) s.chord_notes[1] = 255;
-                else s.chord_notes[1] = static_cast<uint8_t>(std::clamp(n, 24, 127));
-            }
+        [adjustChordSlot](SequencerStep& s, const TrackParameters&, int dir, bool coarse) {
+            adjustChordSlot(s, 1, 4, dir, coarse);
         }));
     add(stepParam("STEP.CHORD2", "NOTE 3",
         [](const SequencerStep& s, const TrackParameters&) {
             if (s.chord_notes[2] == 255) return std::string("--- (OFF)");
             return noteName(s.chord_notes[2]) + " (" + std::to_string(s.chord_notes[2]) + ")";
         },
-        [](SequencerStep& s, const TrackParameters&, int dir, bool coarse) {
-            if (s.chord_notes[2] == 255 && dir > 0) s.chord_notes[2] = static_cast<uint8_t>(std::clamp(s.note + 7, 0, 127));
-            else if (s.chord_notes[2] != 255) {
-                int n = static_cast<int>(s.chord_notes[2]) + dir * (coarse ? 12 : 1);
-                if (n < 24) s.chord_notes[2] = 255;
-                else s.chord_notes[2] = static_cast<uint8_t>(std::clamp(n, 24, 127));
-            }
+        [adjustChordSlot](SequencerStep& s, const TrackParameters&, int dir, bool coarse) {
+            adjustChordSlot(s, 2, 7, dir, coarse);
         }));
     add(stepParam("STEP.CHORD3", "NOTE 4",
         [](const SequencerStep& s, const TrackParameters&) {
             if (s.chord_notes[3] == 255) return std::string("--- (OFF)");
             return noteName(s.chord_notes[3]) + " (" + std::to_string(s.chord_notes[3]) + ")";
         },
-        [](SequencerStep& s, const TrackParameters&, int dir, bool coarse) {
-            if (s.chord_notes[3] == 255 && dir > 0) s.chord_notes[3] = static_cast<uint8_t>(std::clamp(s.note + 11, 0, 127));
-            else if (s.chord_notes[3] != 255) {
-                int n = static_cast<int>(s.chord_notes[3]) + dir * (coarse ? 12 : 1);
-                if (n < 24) s.chord_notes[3] = 255;
-                else s.chord_notes[3] = static_cast<uint8_t>(std::clamp(n, 24, 127));
-            }
+        [adjustChordSlot](SequencerStep& s, const TrackParameters&, int dir, bool coarse) {
+            adjustChordSlot(s, 3, 11, dir, coarse);
         }));
     add(stepParam("STEP.VEL", "VELOCITY",
         [](const SequencerStep& s, const TrackParameters&) { return fmt127(s.velocity); },

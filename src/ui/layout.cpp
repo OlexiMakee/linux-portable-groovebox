@@ -102,9 +102,8 @@ void setupAppLayout(UiShell& shell) {
                 case EngineType::kSampleOneShot:
                 case EngineType::kSliceSampler:
                     return {
-                        {"INST",   {"TRK.ENGINE", "TRK.PRESET", "TRK.WAVE_SAMPLE", "SMP.PLAY_MODE"}},
-                        {"PLAY",   {"SMP.LOOP", "SMP.START", "SMP.LOOP_PT", "SMP.END"}},
-                        {"TUNING", {"SMP.TUNE", "SMP.SLICE"}},
+                        {"SMPL",   {"TRK.WAVE_SAMPLE", "SMP.PLAY_MODE", "SMP.TUNE", "TRK.GAIN_OVER"}},
+                        {"PLAY",   {"TRK.ENGINE", "SMP.LOOP", "SMP.START", "SMP.LOOP_PT", "SMP.END", "SMP.SLICE"}},
                         {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
                         {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
                         {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
@@ -237,43 +236,57 @@ void setupAppLayout(UiShell& shell) {
         ins_spec.style = GridStyle::kPopup;
         ins_spec.accent = palette::kParamTrig;
         ins_spec.header = [](const UiContext& c) {
-            char b[64];
+            char b[96];
             switch (c.app.inspect_page) {
                 case AppModel::InspectPage::kSyn:
-                    std::snprintf(b, sizeof(b), "midi-<SYN>-mod-fx");
+                    std::snprintf(b, sizeof(b), "Step Editor: midi-<SYN>-mod-fx");
                     break;
                 case AppModel::InspectPage::kMod:
-                    std::snprintf(b, sizeof(b), "midi-syn-<MOD>-fx");
+                    std::snprintf(b, sizeof(b), "Step Editor: midi-syn-<MOD>-fx");
                     break;
                 case AppModel::InspectPage::kFx:
-                    std::snprintf(b, sizeof(b), "midi-syn-mod-<FX>");
+                    std::snprintf(b, sizeof(b), "Step Editor: midi-syn-mod-<FX>");
                     break;
                 case AppModel::InspectPage::kMidi:
                 default:
-                    std::snprintf(b, sizeof(b), "<MIDI>-syn-mod-fx");
+                    std::snprintf(b, sizeof(b), "Step Editor: <MIDI>-syn-mod-fx");
                     break;
             }
             return std::string(b);
         };
         ins_spec.dynamic_rows = [](const UiContext& c) -> std::vector<GridRow> {
             switch (c.app.inspect_page) {
-                case AppModel::InspectPage::kSyn:
-                    return {
-                        {"", {"STEP.CUT"}},
-                        {"", {"STEP.P1"}},
-                        {"", {"STEP.P2"}},
-                        {"", {"STEP.P3"}},
-                        {"", {"STEP.P4"}},
-                        {"", {"STEP.P5"}},
-                        {"", {"STEP.P6"}},
-                        {"", {"STEP.ATK"}},
-                        {"", {"STEP.DEC"}},
-                        {"", {"STEP.SUS"}},
-                        {"", {"STEP.REL"}},
-                        {"", {"STEP.SMP_START"}},
-                        {"", {"STEP.SMP_LOOP"}},
-                        {"", {"STEP.SMP_END"}}
+                case AppModel::InspectPage::kSyn: {
+                    std::vector<GridRow> syn_rows;
+                    const auto tp = c.audio.getTrackParams(c.app.selected_track);
+                    std::vector<std::string> pids;
+                    switch (tp.engine) {
+                        case EngineType::kDx7:
+                        case EngineType::kAcid303:
+                        case EngineType::kFm2Op:
+                        case EngineType::kChordPad:
+                        case EngineType::kMidiOut:
+                        case EngineType::kVaMono:
+                        default:
+                            pids = {"TRK.PRESET", "TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5", "TRK.P6"};
+                            break;
+                        case EngineType::kSampleOneShot:
+                        case EngineType::kSliceSampler:
+                            pids = {"SMP.PLAY_MODE", "SMP.TUNE", "TRK.GAIN_OVER", "SMP.LOOP", "SMP.START", "SMP.LOOP_PT", "SMP.END", "SMP.SLICE"};
+                            break;
+                    }
+                    // Додаємо всі налаштування фільтрів та обвідної
+                    std::vector<std::string> filter_pids = {
+                        "TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC",
+                        "TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC",
+                        "TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"
                     };
+                    pids.insert(pids.end(), filter_pids.begin(), filter_pids.end());
+                    for (const auto& pid : pids) {
+                        syn_rows.push_back({"", {pid}});
+                    }
+                    return syn_rows;
+                }
                 case AppModel::InspectPage::kMod:
                     return {
                         {"", {"LFO1.DEPTH"}},
@@ -287,14 +300,22 @@ void setupAppLayout(UiShell& shell) {
                         {"", {"ENV2.ATK"}},
                         {"", {"ENV2.DEC"}}
                     };
-                case AppModel::InspectPage::kFx:
-                    return {
-                        {"", {"STEP.DLY_SEND"}},
-                        {"", {"STEP.REV_SEND"}},
-                        {"", {"FX.BC_BITS"}},
-                        {"", {"FX.DST_DRV"}},
-                        {"", {"FX.CHR_MIX"}}
+                case AppModel::InspectPage::kFx: {
+                    static const char* kFxPids[] = {
+                        "FX.BC_BITS", "FX.SRR",
+                        "FX.DST_DRV", "FX.DST_TONE", "FX.DST_MIX",
+                        "FX.CHR_MIX", "FX.CHR_RATE", "FX.CHR_DEP",
+                        "FX.SC_SRC", "FX.SC_THR", "FX.SC_RAT", "FX.SC_ATK", "FX.SC_REL",
+                        "FX.DLY_DIV", "FX.DLY_FBK", "FX.DLY_WID", "FX.DLY_MIX",
+                        "FX.REV_DEC", "FX.REV_HICUT", "FX.REV_LOCUT", "FX.REV_PRE", "FX.REV_MIX",
+                        "STEP.DLY_SEND", "STEP.REV_SEND", "TRK.CHR"
                     };
+                    std::vector<GridRow> fx_rows;
+                    for (const char* pid : kFxPids) {
+                        fx_rows.push_back({"", {pid}});
+                    }
+                    return fx_rows;
+                }
                 case AppModel::InspectPage::kMidi:
                 default:
                     return {
