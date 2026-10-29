@@ -1079,6 +1079,27 @@ static void testInputRouterAndStepEditor() {
     audio.updateRouting(snap_unplugged.active_audio_card, snap_unplugged.digitakt_connected, false);
     TEST_ASSERT(audio.sampleRate() == static_cast<uint32_t>(activeProfile().internal_rate), "AudioEngine reverts sample rate to native internal DAC rate");
 
+    // Перевірка вибору частоти дискретизації зі списку (24k, 32k, 44.1k)
+    audio.setUserSampleRate(24000);
+    TEST_ASSERT(audio.sampleRate() == 24000, "AudioEngine sets sample rate to 24000 Hz");
+    audio.stepSampleRate(1);
+    TEST_ASSERT(audio.sampleRate() == 32000, "AudioEngine steps sample rate forward to 32000 Hz");
+    audio.stepSampleRate(1);
+    TEST_ASSERT(audio.sampleRate() == 44100, "AudioEngine steps sample rate forward to 44100 Hz");
+    audio.stepSampleRate(1);
+    TEST_ASSERT(audio.sampleRate() == 24000, "AudioEngine wraps sample rate to 24000 Hz");
+    audio.stepSampleRate(-1);
+    TEST_ASSERT(audio.sampleRate() == 44100, "AudioEngine steps sample rate backward to 44100 Hz");
+
+    // Перевірка степінгу буфера списком {96, 128, 256, 512, 1024, 2048} в обох напрямках
+    audio.stepBufferSize(1);
+    uint32_t b1 = audio.getTargetPeriodFrames();
+    audio.stepBufferSize(1);
+    uint32_t b2 = audio.getTargetPeriodFrames();
+    TEST_ASSERT(b2 != b1, "AudioEngine steps buffer size forward via list");
+    audio.stepBufferSize(-1);
+    TEST_ASSERT(audio.getTargetPeriodFrames() == b1, "AudioEngine steps buffer size backward via list");
+
     dt_hw_mon.stop();
 }
 
