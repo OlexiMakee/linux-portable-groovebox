@@ -1015,4 +1015,32 @@
   * Тестовий набір [auto_test.cpp](file:///Users/oleksii/Documents/XU10%20Groovebox/tools/auto_test.cpp) розширено до **211 тестів** (**211/211 PASSED [OK]** на macOS та на Rockchip RK3326S ARM64 на MagicX XU10).
   * Новий бінарник задеплоєно на консоль MagicX XU10 (PID 270994, 16.0% CPU, 9.8% RAM).
 
+## [2026-10-29] Milestone 34: Project Persistence v2, Live Master WAV Recording & Full Elektron Parameter Locks
+* **Серіалізація проекту версії 2 (src/synth_engines.hpp, src/pattern_manager.hpp, src/pattern_manager.cpp, src/ui/actions.cpp):**
+  * Оновлено формат збереження `.xgp` до версії 2 (`kProjectVersion = 2u`) зі збереженням зворотної сумісності для версії 1.
+  * Реалізовано повне збереження та завантаження стану:
+    * Глобальний BPM проекту (`bpm`).
+    * Динамічний Song Mode ланцюг (`song_rows_count`, `song_chain[16]`).
+    * Параметри Master FX (`MasterFxParameters`: saturation drive, EQ low/mid/high, master delay/reverb, delay width, compressor threshold/ratio/makeup/attack/release, limiter threshold).
+    * Усі 128 патернів з параметрами семплерів, синтезаторів та повною сіткою кроків секвенсора.
+  * Інтегровано з діями `PROJECT.SAVE`, `PROJECT.LOAD`, `PROJECT.NEW` в інтерфейсі.
+* **Асинхронний запис Master Audio у WAV (src/audio_engine.hpp, src/audio_engine.cpp, src/ui/actions.cpp, src/ui/keymap.cpp, src/ui/ui_shell.cpp):**
+  * Реалізовано потоковий фоновий запис майстер-виходу у 16-бітний стерео PCM WAV (32 кГц або 48 кГц):
+    * Lock-free кільцевий буфер розміром 64k семплів (~1 секунда буферизації).
+    * Окремий фоновий потік запису на SD-карту (`/storage/roms/groovebox/recordings/` або `/tmp/recordings/`) без жодного впливу на аудіопотік.
+    * Автоматична генерація та оновлення стандартного 44-байтного RIFF/WAVE заголовку при зупинці запису.
+  * Зареєстровано дію `REC.MASTER_TOGGLE`.
+  * Прив'язано глобальну комбінацію кнопок **`SELECT + R3`** (натискання правого аналогового стіка з утриманням `SELECT`) для старту/стопу запису.
+  * Додано пульсуючий червоний індикатор `[REC MM:SS]` у правому кутку верхнього таб-бару при активному записі.
+* **Повні Parameter Locks (P-Locks) в стилі Elektron (src/synth_engines.hpp, src/audio_engine.hpp, src/audio_engine.cpp):**
+  * Розширено структуру `SequencerStep` та стан голосу `VoiceState` підтримкою локальних блокувань параметрів на кожному кроці секвенсора:
+    * Макроси тембру: `plock_p[0..5]` (P1..P6).
+    * Маркери семплера: `plock_sample_start`, `plock_sample_end`, `plock_sample_loop`.
+    * Посили ефектів: `plock_delay_send`, `plock_reverb_send`.
+  * Впроваджено динамічний розрахунок ефективних параметрів `eff_p[6]` для кожного активного голосу в `AudioEngine::renderBlock` для всіх 7 движків (`kSampleOneShot`, `kSliceSampler`, `kDx7`, `kVaMono`, `kFm2Op`, `kAcid303`, `kChordPad`).
+* **Автоматизоване тестування та верифікація:**
+  * Тестовий набір [auto_test.cpp](file:///Users/oleksii/Documents/XU10%20Groovebox/tools/auto_test.cpp) розширено до **231 тесту** (**231/231 PASSED [OK]** на macOS та Rockchip RK3326S ARM64).
+  * Перевірено серіалізацію v2, циклічний буфер запису та заголовки WAV, перевірено динамічну оцінку P-Locks.
+
+
 
