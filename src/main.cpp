@@ -232,14 +232,19 @@ int main(int argc, char* argv[]) {
         };
         ui.handleInput(ctx);
 
-        // 2. Секвенсорний таймінг
+        // 2. Секвенсорний таймінг (накопичувальний таймер без фазового дрейфу)
         if (midi_tel.external_sync) {
             app.bpm = midi_tel.detected_bpm;
         } else {
-            const uint32_t step_interval_ms = static_cast<uint32_t>(60000.0f / (app.bpm * 4.0f));
-            if (app.transport_playing && (now_ms - last_step_ms >= step_interval_ms)) {
+            const float step_interval_ms = 60000.0f / (std::max(app.bpm, 20.0f) * 4.0f);
+            const uint32_t step_interval_int = static_cast<uint32_t>(step_interval_ms);
+            if (app.transport_playing) {
+                while (step_interval_int > 0 && (now_ms - last_step_ms >= step_interval_int)) {
+                    last_step_ms += step_interval_int;
+                    step_sequencer();
+                }
+            } else {
                 last_step_ms = now_ms;
-                step_sequencer();
             }
         }
 

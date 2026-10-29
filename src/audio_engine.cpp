@@ -320,11 +320,17 @@ void AudioEngine::toggleStep(int row, int step_idx) {
     if (!st.enabled) {
         st.enabled = true;
         st.is_param_trig = false; // Звичайний Note Trig (Зелений/Бірюзовий)
+        st.note = 48;
+        st.chord_notes = {48, 255, 255, 255};
     } else if (!st.is_param_trig) {
         st.is_param_trig = true;  // Жовтий Elektron Param Trig (тільки автоматизація)
+        st.note = 255;            // За замовчуванням без ноти, щоб не створювати фантомну ноту C3 у піано-ролі
+        st.chord_notes = {255, 255, 255, 255};
     } else {
         st.enabled = false;
         st.is_param_trig = false; // Вимкнено
+        st.note = 48;
+        st.chord_notes = {48, 255, 255, 255};
     }
 }
 
@@ -816,8 +822,9 @@ void AudioEngine::triggerSequencerStep(uint32_t master_tick) {
         prev_step_fired_[r] = true;
 
         int t = getRowTrack(r);
-        if (steps[r].is_param_trig) {
-            // Жовтий Elektron Trig (Param Trig / P-Lock): лише оновлюємо параметри, без нової ноти!
+        const bool has_notes = (steps[r].note != 255) || (steps[r].chord_notes[0] != 255);
+        if (steps[r].is_param_trig && !has_notes) {
+            // Жовтий Elektron Trig (Param Trig / P-Lock без нот): лише оновлюємо параметри звучання без нової ноти!
             std::lock_guard<std::mutex> lock(state_mutex_);
             int base = t * kVoicesPerTrack;
             for (int vi = 0; vi < kVoicesPerTrack; ++vi) {
@@ -832,30 +839,33 @@ void AudioEngine::triggerSequencerStep(uint32_t master_tick) {
                 }
             }
         } else {
-            // Звичайний Note Trig (головна нота)
-            triggerNote(
-                t,
-                steps[r].note,
-                steps[r].velocity,
-                steps[r].has_plock ? steps[r].plock_cutoff : -1.0f,
-                steps[r].slide,
-                steps[r].gate_len,
-                &steps[r]
-            );
+            // Звичайний Note Trig або Param Trig з розставленими нотами (тригерить ноту з усіма P-Locks)
+            const uint8_t primary_note = (steps[r].note != 255) ? steps[r].note : steps[r].chord_notes[0];
+            if (primary_note != 255) {
+                triggerNote(
+                    t,
+                    primary_note,
+                    steps[r].velocity,
+                    steps[r].has_plock ? steps[r].plock_cutoff : -1.0f,
+                    steps[r].slide,
+                    steps[r].gate_len,
+                    &steps[r]
+                );
 
-            // Поліфонічні ноти акорду (слоти 1..3 для Poly-треків)
-            for (int cn = 1; cn < 4; ++cn) {
-                uint8_t extra_n = steps[r].chord_notes[cn];
-                if (extra_n != 255 && extra_n != steps[r].note) {
-                    triggerNote(
-                        t,
-                        extra_n,
-                        steps[r].velocity,
-                        steps[r].has_plock ? steps[r].plock_cutoff : -1.0f,
-                        steps[r].slide,
-                        steps[r].gate_len,
-                        &steps[r]
-                    );
+                // Поліфонічні ноти акорду (слоти 1..3 для Poly-треків)
+                for (int cn = 1; cn < 4; ++cn) {
+                    uint8_t extra_n = steps[r].chord_notes[cn];
+                    if (extra_n != 255 && extra_n != primary_note) {
+                        triggerNote(
+                            t,
+                            extra_n,
+                            steps[r].velocity,
+                            steps[r].has_plock ? steps[r].plock_cutoff : -1.0f,
+                            steps[r].slide,
+                            steps[r].gate_len,
+                            &steps[r]
+                        );
+                    }
                 }
             }
         }
