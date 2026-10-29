@@ -69,7 +69,7 @@ void setupAppLayout(UiShell& shell) {
             switch (tp.engine) {
                 case EngineType::kDx7:
                     return {
-                        {"INST",   {"TRK.ENGINE", "TRK.P1"}},
+                        {"INST",   {"TRK.ENGINE", "TRK.PRESET", "TRK.P1"}},
                         {"DX7",    {"TRK.P5", "TRK.P6", "TRK.P3", "TRK.P4", "TRK.P2"}},
                         {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
                         {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
@@ -77,7 +77,7 @@ void setupAppLayout(UiShell& shell) {
                     };
                 case EngineType::kAcid303:
                     return {
-                        {"INST",   {"TRK.ENGINE", "TRK.P6"}},
+                        {"INST",   {"TRK.ENGINE", "TRK.PRESET", "TRK.P6"}},
                         {"303",    {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5"}},
                         {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
                         {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
@@ -85,7 +85,7 @@ void setupAppLayout(UiShell& shell) {
                     };
                 case EngineType::kFm2Op:
                     return {
-                        {"INST",   {"TRK.ENGINE", "TRK.P1"}},
+                        {"INST",   {"TRK.ENGINE", "TRK.PRESET", "TRK.P1"}},
                         {"2-OP",   {"TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5", "TRK.P6"}},
                         {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
                         {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
@@ -93,7 +93,7 @@ void setupAppLayout(UiShell& shell) {
                     };
                 case EngineType::kChordPad:
                     return {
-                        {"INST",   {"TRK.ENGINE", "TRK.P1"}},
+                        {"INST",   {"TRK.ENGINE", "TRK.PRESET", "TRK.P1"}},
                         {"CHORD",  {"TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5", "TRK.P6"}},
                         {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
                         {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
@@ -102,7 +102,7 @@ void setupAppLayout(UiShell& shell) {
                 case EngineType::kSampleOneShot:
                 case EngineType::kSliceSampler:
                     return {
-                        {"INST",   {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "SMP.PLAY_MODE"}},
+                        {"INST",   {"TRK.ENGINE", "TRK.PRESET", "TRK.WAVE_SAMPLE", "SMP.PLAY_MODE"}},
                         {"PLAY",   {"SMP.LOOP", "SMP.START", "SMP.LOOP_PT", "SMP.END"}},
                         {"TUNING", {"SMP.TUNE", "SMP.SLICE"}},
                         {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
@@ -111,14 +111,14 @@ void setupAppLayout(UiShell& shell) {
                     };
                 case EngineType::kMidiOut:
                     return {
-                        {"INST",   {"TRK.ENGINE", "TRK.P1", "TRK.P6"}},
+                        {"INST",   {"TRK.ENGINE", "TRK.PRESET", "TRK.P1", "TRK.P6"}},
                         {"CC_A",   {"TRK.P2", "TRK.P3"}},
                         {"CC_B",   {"TRK.P4", "TRK.P5"}}
                     };
                 case EngineType::kVaMono:
                 default:
                     return {
-                        {"INST",   {"TRK.ENGINE", "TRK.P1"}},
+                        {"INST",   {"TRK.ENGINE", "TRK.PRESET", "TRK.P1"}},
                         {"OSC",    {"TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5", "TRK.P6"}},
                         {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
                         {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},

@@ -11,6 +11,7 @@
 #include "ui/params.hpp"
 #include "ui/ui_shell.hpp"
 #include "ui/views.hpp"
+#include "preset_manager.hpp"
 
 #include <SDL.h>
 #include <cassert>
@@ -899,6 +900,53 @@ static void testInputRouterAndStepEditor() {
     TEST_ASSERT(audio.getTrackParams(1).muted == false, "Track 1 unmuted as per row 1 mute_mask");
     ActionRegistry::instance().run("PLAY.TOGGLE", ctx);
     TEST_ASSERT(app.transport_playing == false, "PLAY.TOGGLE stops playback");
+
+    // 16. Тестування Track Preset Manager
+    auto presets_303 = PresetManager::instance().getFactoryPresets(EngineType::kAcid303);
+    TEST_ASSERT(!presets_303.empty(), "PresetManager returns factory presets for 303 Bassline");
+    auto presets_va = PresetManager::instance().getFactoryPresets(EngineType::kVaMono);
+    TEST_ASSERT(presets_va.size() >= 4, "PresetManager returns at least 4 presets for Virtual Analog");
+
+    // Застосування пресету до треку 0
+    auto tp_pres_init = audio.getTrackParams(0);
+    tp_pres_init.level = 0.77f;
+    tp_pres_init.pan = -0.33f;
+    tp_pres_init.muted = true;
+    audio.setTrackParams(0, tp_pres_init);
+
+    PresetManager::instance().applyPreset(tp_pres_init, presets_va[0]); // JP8000 Supersaw
+    TEST_ASSERT(tp_pres_init.engine == EngineType::kVaMono, "Applied preset sets engine to kVaMono");
+    TEST_ASSERT(tp_pres_init.p[0] == 1.0f, "JP8000 Supersaw preset sets WAVE = Supersaw (1.0)");
+    TEST_ASSERT(tp_pres_init.level == 0.77f, "applyPreset preserves track level routing");
+    TEST_ASSERT(tp_pres_init.pan == -0.33f, "applyPreset preserves track pan routing");
+    TEST_ASSERT(tp_pres_init.muted == true, "applyPreset preserves track mute status");
+
+    // Серіалізація та десеріалізація файлу пресету (.snd)
+    std::string test_snd_path = "/tmp/test_preset.snd";
+    TrackPreset tp_save;
+    std::strncpy(tp_save.name, "MY CUSTOM LEAD", sizeof(tp_save.name) - 1);
+    tp_save.engine = EngineType::kVaMono;
+    tp_save.params = tp_pres_init;
+    bool pres_save_ok = PresetManager::instance().savePreset(test_snd_path, tp_save);
+    TEST_ASSERT(pres_save_ok == true, "PresetManager saves binary .snd preset successfully");
+
+    TrackPreset tp_loaded;
+    bool pres_load_ok = PresetManager::instance().loadPreset(test_snd_path, tp_loaded);
+    TEST_ASSERT(pres_load_ok == true, "PresetManager loads binary .snd preset successfully");
+    TEST_ASSERT(std::string(tp_loaded.name) == "MY CUSTOM LEAD", "Loaded preset name matches saved name");
+    TEST_ASSERT(tp_loaded.engine == EngineType::kVaMono, "Loaded preset engine matches saved engine");
+    TEST_ASSERT(tp_loaded.params.p[0] == 1.0f, "Loaded preset parameters match saved parameters");
+
+    // Тест параметра TRK.PRESET у ParamRegistry
+    const Param* p_preset = ParamRegistry::instance().find("TRK.PRESET");
+    TEST_ASSERT(p_preset != nullptr, "Param TRK.PRESET is registered in ParamRegistry");
+    if (p_preset) {
+        audio.setTrackParams(0, tp_pres_init);
+        std::string pres_val1 = p_preset->value(ctx);
+        p_preset->step(ctx, 1, false);
+        std::string pres_val2 = p_preset->value(ctx);
+        TEST_ASSERT(pres_val1 != pres_val2, "Stepping TRK.PRESET cycles through engine sound presets");
+    }
 
     // Тестування Project Persistence v2 (Patterns + Song Mode + Master FX + BPM)
     std::string test_proj_path = "/tmp/test_project_v2.xgproj";
