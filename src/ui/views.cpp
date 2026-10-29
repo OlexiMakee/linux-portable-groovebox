@@ -966,7 +966,7 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
         const int step_w = 8;
         const int grid_y = area.y + kHeaderH + 2;
         const int len_x = grid_x + static_cast<int>(kStepsPerPage) * step_w + 4;
-        const uint32_t play = c.app.transport_playing ? (c.app.current_step % len) : UINT32_MAX;
+        const uint32_t play = c.app.transport_playing ? (c.app.master_tick % len) : UINT32_MAX;
 
         // Універсальний 12-півтоновий Piano Roll з плавним вертикальним скролом
         char hdr[96];
@@ -1168,7 +1168,7 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
         const ColorRGB lc = is_cur ? palette::kAccentOrange : (trk.muted ? palette::kGridDim : palette::kTextDim);
         cv.text(area.x + 4, y + (row_h - 5) / 2, lbl, lc);
 
-        const uint32_t play = c.app.transport_playing ? (c.app.current_step % len) : UINT32_MAX;
+        const uint32_t play = c.app.transport_playing ? (c.app.master_tick % len) : UINT32_MAX;
         const int th = row_h - 3;
 
         // Визначаємо залишкову тривалість gate length ноти, яка могла початися до поточної сторінки

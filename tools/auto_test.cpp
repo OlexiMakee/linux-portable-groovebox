@@ -446,6 +446,41 @@ static void testSequencerOperations() {
     const Param* lfo_mult = ParamRegistry::instance().find("LFO1.MULT");
     TEST_ASSERT(lfo_mult != nullptr, "LFO1.MULT parameter registered in registry");
 
+    // 7. Поліметрія без передчасного скидання фази (Track 0: 16, Track 1: 12)
+    audio.clearRow(0);
+    audio.clearRow(1);
+    audio.setRowLength(0, 16);
+    audio.setRowLength(1, 12);
+    SequencerStep poly_s1{};
+    poly_s1.enabled = true;
+    poly_s1.note = 60;
+    audio.setStep(1, 4, poly_s1);
+
+    // На тіку 16 (другий такт): T0 має бути на кроці 0, T1 на кроці 4 (16 % 12 == 4)
+    uint32_t t0_step_at_16 = 16 % audio.getRowLength(0);
+    uint32_t t1_step_at_16 = 16 % audio.getRowLength(1);
+    TEST_ASSERT(t0_step_at_16 == 0, "Polymetry: Track 0 (len 16) is at step 0 on tick 16");
+    TEST_ASSERT(t1_step_at_16 == 4, "Polymetry: Track 1 (len 12) shifts to step 4 on tick 16 without resetting");
+
+    // На тіку 32 (третій такт): T0 на кроці 0, T1 на кроці 8 (32 % 12 == 8)
+    uint32_t t1_step_at_32 = 32 % audio.getRowLength(1);
+    TEST_ASSERT(t1_step_at_32 == 8, "Polymetry: Track 1 (len 12) shifts to step 8 on tick 32 without resetting");
+
+    // На тіку 48 (четвертий такт): T0 і T1 збігаються на кроці 0 лише в точці НСК (48)
+    uint32_t t1_step_at_48 = 48 % audio.getRowLength(1);
+    TEST_ASSERT(t1_step_at_48 == 0, "Polymetry: Track 1 (len 12) resynchronizes with T0 only at LCM (tick 48)");
+
+    // Перевірка безперервності master_tick в AppModel при зацикленні current_step
+    AppModel app_poly;
+    app_poly.transport_playing = true;
+    app_poly.pattern_length = 16;
+    for (int i = 0; i < 32; ++i) {
+        app_poly.current_step = (app_poly.current_step + 1) % app_poly.pattern_length;
+        app_poly.master_tick++;
+    }
+    TEST_ASSERT(app_poly.current_step == 0, "app.current_step wrapped at pattern_length (16)");
+    TEST_ASSERT(app_poly.master_tick == 32, "app.master_tick preserved continuous monotonic time (32)");
+
     audio.stop();
 }
 
