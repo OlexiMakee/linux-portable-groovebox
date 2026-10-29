@@ -750,12 +750,12 @@ void SeqView::navigate(UiContext& c, int dx, int dy, bool coarse) {
 
     if (c.app.rec_mode) {
         const int t = c.app.selected_track;
-        const int max_lanes = 12;
+        const int max_lanes = 13;
         if (dy != 0) {
             int new_lane = c.app.rec_cursor_lane + dy;
             if (new_lane < 0) {
                 // Плавний скрол вгору по півтонах
-                if (c.app.rec_scroll_pitch + 11 < 127) {
+                if (c.app.rec_scroll_pitch + 12 < 127) {
                     c.app.rec_scroll_pitch++;
                     c.app.rec_cursor_lane = 0;
                 }
@@ -763,12 +763,12 @@ void SeqView::navigate(UiContext& c, int dx, int dy, bool coarse) {
                 // Плавний скрол вниз по півтонах
                 if (c.app.rec_scroll_pitch > 0) {
                     c.app.rec_scroll_pitch--;
-                    c.app.rec_cursor_lane = 11;
+                    c.app.rec_cursor_lane = 12;
                 }
             } else {
                 c.app.rec_cursor_lane = new_lane;
             }
-            int cur_pitch = c.app.rec_scroll_pitch + (11 - c.app.rec_cursor_lane);
+            int cur_pitch = c.app.rec_scroll_pitch + (12 - c.app.rec_cursor_lane);
             c.app.rec_octave = std::clamp(cur_pitch / 12, 1, 8);
         }
         const int len = static_cast<int>(c.audio.getRowLength(t));
@@ -968,22 +968,22 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
         const int len_x = grid_x + static_cast<int>(kStepsPerPage) * step_w + 4;
         const uint32_t play = c.app.transport_playing ? (c.app.master_tick % len) : UINT32_MAX;
 
-        // Універсальний 12-півтоновий Piano Roll з плавним вертикальним скролом
+        // Універсальний 13-півтоновий Piano Roll з плавним вертикальним скролом (повна октава C..C)
         char hdr[96];
         static const char* kSemiNames[12] = {"C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#", "A ", "A#", "B "};
-        int cur_l = std::clamp(c.app.rec_cursor_lane, 0, 11);
-        int cur_pitch = c.app.rec_scroll_pitch + (11 - cur_l);
+        int cur_l = std::clamp(c.app.rec_cursor_lane, 0, 12);
+        int cur_pitch = c.app.rec_scroll_pitch + (12 - cur_l);
         c.app.rec_octave = std::clamp(cur_pitch / 12, 1, 8);
         std::snprintf(hdr, sizeof(hdr), "TRK %d: PIANO ROLL [%s] | NOTE %s%d (%d) | L%u",
                       t + 1, getEngineTypeName(tp.engine), kNoteNames[cur_pitch % 12], cur_pitch / 12 - 1, cur_pitch, len);
         cv.text(area.x + 4, area.y + 3, hdr, palette::kAccentCyan);
 
         const int row_h = 12;
-        for (int l = 0; l < 12; ++l) {
+        for (int l = 0; l < 13; ++l) {
             const int y = grid_y + l * row_h;
             const bool is_lane = (l == cur_l);
             if (is_lane) cv.fill(area.x + 2, y, 24, row_h - 1, palette::kHeaderSel);
-            int row_pitch = c.app.rec_scroll_pitch + (11 - l);
+            int row_pitch = c.app.rec_scroll_pitch + (12 - l);
             int semi = ((row_pitch % 12) + 12) % 12;
             bool is_sharp = (kSemiNames[semi][1] == '#');
             char lbl[8];
@@ -991,6 +991,8 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
             cv.text(area.x + 4, y + (row_h - 5) / 2, lbl, is_lane ? palette::kAccentCyan : (is_sharp ? palette::kGridDim : palette::kTextDim));
 
             const int th = row_h - 2;
+
+            // 1-й прохід: малюємо сітку та фон
             for (uint32_t s = 0; s < kStepsPerPage; ++s) {
                 const uint32_t idx = scroll_off + s;
                 const int x = grid_x + static_cast<int>(s) * step_w;
@@ -1009,6 +1011,26 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
                     }
                     cv.fill(x, y + 1, step_w - 1, th, bg_col);
 
+                    if (s % 4 == 0) cv.fill(x + 2, y + row_h / 2 - 1, 2, 2, palette::kGridDim);
+                    else cv.fill(x + 3, y + row_h / 2, 1, 1, ColorRGB{36, 36, 44});
+
+                    if (idx == play) cv.line(x + 3, y, x + 3, y + row_h - 1, palette::kCursorWhite);
+                } else if (idx == len) {
+                    cv.line(x, y, x, y + row_h - 1, palette::kAccentOrange);
+                } else {
+                    const bool beat_alt = (((s / 4) + l) % 2 == 1);
+                    cv.fill(x, y + 1, step_w - 1, th, beat_alt ? ColorRGB{10, 10, 14} : ColorRGB{6, 6, 8});
+                }
+            }
+
+            // 2-й прохід: активні тригери, довжина ноти (tail) та курсор
+            for (uint32_t s = 0; s < kStepsPerPage; ++s) {
+                const uint32_t idx = scroll_off + s;
+                const int x = grid_x + static_cast<int>(s) * step_w;
+                if (idx < len) {
+                    const auto sd = c.audio.getStep(t, static_cast<int>(idx));
+                    const bool is_plock_column = sd.has_plock || sd.is_param_trig;
+
                     bool active_note = sd.enabled && (
                         (sd.note != 255 && sd.note == row_pitch) ||
                         (sd.chord_notes[0] != 255 && sd.chord_notes[0] == row_pitch) ||
@@ -1018,34 +1040,36 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
                     );
 
                     if (active_note) {
-                        cv.fill(x + 1, y + 1, step_w - 3, th - 1, is_plock_column ? palette::kParamTrig : palette::kAccentCyan);
-                    } else {
-                        if (s % 4 == 0) cv.fill(x + 2, y + row_h / 2 - 1, 2, 2, palette::kGridDim);
-                        else cv.fill(x + 3, y + row_h / 2, 1, 1, ColorRGB{36, 36, 44});
+                        int trig_w = (sd.gate_len < 0.8f) ? std::max(2, static_cast<int>(sd.gate_len * (step_w - 2))) : (step_w - 3);
+                        cv.fill(x + 1, y + 1, trig_w, th - 1, is_plock_column ? palette::kParamTrig : palette::kAccentCyan);
+
+                        // Індикація довжини тригера (sustain tail при gate_len > 1.0)
+                        if (sd.gate_len > 1.05f) {
+                            int tail_px = static_cast<int>((sd.gate_len - 1.0f) * step_w);
+                            int max_tail = static_cast<int>((len - idx - 1) * step_w);
+                            tail_px = std::min(tail_px, max_tail);
+                            if (tail_px > 0) {
+                                ColorRGB tail_col = is_plock_column ? ColorRGB{190, 160, 40} : ColorRGB{0, 170, 195};
+                                cv.fill(x + step_w - 2, y + th / 2, tail_px, 3, tail_col);
+                            }
+                        }
                     }
-                    if (idx == play) cv.line(x + 3, y, x + 3, y + row_h - 1, palette::kCursorWhite);
-                } else if (idx == len) {
-                    cv.line(x, y, x, y + row_h - 1, palette::kAccentOrange);
-                } else {
-                    const bool beat_alt = (((s / 4) + l) % 2 == 1);
-                    cv.fill(x, y + 1, step_w - 1, th, beat_alt ? ColorRGB{10, 10, 14} : ColorRGB{6, 6, 8});
-                }
-                if (is_lane && idx == static_cast<uint32_t>(c.app.cursor_step)) {
-                    cv.rect(x - 1, y, step_w, row_h, palette::kCursorWhite);
+                    if (is_lane && idx == static_cast<uint32_t>(c.app.cursor_step)) {
+                        cv.rect(x - 1, y, step_w, row_h, palette::kCursorWhite);
+                    }
                 }
             }
+
             char ltxt[8];
             std::snprintf(ltxt, sizeof(ltxt), "%u", len);
             cv.text(len_x, y + (row_h - 5) / 2, ltxt, is_lane ? palette::kAccentCyan : palette::kGridDim);
         }
 
-        // Нижній лейаут фортепіанної клавіатури:
-        // - виділена клавіша курсору (Cyan)
-        // - активні клавіші поточного кроку (Amber / kParamTrig)
+        // Нижній лейаут фортепіанної клавіатури, опущений впритул до нижнього оверлею (HUD)
         const int kbd_x = area.x + 4;
-        const int kbd_y = grid_y + 12 * row_h + 4;
         const int kbd_w = area.w - 8;
-        const int kbd_h = 16;
+        const int kbd_h = 17;
+        const int kbd_y = area.y + area.h - kbd_h - 1; // 16 + 192 - 17 - 1 = 190 (низ на 207, HUD на 208)
         cv.rect(kbd_x - 1, kbd_y - 1, kbd_w + 2, kbd_h + 2, palette::kGridDim);
 
         const int kbd_start_oct = std::clamp((cur_pitch / 12) - 1, 0, 8);
@@ -1066,15 +1090,18 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
             int pitch = oct * 12 + kWkSemi[wk % 7];
             bool is_cur = (pitch == cur_pitch);
             bool is_step = isStepPitch(pitch);
+            bool is_playing = c.audio.isVoicePlayingNote(t, pitch);
 
-            ColorRGB col = is_cur ? palette::kAccentCyan : (is_step ? palette::kParamTrig : ColorRGB{190, 195, 205});
+            ColorRGB col = is_playing ? ColorRGB{40, 240, 140}
+                                      : (is_cur ? palette::kAccentCyan
+                                                : (is_step ? palette::kParamTrig : ColorRGB{190, 195, 205}));
             int kx = kbd_x + wk * white_key_w;
             cv.fill(kx, kbd_y, white_key_w - 1, kbd_h, col);
 
             if (wk % 7 == 0) {
                 char oct_lbl[4];
                 std::snprintf(oct_lbl, sizeof(oct_lbl), "C%d", oct);
-                cv.text(kx + 1, kbd_y + kbd_h - 7, oct_lbl, is_cur ? palette::kPanelBg : palette::kTextDim);
+                cv.text(kx + 1, kbd_y + kbd_h - 7, oct_lbl, (is_cur || is_playing) ? palette::kPanelBg : palette::kTextDim);
             }
         }
 
@@ -1082,7 +1109,7 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
         static const int kBkSemi[5] = {1, 3, 6, 8, 10};
         static const int kBkWkOffset[5] = {0, 1, 3, 4, 5};
         const int bk_w = 8;
-        const int bk_h = 9;
+        const int bk_h = 10;
         for (int o = 0; o < 3; ++o) {
             int oct = kbd_start_oct + o;
             for (int b = 0; b < 5; ++b) {
@@ -1091,8 +1118,11 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
                 int bx = kbd_x + wk_idx * white_key_w + (white_key_w * 7 / 10);
                 bool is_cur = (pitch == cur_pitch);
                 bool is_step = isStepPitch(pitch);
+                bool is_playing = c.audio.isVoicePlayingNote(t, pitch);
 
-                ColorRGB col = is_cur ? palette::kAccentCyan : (is_step ? palette::kParamTrig : ColorRGB{24, 28, 36});
+                ColorRGB col = is_playing ? ColorRGB{40, 240, 140}
+                                          : (is_cur ? palette::kAccentCyan
+                                                    : (is_step ? palette::kParamTrig : ColorRGB{24, 28, 36}));
                 cv.fill(bx, kbd_y, bk_w, bk_h, col);
                 cv.rect(bx, kbd_y, bk_w, bk_h, palette::kPanelBg);
             }
