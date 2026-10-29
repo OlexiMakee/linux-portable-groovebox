@@ -140,9 +140,9 @@ public:
     }
 
     // Тригер ноти для конкретного голосу/рядка (row = 0..15)
-    void triggerVoice(int row, int midi_note, float velocity = 0.9f, float plock_cutoff = -1.0f, bool slide = false, float gate_len = 0.60f);
+    void triggerVoice(int row, int midi_note, float velocity = 0.9f, float plock_cutoff = -1.0f, bool slide = false, float gate_len = 0.60f, const SequencerStep* plock_step = nullptr);
     // Поліфонічний тригер ноти для треку (динамічний розподіл на 4 голоси треку)
-    void triggerNote(int track, int midi_note, float velocity = 0.9f, float plock_cutoff = -1.0f, bool slide = false, float gate_len = 0.60f);
+    void triggerNote(int track, int midi_note, float velocity = 0.9f, float plock_cutoff = -1.0f, bool slide = false, float gate_len = 0.60f, const SequencerStep* plock_step = nullptr);
     // Поліфонічне відпускання ноти (Note-Off) для треку
     void noteOff(int track, int midi_note);
     void noteOffAll();
@@ -247,6 +247,12 @@ private:
         float hpf_decay_coef = 0.999f;
         float last_out = 0.0f;
         float plock_cutoff = -1.0f;
+        std::array<float, 6> plock_p = {-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
+        float plock_sample_start = -1.0f;
+        float plock_sample_end = -1.0f;
+        float plock_sample_loop = -1.0f;
+        float plock_delay_send = -1.0f;
+        float plock_reverb_send = -1.0f;
         uint8_t drum_slot = 0;
         Dx7Voice dx7_voice{};
     };

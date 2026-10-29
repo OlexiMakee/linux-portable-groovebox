@@ -667,6 +667,12 @@ struct SequencerStep {
     float decay = -1.0f;         // P-Lock Decay (-1 = дефолт доріжки)
     float sustain = -1.0f;       // P-Lock Sustain (-1 = дефолт доріжки)
     float release = -1.0f;       // P-Lock Release (-1 = дефолт доріжки)
+    std::array<float, 6> plock_p = {-1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f}; // P-Locks для макро-параметрів P1..P6 (-1 = дефолт)
+    float plock_sample_start = -1.0f; // P-Lock точки старту семпла
+    float plock_sample_end = -1.0f;   // P-Lock точки кінця семпла
+    float plock_sample_loop = -1.0f;  // P-Lock точки зациклення семпла
+    float plock_delay_send = -1.0f;   // P-Lock посилу на ділей
+    float plock_reverb_send = -1.0f;  // P-Lock посилу на ревер
 };
 
 // Рядок сонгмоду Elektron Song Mode

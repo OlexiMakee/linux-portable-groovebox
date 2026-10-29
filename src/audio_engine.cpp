@@ -551,7 +551,7 @@ int AudioEngine::getRowVoice(int row) const {
     return row_voice_[r];
 }
 
-void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plock_cutoff, bool slide, float gate_len) {
+void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plock_cutoff, bool slide, float gate_len, const SequencerStep* plock_step) {
     if (row < 0 || row >= kTotalVoices) return;
     std::lock_guard<std::mutex> lock(state_mutex_);
     int t = row / kVoicesPerTrack;
@@ -587,6 +587,21 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
     v.active = true;
     v.velocity = std::clamp(velocity, 0.05f, 1.0f);
     v.plock_cutoff = plock_cutoff;
+    if (plock_step && plock_step->has_plock) {
+        v.plock_p = plock_step->plock_p;
+        v.plock_sample_start = plock_step->plock_sample_start;
+        v.plock_sample_end = plock_step->plock_sample_end;
+        v.plock_sample_loop = plock_step->plock_sample_loop;
+        v.plock_delay_send = plock_step->plock_delay_send;
+        v.plock_reverb_send = plock_step->plock_reverb_send;
+    } else {
+        v.plock_p.fill(-1.0f);
+        v.plock_sample_start = -1.0f;
+        v.plock_sample_end = -1.0f;
+        v.plock_sample_loop = -1.0f;
+        v.plock_delay_send = -1.0f;
+        v.plock_reverb_send = -1.0f;
+    }
     v.pitch_env = 1.0f;
     // Constant-time RC glide (TB-303 класика = 65 мс, налаштовується параметром TRK.GLIDE)
     v.glide_coef = std::exp(-1.0f / (std::clamp(tracks_[t].glide, 0.005f, 0.5f) * sr));
@@ -688,7 +703,7 @@ int AudioEngine::allocateVoice(int track, int midi_note) {
     return oldest_r;
 }
 
-void AudioEngine::triggerNote(int track, int midi_note, float velocity, float plock_cutoff, bool slide, float gate_len) {
+void AudioEngine::triggerNote(int track, int midi_note, float velocity, float plock_cutoff, bool slide, float gate_len, const SequencerStep* plock_step) {
     if (track < 0 || track >= kMaxTracks) return;
     int row = 0;
     {
@@ -697,7 +712,7 @@ void AudioEngine::triggerNote(int track, int midi_note, float velocity, float pl
         voices_[row].note_num = static_cast<uint8_t>(midi_note);
         voices_[row].trig_time = ++voice_alloc_counter_;
     }
-    triggerVoice(row, midi_note, velocity, plock_cutoff, slide, gate_len);
+    triggerVoice(row, midi_note, velocity, plock_cutoff, slide, gate_len, plock_step);
 }
 
 void AudioEngine::noteOff(int track, int midi_note) {
@@ -797,6 +812,14 @@ void AudioEngine::triggerSequencerStep(uint32_t master_tick) {
             int base = t * kVoicesPerTrack;
             for (int vi = 0; vi < kVoicesPerTrack; ++vi) {
                 voices_[base + vi].plock_cutoff = steps[r].has_plock ? steps[r].plock_cutoff : -1.0f;
+                if (steps[r].has_plock) {
+                    voices_[base + vi].plock_p = steps[r].plock_p;
+                    voices_[base + vi].plock_sample_start = steps[r].plock_sample_start;
+                    voices_[base + vi].plock_sample_end = steps[r].plock_sample_end;
+                    voices_[base + vi].plock_sample_loop = steps[r].plock_sample_loop;
+                    voices_[base + vi].plock_delay_send = steps[r].plock_delay_send;
+                    voices_[base + vi].plock_reverb_send = steps[r].plock_reverb_send;
+                }
             }
         } else {
             // Звичайний Note Trig (головна нота)
@@ -806,7 +829,8 @@ void AudioEngine::triggerSequencerStep(uint32_t master_tick) {
                 steps[r].velocity,
                 steps[r].has_plock ? steps[r].plock_cutoff : -1.0f,
                 steps[r].slide,
-                steps[r].gate_len
+                steps[r].gate_len,
+                &steps[r]
             );
 
             // Поліфонічні ноти акорду (слоти 1..3 для Poly-треків)
@@ -819,7 +843,8 @@ void AudioEngine::triggerSequencerStep(uint32_t master_tick) {
                         steps[r].velocity,
                         steps[r].has_plock ? steps[r].plock_cutoff : -1.0f,
                         steps[r].slide,
-                        steps[r].gate_len
+                        steps[r].gate_len,
+                        &steps[r]
                     );
                 }
             }
@@ -1198,17 +1223,25 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
 
                 float raw = 0.0f;
 
+                std::array<float, 6> eff_p = tp.p;
+                for (int pi = 0; pi < 6; ++pi) {
+                    if (v.plock_p[pi] >= 0.0f) eff_p[pi] = v.plock_p[pi];
+                }
+
                 if (tp.engine == EngineType::kSampleOneShot) {
                     const auto& sb = sampler().trackSample(t);
                     if (sb.loaded && sb.lengthFrames() > 0) {
                         float total_f = static_cast<float>(sb.lengthFrames());
-                        float start_f = std::clamp(tp.sample.start, 0.0f, 0.999f) * total_f;
-                        float loop_f = std::clamp(tp.sample.loop_point, 0.0f, 0.999f) * total_f;
-                        float end_f = std::clamp(tp.sample.end, 0.001f, 1.0f) * total_f;
+                        float s_norm = (v.plock_sample_start >= 0.0f) ? v.plock_sample_start : tp.sample.start;
+                        float l_norm = (v.plock_sample_loop >= 0.0f) ? v.plock_sample_loop : tp.sample.loop_point;
+                        float e_norm = (v.plock_sample_end >= 0.0f) ? v.plock_sample_end : tp.sample.end;
+                        float start_f = std::clamp(s_norm, 0.0f, 0.999f) * total_f;
+                        float loop_f = std::clamp(l_norm, 0.0f, 0.999f) * total_f;
+                        float end_f = std::clamp(e_norm, 0.001f, 1.0f) * total_f;
                         if (end_f <= start_f) end_f = std::min(total_f, start_f + 10.0f);
                         if (loop_f >= end_f) loop_f = start_f;
 
-                        float note_pitch = static_cast<float>(v.note_num) - 48.0f + tp.sample.tune + (tp.p[1] - 0.5f) * 48.0f;
+                        float note_pitch = static_cast<float>(v.note_num) - 48.0f + tp.sample.tune + (eff_p[1] - 0.5f) * 48.0f;
                         float pitch_ratio = std::pow(2.0f, note_pitch / 12.0f);
                         float step = pitch_ratio * (static_cast<float>(sb.sample_rate) * inv_sr);
 
@@ -1256,10 +1289,10 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                     }
                 } else if (tp.engine == EngineType::kSliceSampler) {
                     const auto& sb = sampler().recordedSample();
-                    int s_idx = std::clamp(static_cast<int>(tp.p[1] * (sampler().sliceCount() - 1) + 0.5f), 0, sampler().sliceCount() - 1);
+                    int s_idx = std::clamp(static_cast<int>(eff_p[1] * (sampler().sliceCount() - 1) + 0.5f), 0, sampler().sliceCount() - 1);
                     SlicePoint pt = sampler().getSlice(s_idx);
                     if (sb.loaded && pt.length_frames > 0) {
-                        float pitch_ratio = std::pow(2.0f, (tp.sample.tune / 12.0f) + (tp.p[2] - 0.5f) * 4.0f);
+                        float pitch_ratio = std::pow(2.0f, (tp.sample.tune / 12.0f) + (eff_p[2] - 0.5f) * 4.0f);
                         float step = pitch_ratio * (static_cast<float>(sb.sample_rate) * inv_sr);
                         uint32_t cur_f = pt.start_frame + static_cast<uint32_t>(v.phase1);
                         if (v.phase1 < static_cast<float>(pt.length_frames) && cur_f + 1 < sb.lengthFrames()) {
@@ -1277,13 +1310,13 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                         raw = 0.0f;
                     }
                 } else if (tp.engine == EngineType::kDx7) {
-                    int p_idx = std::clamp(static_cast<int>(tp.p[0] * (dx7_engine_.patchCount() - 1) + 0.5f), 0, dx7_engine_.patchCount() - 1);
+                    int p_idx = std::clamp(static_cast<int>(eff_p[0] * (dx7_engine_.patchCount() - 1) + 0.5f), 0, dx7_engine_.patchCount() - 1);
                     const auto& patch = dx7_engine_.getPatch(p_idx);
-                    float bright = std::clamp(tp.p[2] * 2.0f, 0.0f, 3.0f);
-                    float dec = std::clamp(tp.p[3] * 2.0f + 0.1f, 0.1f, 4.0f);
-                    int algo_idx = std::clamp(static_cast<int>(tp.p[4] * 31.99f), 0, 31);
-                    int fb_amt = std::clamp(static_cast<int>(tp.p[5] * 7.99f), 0, 7);
-                    float detune = std::clamp(tp.p[1] * 4.0f, 0.0f, 6.0f);
+                    float bright = std::clamp(eff_p[2] * 2.0f, 0.0f, 3.0f);
+                    float dec = std::clamp(eff_p[3] * 2.0f + 0.1f, 0.1f, 4.0f);
+                    int algo_idx = std::clamp(static_cast<int>(eff_p[4] * 31.99f), 0, 31);
+                    int fb_amt = std::clamp(static_cast<int>(eff_p[5] * 7.99f), 0, 7);
+                    float detune = std::clamp(eff_p[1] * 4.0f, 0.0f, 6.0f);
                     raw = v.dx7_voice.process(patch, bright, dec, static_cast<float>(sample_rate), algo_idx, fb_amt, detune);
                     if (!v.dx7_voice.isActive()) {
                         v.active = false;
@@ -1303,22 +1336,22 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                         case EngineType::kVaMono: {
                             v.phase2 += dt * 0.5f;
                             if (v.phase2 >= 1.0f) v.phase2 -= 1.0f;
-                            float pw = std::clamp(0.15f + tp.p[5] * 0.70f, 0.1f, 0.9f);
+                            float pw = std::clamp(0.15f + eff_p[5] * 0.70f, 0.1f, 0.9f);
                             float saw = (2.0f * v.phase1 - 1.0f) - polyBlep(v.phase1, dt);
                             float pulse = (v.phase1 < pw ? 1.0f : -1.0f)
                                           + polyBlep(v.phase1, dt)
                                           - polyBlep(std::fmod(v.phase1 - pw + 1.0f, 1.0f), dt);
                             float sub = (v.phase2 < 0.5f) ? 0.65f : -0.65f;
-                            raw = (saw * 0.50f + pulse * 0.35f) + sub * tp.p[4];
+                            raw = (saw * 0.50f + pulse * 0.35f) + sub * eff_p[4];
                             break;
                         }
                         case EngineType::kFm2Op: {
                             static constexpr float kRatios[8] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 3.5f, 4.0f, 7.0f};
-                            int r_idx = std::clamp(static_cast<int>(tp.p[2] * 7.99f), 0, 7);
+                            int r_idx = std::clamp(static_cast<int>(eff_p[2] * 7.99f), 0, 7);
                             v.phase2 += dt * kRatios[r_idx];
                             if (v.phase2 >= 1.0f) v.phase2 -= 1.0f;
-                            float mod_idx = std::clamp(tp.p[1] + fm_macro, 0.0f, 1.0f) * 6.5f * f_env;
-                            float fb = tp.p[4] * v.last_out * 1.2f;
+                            float mod_idx = std::clamp(eff_p[1] + fm_macro, 0.0f, 1.0f) * 6.5f * f_env;
+                            float fb = eff_p[4] * v.last_out * 1.2f;
                             float mod = std::sin((v.phase2 + fb) * 6.2831853f) * mod_idx;
                             raw = std::sin(v.phase1 * 6.2831853f + mod);
                             v.last_out = raw;
@@ -1329,7 +1362,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                             float sq = (v.phase1 < 0.5f ? 0.9f : -0.9f)
                                        + polyBlep(v.phase1, dt)
                                        - polyBlep(std::fmod(v.phase1 + 0.5f, 1.0f), dt);
-                            raw = saw * (1.0f - tp.p[5]) + sq * tp.p[5];
+                            raw = saw * (1.0f - eff_p[5]) + sq * eff_p[5];
                             break;
                         }
                         case EngineType::kChordPad: {
@@ -1339,8 +1372,8 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                                 {1.334840f, 1.498307f}, // Sus4 (+5, +7)
                                 {1.498307f, 2.000000f}  // Power (+7, +12)
                             };
-                            int c_idx = std::clamp(static_cast<int>(tp.p[2] * 3.99f), 0, 3);
-                            float det = 1.0f + (tp.p[4] + std::fabs(fm_macro)) * 0.012f;
+                            int c_idx = std::clamp(static_cast<int>(eff_p[2] * 3.99f), 0, 3);
+                            float det = 1.0f + (eff_p[4] + std::fabs(fm_macro)) * 0.012f;
                             v.phase2 += dt * kChords[c_idx][0] * det;
                             if (v.phase2 >= 1.0f) v.phase2 -= 1.0f;
                             v.phase3 += dt * kChords[c_idx][1];
@@ -1610,10 +1643,12 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
 
             mix_l += s_l;
             mix_r += s_r;
-            send_l += s_l * d_send;
-            send_r += s_r * d_send;
-            rev_l  += s_l * r_send;
-            rev_r  += s_r * r_send;
+            float eff_d_send = (voices_[base_v].plock_delay_send >= 0.0f) ? voices_[base_v].plock_delay_send : d_send;
+            float eff_r_send = (voices_[base_v].plock_reverb_send >= 0.0f) ? voices_[base_v].plock_reverb_send : r_send;
+            send_l += s_l * eff_d_send;
+            send_r += s_r * eff_d_send;
+            rev_l  += s_l * eff_r_send;
+            rev_r  += s_r * eff_r_send;
         }
 
         // Стерео Хорус (LFO-модульована затримка 7-18мс)
