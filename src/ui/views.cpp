@@ -1275,11 +1275,11 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
         std::snprintf(ltxt, sizeof(ltxt), "%u", len);
         cv.text(len_x, y + (row_h - 5) / 2, ltxt, is_cur ? palette::kAccentOrange : palette::kGridDim);
 
-        // Довша та читабельна назва доріжки у просторі праворуч
+        // Назва рушія синтезу у просторі праворуч
         const int name_x = len_x + 19;
-        std::string full_nm = c.audio.getTrackName(t);
-        if (trk.muted) full_nm += " [M]";
-        cv.textClip(name_x, y + (row_h - 5) / 2, full_nm, (area.w - (name_x - area.x) - 4) / Canvas::kCharW,
+        std::string eng_nm = getEngineTypeName(trk.engine);
+        if (trk.muted) eng_nm += " [M]";
+        cv.textClip(name_x, y + (row_h - 5) / 2, eng_nm, (area.w - (name_x - area.x) - 4) / Canvas::kCharW,
                     trk.muted ? palette::kGridDim : (is_cur ? palette::kAccentCyan : palette::kTextMain));
     }
 

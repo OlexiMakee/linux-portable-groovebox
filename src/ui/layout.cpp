@@ -73,7 +73,7 @@ void setupAppLayout(UiShell& shell) {
                         {"DX7",    {"TRK.P5", "TRK.P6", "TRK.P3", "TRK.P4", "TRK.P2"}},
                         {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
                         {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
+                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL", "TRK.LVL"}}
                     };
                 case EngineType::kAcid303:
                     return {
@@ -81,7 +81,7 @@ void setupAppLayout(UiShell& shell) {
                         {"303",    {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5"}},
                         {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
                         {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
+                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL", "TRK.LVL"}}
                     };
                 case EngineType::kFm2Op:
                     return {
@@ -89,7 +89,7 @@ void setupAppLayout(UiShell& shell) {
                         {"2-OP",   {"TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5", "TRK.P6"}},
                         {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
                         {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
+                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL", "TRK.LVL"}}
                     };
                 case EngineType::kChordPad:
                     return {
@@ -97,16 +97,16 @@ void setupAppLayout(UiShell& shell) {
                         {"CHORD",  {"TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5", "TRK.P6"}},
                         {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
                         {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
+                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL", "TRK.LVL"}}
                     };
                 case EngineType::kSampleOneShot:
                 case EngineType::kSliceSampler:
                     return {
-                        {"SMPL",   {"TRK.WAVE_SAMPLE", "SMP.PLAY_MODE", "SMP.TUNE", "TRK.GAIN_OVER"}},
-                        {"PLAY",   {"TRK.ENGINE", "SMP.LOOP", "SMP.START", "SMP.LOOP_PT", "SMP.END", "SMP.SLICE"}},
+                        {"INST",   {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "SMP.PLAY_MODE", "SMP.TUNE", "TRK.GAIN_OVER"}},
+                        {"PLAY",   {"SMP.LOOP", "SMP.START", "SMP.LOOP_PT", "SMP.END", "SMP.SLICE"}},
                         {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
                         {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
+                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL", "TRK.LVL"}}
                     };
                 case EngineType::kMidiOut:
                     return {
@@ -121,7 +121,7 @@ void setupAppLayout(UiShell& shell) {
                         {"OSC",    {"TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5", "TRK.P6"}},
                         {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
                         {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
+                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL", "TRK.LVL"}}
                     };
             }
         };

@@ -187,12 +187,11 @@ void AudioEngine::initDefaultPattern() {
     // T6: YAMAHA DX7
     // T7: CHORD PAD
     static const char* kDrumFiles[5] = {"bd.wav", "sd.wav", "oh.wav", "ch.wav", "tom.wav"};
-    static const char* kDrumNames[5] = {"909 KICK", "909 SNARE", "909 OPEN HAT", "909 CLOSED HAT", "909 TOM"};
     static const float kDrumLevels[5] = {0.90f, 0.85f, 0.75f, 0.75f, 0.80f};
 
     for (int i = 0; i < 5; ++i) {
         tracks_[i] = TrackParameters{};
-        std::snprintf(tracks_[i].name, sizeof(tracks_[i].name), "%s", kDrumNames[i]);
+        std::snprintf(tracks_[i].name, sizeof(tracks_[i].name), "TRACK %02d", i + 1);
         tracks_[i].engine = EngineType::kSampleOneShot;
         tracks_[i].p = {0.00f, 0.50f, 0.40f, 0.85f, 0.15f, 0.15f};
         tracks_[i].attack = 0.002f; tracks_[i].decay = 2.00f; tracks_[i].sustain = 0.00f; tracks_[i].release = 0.10f;
@@ -213,21 +212,21 @@ void AudioEngine::initDefaultPattern() {
     }
 
     tracks_[5] = TrackParameters{};
-    std::snprintf(tracks_[5].name, sizeof(tracks_[5].name), "303 BASS");
+    std::snprintf(tracks_[5].name, sizeof(tracks_[5].name), "TRACK %02d", 6);
     tracks_[5].engine = EngineType::kAcid303;
     tracks_[5].p = {0.62f, 0.55f, 0.60f, 0.22f, 0.70f, 0.00f};
     tracks_[5].attack = 0.005f; tracks_[5].decay = 0.28f; tracks_[5].sustain = 0.00f; tracks_[5].release = 0.05f;
     tracks_[5].level = 0.85f; tracks_[5].pan = -0.15f; tracks_[5].delay_send = 0.0f; tracks_[5].reverb_send = 0.0f;
 
     tracks_[6] = TrackParameters{};
-    std::snprintf(tracks_[6].name, sizeof(tracks_[6].name), "DX7 KEYS");
+    std::snprintf(tracks_[6].name, sizeof(tracks_[6].name), "TRACK %02d", 7);
     tracks_[6].engine = EngineType::kDx7;
     tracks_[6].p = {0.32f, 0.75f, 0.60f, 0.40f, 0.00f, 0.30f};
     tracks_[6].attack = 0.005f; tracks_[6].decay = 0.45f; tracks_[6].sustain = 0.00f; tracks_[6].release = 0.05f;
     tracks_[6].level = 0.85f; tracks_[6].pan = 0.15f; tracks_[6].delay_send = 0.0f; tracks_[6].reverb_send = 0.0f;
 
     tracks_[7] = TrackParameters{};
-    std::snprintf(tracks_[7].name, sizeof(tracks_[7].name), "CHORD PAD");
+    std::snprintf(tracks_[7].name, sizeof(tracks_[7].name), "TRACK %02d", 8);
     tracks_[7].engine = EngineType::kChordPad;
     tracks_[7].p = {0.30f, 0.40f, 0.60f, 0.30f, 0.00f, 0.20f};
     tracks_[7].attack = 0.02f; tracks_[7].decay = 0.80f; tracks_[7].sustain = 0.40f; tracks_[7].release = 0.20f;
