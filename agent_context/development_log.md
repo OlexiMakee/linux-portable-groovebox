@@ -1148,3 +1148,21 @@
   * Прибрано застарілі `TRK.GLIDE` та `FX.DRIVE`/`FX.DRV_TONE`.
 * **Верифікація:**
   * Усі 243 тести пройдені успішно без жодної помилки чи попередження компілятора (`build-macos/auto_test`: 243/243 PASSED).
+
+## [2026-10-29 16:30] Milestone 38: Track Preset Manager (Sound Patches) & Integrated SYNTH Presets
+
+* **Track Preset Manager (src/preset_manager.hpp):**
+  * Реалізовано повноцінний менеджер звукових пресетів доріжки (Elektron Sound / Track Patch architecture).
+  * Підтримка бінарної серіалізації/десеріалізації у компактні файли `.snd` (magic `XUS1`).
+  * Метод `applyPreset()` застосовує повну конфігурацію тембру (рушій, макроси `p[0..5]`, огинаючі ADSR, фільтри LPF/HPF, ланцюг Track FX та параметри семплера), гарантуючи збереження індивідуального роутингу треку (level, pan, mute, transpose, preset_idx).
+* **Фабрична бібліотека тембрів (Factory Sound Bank):**
+  * **303 Bassline:** `ACID CLASSIC` (агресивна Saw, 24 dB діодний зріз, високий резонанс), `RUBBER SQUARE` (глибокий резиновий бас), `SCREAM LEAD` (кислотний солюючий лід з акцентом).
+  * **Virtual Analog:** `JP8000 SUPERSAW` (7-осциляторний масивний лід), `PUNCHY PLUCK` (гострий щипковий тембр з швидким фільтром), `FAT PULSE PWM` (жирний бас з широким імпульсом), `WARM ANALOG PAD` (теплий аналоговий пад з повільною атакою).
+  * **Chord Pad:** `DEEP HOUSE M7` (класичний діп-хаус акорд), `LUSH MAJ7` (атмосферний мажорний акорд).
+  * **Sample Player:** `STANDARD ONESHOT`, `SLICED BREAK` (16-кроковий луп-слайсер).
+  * **Yamaha DX7:** `E.PIANO 1`, `BASS 1`.
+* **Інтеграція в інтерфейс (src/ui/layout.cpp, src/ui/params.cpp):**
+  * Додано параметр `TRK.PRESET` у перший рядок `INST` для всіх звукових рушіїв вкладки `SYNTH`.
+  * Зміна параметра `PRESET` миттєво перемикає фабричні пресети тембрів з оновленням HUD (`PRESET: <NAME>`).
+* **Верифікація:**
+  * Додано нові тести у `tools/auto_test.cpp` (257/257 PASSED [OK]).
