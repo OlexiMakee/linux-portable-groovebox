@@ -10,7 +10,7 @@ namespace groovebox {
 
 namespace {
 constexpr uint32_t kProjectMagic = 0x47425831u; // "GBX1"
-constexpr uint32_t kProjectVersion = 1u;
+constexpr uint32_t kProjectVersion = 2u;
 } // namespace
 
 PatternManager::PatternManager() {
@@ -178,7 +178,9 @@ std::vector<std::string> PatternManager::listProjectFiles() {
     return out;
 }
 
-bool PatternManager::saveProject(const std::string& filepath, const AudioEngine& engine, float bpm) {
+bool PatternManager::saveProject(const std::string& filepath, const AudioEngine& engine, float bpm,
+                                 const std::array<SongStep, 16>* song_chain,
+                                 int song_rows_count) {
     const_cast<PatternManager*>(this)->captureCurrent(engine, bpm);
 
     std::error_code ec;
@@ -191,6 +193,16 @@ bool PatternManager::saveProject(const std::string& filepath, const AudioEngine&
     os.write(reinterpret_cast<const char*>(&kProjectVersion), sizeof(kProjectVersion));
     os.write(reinterpret_cast<const char*>(&current_bank_), sizeof(current_bank_));
     os.write(reinterpret_cast<const char*>(&current_pattern_), sizeof(current_pattern_));
+    os.write(reinterpret_cast<const char*>(&bpm), sizeof(bpm));
+    os.write(reinterpret_cast<const char*>(&song_rows_count), sizeof(song_rows_count));
+
+    std::array<SongStep, 16> dummy_sc{};
+    dummy_sc[0].enabled = true;
+    const auto* sc_to_write = song_chain ? song_chain : &dummy_sc;
+    os.write(reinterpret_cast<const char*>(sc_to_write->data()), sizeof(SongStep) * 16);
+
+    MasterFxParameters mfx = engine.getMasterFx();
+    os.write(reinterpret_cast<const char*>(&mfx), sizeof(MasterFxParameters));
 
     for (int i = 0; i < kTotalPatterns; ++i) {
         os.write(reinterpret_cast<const char*>(&patterns_[i]), sizeof(PatternData));
@@ -203,7 +215,9 @@ bool PatternManager::saveProject(const std::string& filepath, const AudioEngine&
     return false;
 }
 
-bool PatternManager::loadProject(const std::string& filepath, AudioEngine& engine, float& bpm) {
+bool PatternManager::loadProject(const std::string& filepath, AudioEngine& engine, float& bpm,
+                                 std::array<SongStep, 16>* song_chain,
+                                 int* song_rows_count) {
     std::ifstream is(filepath, std::ios::binary);
     if (!is.is_open()) return false;
 
@@ -211,10 +225,25 @@ bool PatternManager::loadProject(const std::string& filepath, AudioEngine& engin
     uint32_t ver = 0;
     is.read(reinterpret_cast<char*>(&magic), sizeof(magic));
     is.read(reinterpret_cast<char*>(&ver), sizeof(ver));
-    if (magic != kProjectMagic || ver != kProjectVersion) return false;
+    if (magic != kProjectMagic || (ver != 1u && ver != 2u)) return false;
 
     is.read(reinterpret_cast<char*>(&current_bank_), sizeof(current_bank_));
     is.read(reinterpret_cast<char*>(&current_pattern_), sizeof(current_pattern_));
+
+    if (ver >= 2u) {
+        is.read(reinterpret_cast<char*>(&bpm), sizeof(bpm));
+        int loaded_rows_count = 1;
+        is.read(reinterpret_cast<char*>(&loaded_rows_count), sizeof(loaded_rows_count));
+        if (song_rows_count) *song_rows_count = std::clamp(loaded_rows_count, 1, 16);
+
+        std::array<SongStep, 16> loaded_sc{};
+        is.read(reinterpret_cast<char*>(loaded_sc.data()), sizeof(SongStep) * 16);
+        if (song_chain) *song_chain = loaded_sc;
+
+        MasterFxParameters loaded_mfx{};
+        is.read(reinterpret_cast<char*>(&loaded_mfx), sizeof(MasterFxParameters));
+        engine.setMasterFx(loaded_mfx);
+    }
 
     for (int i = 0; i < kTotalPatterns; ++i) {
         is.read(reinterpret_cast<char*>(&patterns_[i]), sizeof(PatternData));

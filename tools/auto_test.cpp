@@ -898,6 +898,43 @@ static void testInputRouterAndStepEditor() {
     TEST_ASSERT(audio.getTrackParams(1).muted == false, "Track 1 unmuted as per row 1 mute_mask");
     ActionRegistry::instance().run("PLAY.TOGGLE", ctx);
     TEST_ASSERT(app.transport_playing == false, "PLAY.TOGGLE stops playback");
+
+    // Тестування Project Persistence v2 (Patterns + Song Mode + Master FX + BPM)
+    std::string test_proj_path = "/tmp/test_project_v2.xgproj";
+    std::remove(test_proj_path.c_str());
+
+    MasterFxParameters orig_mfx = audio.getMasterFx();
+    orig_mfx.gain_over = 0.55f;
+    orig_mfx.bell_gain = 4.5f;
+    orig_mfx.lpf_cutoff = 0.65f;
+    audio.setMasterFx(orig_mfx);
+
+    app.bpm = 135.0f;
+    bool save_ok = app.pattern_mgr.saveProject(test_proj_path, audio, app.bpm, &app.song_chain, app.song_rows_count);
+    TEST_ASSERT(save_ok == true, "saveProject v2 successfully serializes project to file");
+
+    // Змінюємо стан перед завантаженням
+    app.bpm = 90.0f;
+    app.song_rows_count = 1;
+    app.song_chain[1].mute_mask = 0;
+    orig_mfx.gain_over = 0.0f;
+    orig_mfx.bell_gain = 0.0f;
+    orig_mfx.lpf_cutoff = 1.0f;
+    audio.setMasterFx(orig_mfx);
+
+    float loaded_bpm = 0.0f;
+    int loaded_rows = 0;
+    std::array<SongStep, 16> loaded_sc{};
+    bool proj_load_ok = app.pattern_mgr.loadProject(test_proj_path, audio, loaded_bpm, &loaded_sc, &loaded_rows);
+    TEST_ASSERT(proj_load_ok == true, "loadProject v2 successfully deserializes project from file");
+    TEST_ASSERT(std::abs(loaded_bpm - 135.0f) < 0.1f, "loadProject restores accurate BPM (135)");
+    TEST_ASSERT(loaded_rows == 2, "loadProject restores exact song_rows_count (2)");
+    TEST_ASSERT(loaded_sc[1].mute_mask == 0b00000001, "loadProject restores song row mute_mask");
+    MasterFxParameters loaded_mfx = audio.getMasterFx();
+    TEST_ASSERT(std::abs(loaded_mfx.gain_over - 0.55f) < 0.01f, "loadProject restores gain_over");
+    TEST_ASSERT(std::abs(loaded_mfx.bell_gain - 4.5f) < 0.01f, "loadProject restores EQ bell_gain");
+    TEST_ASSERT(std::abs(loaded_mfx.lpf_cutoff - 0.65f) < 0.01f, "loadProject restores lpf_cutoff");
+    std::remove(test_proj_path.c_str());
 }
 
 static void testViewsRendering() {

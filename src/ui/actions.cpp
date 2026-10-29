@@ -1187,8 +1187,31 @@ ActionRegistry::ActionRegistry() {
     add(Action{"PROJECT.SAVE", "SAVE PROJ", [](UiContext& c) {
         std::string path = c.app.pattern_mgr.currentProjectPath();
         if (path.empty()) path = PatternManager::defaultProjectPath();
-        bool ok = c.app.pattern_mgr.saveProject(path, c.audio, c.app.bpm);
+        bool ok = c.app.pattern_mgr.saveProject(path, c.audio, c.app.bpm, &c.app.song_chain, c.app.song_rows_count);
         c.app.last_action = ok ? "PROJECT SAVED" : "ERR: SAVE FAILED";
+    }});
+    add(Action{"PROJECT.NEW", "NEW PROJ", [](UiContext& c) {
+        c.app.pattern_mgr = PatternManager();
+        c.app.song_rows_count = 1;
+        c.app.song_cursor_row = 0;
+        c.app.song_chain = []() {
+            std::array<SongStep, 16> sc{};
+            sc[0].bank = 0;
+            sc[0].pattern = 0;
+            sc[0].repeats = 1;
+            sc[0].enabled = true;
+            for (int i = 1; i < 16; ++i) {
+                sc[i].bank = 0;
+                sc[i].pattern = i;
+                sc[i].repeats = 1;
+                sc[i].enabled = false;
+            }
+            return sc;
+        }();
+        c.audio.setMasterFx(MasterFxParameters{});
+        c.app.bpm = 120.0f;
+        c.app.pattern_mgr.applyCurrent(c.audio, c.app.bpm);
+        c.app.last_action = "NEW PROJECT CREATED";
     }});
     add(Action{"PROJECT.SAVE_AS_OPEN", "SAVE AS", [](UiContext& c) {
         if (c.app.active_view != ViewId::kSys) {
@@ -1225,7 +1248,7 @@ ActionRegistry::ActionRegistry() {
                 fname = c.app.project_files[c.app.project_modal_sel];
             }
             std::string full_path = PatternManager::projectsDirectory() + "/" + fname;
-            bool ok = c.app.pattern_mgr.saveProject(full_path, c.audio, c.app.bpm);
+            bool ok = c.app.pattern_mgr.saveProject(full_path, c.audio, c.app.bpm, &c.app.song_chain, c.app.song_rows_count);
             c.app.project_modal_open = false;
             c.app.modal_cooldown_until_ms = c.now_ms + 300;
             c.app.last_action = ok ? ("SAVED: " + fname) : "ERR: SAVE FAILED";
@@ -1233,7 +1256,7 @@ ActionRegistry::ActionRegistry() {
             if (!c.app.project_files.empty() && c.app.project_modal_sel < static_cast<int>(c.app.project_files.size())) {
                 std::string fname = c.app.project_files[c.app.project_modal_sel];
                 std::string full_path = PatternManager::projectsDirectory() + "/" + fname;
-                bool ok = c.app.pattern_mgr.loadProject(full_path, c.audio, c.app.bpm);
+                bool ok = c.app.pattern_mgr.loadProject(full_path, c.audio, c.app.bpm, &c.app.song_chain, &c.app.song_rows_count);
                 c.app.project_modal_open = false;
                 c.app.modal_cooldown_until_ms = c.now_ms + 300;
                 c.app.last_action = ok ? ("LOADED: " + fname) : "ERR: LOAD FAILED";
