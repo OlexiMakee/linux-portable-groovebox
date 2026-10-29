@@ -1042,5 +1042,28 @@
   * Тестовий набір [auto_test.cpp](file:///Users/oleksii/Documents/XU10%20Groovebox/tools/auto_test.cpp) розширено до **231 тесту** (**231/231 PASSED [OK]** на macOS та Rockchip RK3326S ARM64).
   * Перевірено серіалізацію v2, циклічний буфер запису та заголовки WAV, перевірено динамічну оцінку P-Locks.
 
+## [2026-10-29] Milestone 35: Step Inspector P-Locks UX, Algorithmic Transient Slicing & Digitakt II OTG Hotplug
+* **Повний інтерфейс редагування Elektron P-Locks у Step Inspector (src/ui/layout.cpp, src/ui/params.cpp):**
+  * Розширено матрицю рядків `ViewId::kInspect` до 26 параметрів з підтримкою автоскролу:
+    * `CUT LOCK`, `ATTACK`, `DECAY`, `SUSTAIN`, `RELEASE`.
+    * `P1`..`P6` з динамічними назвами макросів відповідно до активного рушія треку (наприклад, `P1 TUNE`, `P2 CUTOFF`, `P3 RESO`, `P4 DRIVE`, `P5 ATK`, `P6 DEC`).
+    * `SMP START`, `SMP LOOP`, `SMP END` для семплерних треків.
+    * `DLY SEND`, `REV SEND` для посилів ефектів.
+  * Інтуїтивна логіка блокування: при зміні вгору параметр фіксується локально (`... L`), а при кроці вниз нижче 0 блокування скидається назад до налаштувань треку (`--- (TRK)`).
+* **Алгоритмічна автодетекція транзієнтів та слайсинг (src/sampler_engine.cpp, src/ui/params.cpp, src/ui/ui_context.hpp, src/ui/views.cpp):**
+  * Оновлено `SamplerEngine::sliceTransients(sensitivity)` з розрахунком енергетичного потоку (energy flux) та перепаду піків:
+    * Автоматично знаходить до 16 транзієнтів у завантаженому чи записаному аудіобуфері.
+    * При малому числі перепадів плавно фолбечить на сітку, гарантуючи валідні слайси.
+  * `sliceToDrumSlots(trim_st, trim_end)` тепер автоматично вирівнює 8 барабанних слотів за першими 8 знайденими транзієнтними ударами всередині зони Trim.
+  * Параметр `SMP.THRS` перетворено на `TRANSIENT` з інтерактивною зміною чутливості (`AUTO 50%`) та миттєвим перезапуском слайсингу.
+  * Візуалізатор хвилі у `SampleView` тепер динамічно малює пунктирні лінії реальних транзієнтних меж з підсвіткою активного слайсу.
+* **Автоматизація Hot-Plug для Elektron Digitakt II (src/audio_engine.hpp, tools/auto_test.cpp):**
+  * Додано інспекційний метод `audio.sampleRate()`.
+  * Перевірено автоматичне перемикання частоти дискретизації між 32000 Hz (RK817 DAC) та 48000 Hz (Digitakt II USB Audio) при вставлянні/вийманні кабелю без перезапуску додатку.
+* **Автоматизоване тестування та деплой на консоль:**
+  * Тестовий набір [auto_test.cpp](file:///Users/oleksii/Documents/XU10%20Groovebox/tools/auto_test.cpp) розширено до **243 тестів** (**243/243 PASSED [OK]** на macOS та на Rockchip RK3326S ARM64 на MagicX XU10).
+  * Новий бінарник задеплоєно на консоль MagicX XU10 (PID 288709, Direct KMSDRM, ALSA 32k stereo).
+  * Оновлено всі 14 скріншотів туру у форматі PNG.
+
 
 
