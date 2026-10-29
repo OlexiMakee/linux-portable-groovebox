@@ -641,7 +641,7 @@ struct TrackParameters {
 
 inline constexpr const char* kParamNames[static_cast<int>(EngineType::kCount)][kParamsPerTrack] = {
     // kVaMono
-    {"CUTOFF", "RESO", "ENV MOD", "DECAY", "SUB LVL", "PULSE W"},
+    {"WAVE", "PULSE W", "SUB LVL", "SUB WAVE", "DETUNE", "OSC MIX"},
     // kFm2Op
     {"CUTOFF", "FM IDX", "RATIO", "DECAY", "FEEDBCK", "MOD DEC"},
     // kAcid303

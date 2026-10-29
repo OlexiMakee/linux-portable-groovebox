@@ -635,9 +635,10 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
     v.hpf_decay_coef = std::exp(-1.0f / (std::clamp(tracks_[t].hpf_decay, 0.01f, 4.0f) * sr));
 
     if (tracks_[t].engine == EngineType::kAcid303 && slide && v.amp_adsr.isActive()) {
-        // Roland TB-303 Legato Slide: нова цільова нота, без скидання фази чи огинаючої!
+        // Roland TB-303 Legato Slide: нова цільова нота, плавний слайд без скидання фази чи огинаючої!
         v.target_pitch = static_cast<float>(midi_note);
         v.is_legato = true;
+        v.glide_coef = std::exp(-1.0f / (0.060f * sr)); // 60ms constant-time RC slide
     } else {
         v.target_pitch = static_cast<float>(midi_note);
         v.current_pitch = v.target_pitch;
@@ -677,6 +678,11 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
 int AudioEngine::allocateVoice(int track, int midi_note) {
     if (track < 0 || track >= kMaxTracks) return 0;
     const int base = track * kVoicesPerTrack;
+
+    // TB-303 є строго монофонічним інструментом: завжди виділяємо голос 0
+    if (tracks_[track].engine == EngineType::kAcid303) {
+        return base;
+    }
 
     // 1. Шукаємо вільний (idle) голос для справжньої поліфонії
     for (int i = 0; i < kVoicesPerTrack; ++i) {
@@ -725,6 +731,10 @@ void AudioEngine::triggerNote(int track, int midi_note, float velocity, float pl
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         row = allocateVoice(track, midi_note);
+        if (tracks_[track].engine == EngineType::kAcid303 && voices_[row].active && voices_[row].amp_adsr.isActive()) {
+            // Нашарування нот на кроці або активна нота TB-303 сприймаються як слайд
+            slide = true;
+        }
         voices_[row].note_num = static_cast<uint8_t>(midi_note);
         voices_[row].trig_time = ++voice_alloc_counter_;
     }
@@ -1350,15 +1360,66 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
 
                     switch (tp.engine) {
                         case EngineType::kVaMono: {
-                            v.phase2 += dt * 0.5f;
-                            if (v.phase2 >= 1.0f) v.phase2 -= 1.0f;
-                            float pw = std::clamp(0.15f + eff_p[5] * 0.70f, 0.1f, 0.9f);
-                            float saw = (2.0f * v.phase1 - 1.0f) - polyBlep(v.phase1, dt);
-                            float pulse = (v.phase1 < pw ? 1.0f : -1.0f)
+                            // P1 (eff_p[0]): WAVE (0: Saw, 1: Pulse, 2: Triangle, 3: Sine, 4: Noise, 5: Supersaw)
+                            // P2 (eff_p[1]): PULSE W / SPREAD (0.05 .. 0.95)
+                            // P3 (eff_p[2]): SUB LVL (0.0 .. 1.0)
+                            // P4 (eff_p[3]): SUB WAVE (0: Square, 1: Sine)
+                            // P5 (eff_p[4]): DETUNE (fine detune)
+                            // P6 (eff_p[5]): OSC MIX
+                            int wave_type = std::clamp(static_cast<int>(eff_p[0] * 5.99f), 0, 5);
+                            float pw = std::clamp(0.05f + eff_p[1] * 0.90f, 0.05f, 0.95f);
+                            float osc = 0.0f;
+
+                            switch (wave_type) {
+                                case 0: { // Sawtooth
+                                    osc = (2.0f * v.phase1 - 1.0f) - polyBlep(v.phase1, dt);
+                                    break;
+                                }
+                                case 1: { // Pulse with PWM
+                                    osc = (v.phase1 < pw ? 1.0f : -1.0f)
                                           + polyBlep(v.phase1, dt)
                                           - polyBlep(std::fmod(v.phase1 - pw + 1.0f, 1.0f), dt);
-                            float sub = (v.phase2 < 0.5f) ? 0.65f : -0.65f;
-                            raw = (saw * 0.50f + pulse * 0.35f) + sub * eff_p[4];
+                                    break;
+                                }
+                                case 2: { // Triangle
+                                    float saw = (2.0f * v.phase1 - 1.0f) - polyBlep(v.phase1, dt);
+                                    osc = 2.0f * std::fabs(saw) - 1.0f;
+                                    break;
+                                }
+                                case 3: { // Sine
+                                    osc = std::sin(v.phase1 * 6.2831853f);
+                                    break;
+                                }
+                                case 4: { // White / Pink Noise
+                                    static uint32_t noise_seed = 0x12345678;
+                                    noise_seed = noise_seed * 1664525u + 1013904223u;
+                                    osc = static_cast<float>(static_cast<int32_t>(noise_seed)) * (1.0f / 2147483648.0f);
+                                    break;
+                                }
+                                case 5: { // Roland JP-8000 7-oscillator Supersaw
+                                    static constexpr float kSupersawDetune[7] = {
+                                        -0.110f, -0.063f, -0.020f, 0.0f, 0.020f, 0.062f, 0.107f
+                                    };
+                                    float det_spread = eff_p[1] * 0.08f;
+                                    float ss = 0.0f;
+                                    for (int s = 0; s < 7; ++s) {
+                                        float det = 1.0f + kSupersawDetune[s] * det_spread;
+                                        float dt_s = dt * det;
+                                        float ph = std::fmod(v.phase1 * det + s * (1.0f / 7.0f), 1.0f);
+                                        ss += (2.0f * ph - 1.0f) - polyBlep(ph, dt_s);
+                                    }
+                                    osc = ss * (1.0f / 7.0f) * 1.6f;
+                                    break;
+                                }
+                            }
+
+                            // Sub-oscillator (1 octave below, phase2)
+                            v.phase2 += dt * 0.5f;
+                            if (v.phase2 >= 1.0f) v.phase2 -= 1.0f;
+                            float sub = (eff_p[3] > 0.5f) ? std::sin(v.phase2 * 6.2831853f) : ((v.phase2 < 0.5f) ? 0.7f : -0.7f);
+                            float sub_lvl = eff_p[2];
+
+                            raw = osc * (1.0f - sub_lvl * 0.5f) + sub * sub_lvl;
                             break;
                         }
                         case EngineType::kFm2Op: {
@@ -1413,9 +1474,9 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                 // Dual filter 1: High Pass Filter (Cytomic SVF, 12 dB or cascaded 24 dB) with Bipolar Decay Envelope
                 float eff_hpf = std::clamp(tp.hpf_cutoff + hpf_offset + (tp.hpf_env + hpf_env_offset) * v.hpf_env_val, 0.0f, 0.98f);
                 if (eff_hpf > 0.005f) {
-                    float f_hpf_hz = std::clamp(20.0f * std::pow(800.0f, eff_hpf), 20.0f, static_cast<float>(sample_rate) * 0.48f);
+                    float f_hpf_hz = std::clamp(20.0f * std::pow(800.0f, eff_hpf), 20.0f, static_cast<float>(sample_rate) * 0.45f);
                     float g_hpf = std::tan(3.14159265f * f_hpf_hz * inv_sr);
-                    float k_hpf = 2.0f - 1.9f * std::clamp(tp.hpf_resonance, 0.0f, 0.98f);
+                    float k_hpf = 2.0f - 1.9f * hpf_reso;
                     float a1_h = 1.0f / (1.0f + g_hpf * (g_hpf + k_hpf));
                     float a2_h = g_hpf * a1_h;
                     float a3_h = g_hpf * a2_h;
@@ -1429,13 +1490,18 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                     float hp1 = raw - k_hpf * v1_h1 - v2_h1;
 
                     if (tp.hpf_24db) {
-                        // Stage 2 (4-pole 24 dB/oct)
+                        // Stage 2 (4-pole 24 dB/oct, Linkwitz-Riley damped to prevent resonance squeal)
+                        float k_hpf2 = 1.414f + (k_hpf - 1.414f) * 0.35f;
+                        float a1_h2 = 1.0f / (1.0f + g_hpf * (g_hpf + k_hpf2));
+                        float a2_h2 = g_hpf * a1_h2;
+                        float a3_h2 = g_hpf * a2_h2;
+
                         float v3_h2 = hp1 - v.hpf_s2_b;
-                        float v1_h2 = a1_h * v.hpf_s1_b + a2_h * v3_h2;
-                        float v2_h2 = v.hpf_s2_b + a2_h * v.hpf_s1_b + a3_h * v3_h2;
+                        float v1_h2 = a1_h2 * v.hpf_s1_b + a2_h2 * v3_h2;
+                        float v2_h2 = v.hpf_s2_b + a2_h2 * v.hpf_s1_b + a3_h2 * v3_h2;
                         v.hpf_s1_b = 2.0f * v1_h2 - v.hpf_s1_b;
                         v.hpf_s2_b = 2.0f * v2_h2 - v.hpf_s2_b;
-                        raw = hp1 - k_hpf * v1_h2 - v2_h2;
+                        raw = hp1 - k_hpf2 * v1_h2 - v2_h2;
                     } else {
                         raw = hp1;
                     }
@@ -1444,9 +1510,9 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                 // Dual filter 2: Low Pass Filter (Cytomic SVF, 12 dB or cascaded 24 dB) with Bipolar Decay Envelope
                 float base_cut = (v.plock_cutoff >= 0.0f) ? v.plock_cutoff : tp.lpf_cutoff;
                 float eff_lpf = std::clamp(base_cut + cut_offset + (tp.lpf_env + env_offset) * v.lpf_env_val, 0.01f, 1.0f);
-                float f_lpf_hz = std::clamp(20.0f * std::pow(1000.0f, eff_lpf), 20.0f, static_cast<float>(sample_rate) * 0.48f);
+                float f_lpf_hz = std::clamp(20.0f * std::pow(1000.0f, eff_lpf), 20.0f, static_cast<float>(sample_rate) * 0.45f);
                 float g_lpf = std::tan(3.14159265f * f_lpf_hz * inv_sr);
-                float k_lpf = 2.0f - 1.9f * std::clamp(tp.lpf_resonance + res_offset, 0.0f, 0.98f);
+                float k_lpf = 2.0f - 1.9f * lpf_reso;
                 float a1_l = 1.0f / (1.0f + g_lpf * (g_lpf + k_lpf));
                 float a2_l = g_lpf * a1_l;
                 float a3_l = g_lpf * a2_l;
@@ -1460,10 +1526,15 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                 float lp_out = v2_l1;
 
                 if (tp.lpf_24db) {
-                    // Stage 2 (4-pole 24 dB/oct)
+                    // Stage 2 (4-pole 24 dB/oct, Linkwitz-Riley damped to prevent resonance squeal)
+                    float k_lpf2 = 1.414f + (k_lpf - 1.414f) * 0.35f;
+                    float a1_l2 = 1.0f / (1.0f + g_lpf * (g_lpf + k_lpf2));
+                    float a2_l2 = g_lpf * a1_l2;
+                    float a3_l2 = g_lpf * a2_l2;
+
                     float v3_l2 = lp_out - v.lpf_s2_b;
-                    float v1_l2 = a1_l * v.lpf_s1_b + a2_l * v3_l2;
-                    float v2_l2 = v.lpf_s2_b + a2_l * v.lpf_s1_b + a3_l * v3_l2;
+                    float v1_l2 = a1_l2 * v.lpf_s1_b + a2_l2 * v3_l2;
+                    float v2_l2 = v.lpf_s2_b + a2_l2 * v.lpf_s1_b + a3_l2 * v3_l2;
                     v.lpf_s1_b = 2.0f * v1_l2 - v.lpf_s1_b;
                     v.lpf_s2_b = 2.0f * v2_l2 - v.lpf_s2_b;
                     lp_out = v2_l2;
