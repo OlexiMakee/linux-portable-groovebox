@@ -330,19 +330,45 @@ ActionRegistry::ActionRegistry() {
             c.app.seq_submode = SeqSubmode::kPianoRoll;
             c.app.rec_mode = true;
             c.app.selected_track = c.audio.getRowTrack(c.app.cursor_row);
-            auto st = c.audio.getStep(c.app.selected_track, c.app.cursor_step);
-            if (st.enabled) {
-                c.app.rec_octave = std::clamp(static_cast<int>(st.note / 12) - 1, 1, 8);
-                c.app.rec_cursor_lane = 11 - (st.note % 12);
+
+            // Знаходимо найнижчу ноту серед усіх активних кроків треку
+            int min_pitch = 128;
+            int trk_len = static_cast<int>(c.audio.getRowLength(c.app.selected_track));
+            for (int s = 0; s < trk_len; ++s) {
+                auto st = c.audio.getStep(c.app.selected_track, s);
+                if (st.enabled) {
+                    if (st.note > 0 && st.note < min_pitch) min_pitch = st.note;
+                    for (int ch = 0; ch < 4; ++ch) {
+                        if (st.chord_notes[ch] > 0 && st.chord_notes[ch] < min_pitch) {
+                            min_pitch = st.chord_notes[ch];
+                        }
+                    }
+                }
             }
+            if (min_pitch < 128) {
+                c.app.rec_octave = std::clamp(min_pitch / 12, 1, 8);
+                c.app.rec_cursor_lane = 11 - (min_pitch % 12);
+            } else {
+                auto st = c.audio.getStep(c.app.selected_track, c.app.cursor_step);
+                if (st.enabled && st.note > 0) {
+                    c.app.rec_octave = std::clamp(static_cast<int>(st.note / 12) - 1, 1, 8);
+                    c.app.rec_cursor_lane = 11 - (st.note % 12);
+                } else {
+                    c.app.rec_octave = 3;
+                    c.app.rec_cursor_lane = 11;
+                }
+            }
+            c.app.last_seq_submode = SeqSubmode::kPianoRoll;
             c.app.last_action = "PIANO ROLL";
         } else if (c.app.seq_submode == SeqSubmode::kPianoRoll) {
             c.app.seq_submode = SeqSubmode::kSong;
             c.app.rec_mode = false;
+            c.app.last_seq_submode = SeqSubmode::kSong;
             c.app.last_action = "SONG MODE";
         } else {
             c.app.seq_submode = SeqSubmode::kMatrix;
             c.app.rec_mode = false;
+            c.app.last_seq_submode = SeqSubmode::kMatrix;
             c.app.last_action = "MATRIX SEQ";
         }
     }});
@@ -682,8 +708,8 @@ ActionRegistry::ActionRegistry() {
         closeAllModals(c.app);
         if (c.app.active_view != ViewId::kSeq) {
             c.app.active_view = ViewId::kSeq;
-            c.app.seq_submode = SeqSubmode::kMatrix;
-            c.app.rec_mode = false;
+            c.app.seq_submode = c.app.last_seq_submode;
+            c.app.rec_mode = (c.app.seq_submode == SeqSubmode::kPianoRoll);
             c.app.last_action = "VIEW: SEQ";
         } else {
             ActionRegistry::instance().run("SEQ.REC_TOGGLE", c);
@@ -697,18 +723,21 @@ ActionRegistry::ActionRegistry() {
         }
         if (c.app.active_view != ViewId::kSynth) {
             c.app.active_view = ViewId::kSynth;
-            c.app.synth_submode = SynthSubmode::kSynth;
+            c.app.synth_submode = c.app.last_synth_submode;
             c.app.last_action = "VIEW: SYNTH";
         } else {
             // Цикл L2: SYN -> MOD -> FX -> SYN
             if (c.app.synth_submode == SynthSubmode::kSynth) {
                 c.app.synth_submode = SynthSubmode::kMod;
+                c.app.last_synth_submode = SynthSubmode::kMod;
                 c.app.last_action = "MODE: MOD";
             } else if (c.app.synth_submode == SynthSubmode::kMod) {
                 c.app.synth_submode = SynthSubmode::kFx;
+                c.app.last_synth_submode = SynthSubmode::kFx;
                 c.app.last_action = "MODE: FX";
             } else {
                 c.app.synth_submode = SynthSubmode::kSynth;
+                c.app.last_synth_submode = SynthSubmode::kSynth;
                 c.app.last_action = "MODE: SYNTH";
             }
         }
@@ -716,21 +745,24 @@ ActionRegistry::ActionRegistry() {
     add(Action{"TAB.R2", "MIX", [](UiContext& c) {
         closeAllModals(c.app);
         if (c.app.active_view != ViewId::kMix && c.app.active_view != ViewId::kFx) {
-            c.app.active_view = ViewId::kMix;
-            c.app.mix_submode = MixSubmode::kMix;
+            c.app.active_view = (c.app.last_mix_submode == MixSubmode::kSend) ? ViewId::kFx : ViewId::kMix;
+            c.app.mix_submode = c.app.last_mix_submode;
             c.app.last_action = "VIEW: MIX";
         } else {
             // Цикл R2: MIX -> SND -> MSTR -> MIX
             if (c.app.mix_submode == MixSubmode::kMix) {
                 c.app.mix_submode = MixSubmode::kSend;
+                c.app.last_mix_submode = MixSubmode::kSend;
                 c.app.active_view = ViewId::kFx;
                 c.app.last_action = "MODE: SEND";
             } else if (c.app.mix_submode == MixSubmode::kSend) {
                 c.app.mix_submode = MixSubmode::kMaster;
+                c.app.last_mix_submode = MixSubmode::kMaster;
                 c.app.active_view = ViewId::kMix;
                 c.app.last_action = "MODE: MASTER";
             } else {
                 c.app.mix_submode = MixSubmode::kMix;
+                c.app.last_mix_submode = MixSubmode::kMix;
                 c.app.active_view = ViewId::kMix;
                 c.app.last_action = "MODE: MIX";
             }
@@ -836,11 +868,92 @@ ActionRegistry::ActionRegistry() {
             }
             if (c.app.cursor_row < c.audio.getActiveRowCount()) {
                 c.app.step_inspector_open = true;
+                c.app.inspect_page = AppModel::InspectPage::kMidi;
+                c.app.grid_row[static_cast<int>(ViewId::kInspect)] = 0;
+                c.app.grid_scroll[static_cast<int>(ViewId::kInspect)] = 0;
             }
         }
     }});
+    add(Action{"INSPECT.CYCLE", "CYCLE", [](UiContext& c) {
+        if (!c.app.step_inspector_open) {
+            c.app.step_inspector_open = true;
+            c.app.inspect_page = AppModel::InspectPage::kMidi;
+        } else {
+            int p = (static_cast<int>(c.app.inspect_page) + 1) % static_cast<int>(AppModel::InspectPage::kCount);
+            c.app.inspect_page = static_cast<AppModel::InspectPage>(p);
+        }
+        c.app.grid_row[static_cast<int>(ViewId::kInspect)] = 0;
+        c.app.grid_scroll[static_cast<int>(ViewId::kInspect)] = 0;
+    }});
     add(Action{"INSPECT.CLOSE", "CLOSE", [](UiContext& c) {
         c.app.step_inspector_open = false;
+    }});
+
+    // Універсальний рандомайзер SELECT + R3
+    add(Action{"UNIVERSAL.RANDOMIZE", "RND", [](UiContext& c) {
+        if (c.app.active_view == ViewId::kSeq) {
+            if (c.app.rec_mode || c.app.seq_submode == SeqSubmode::kPianoRoll) {
+                // Piano Roll: розумно розкидаємо ноти в межах октави виділеної ноти
+                const int t = c.app.selected_track;
+                const int len = static_cast<int>(c.audio.getRowLength(t));
+                const int base_pitch = c.app.rec_octave * 12;
+                for (int s = 0; s < len; ++s) {
+                    auto st = c.audio.getStep(t, s);
+                    if (st.enabled) {
+                        st.note = static_cast<uint8_t>(base_pitch + (std::rand() % 12));
+                        c.audio.setStep(t, s, st);
+                    }
+                }
+                c.app.last_action = "PIANO: OCT RANDOM";
+            } else {
+                c.audio.randomizeRow(c.app.cursor_row);
+                c.app.last_action = "TRACK TRIGS RANDOM";
+            }
+            return;
+        }
+        if (c.app.active_view == ViewId::kSynth) {
+            int t = c.app.selected_track;
+            auto tp = c.audio.getTrackParams(t);
+            if (c.app.synth_submode == SynthSubmode::kSynth) {
+                // Рандомізація чисельних параметрів поточного екрану синтезатора
+                for (int i = 0; i < kParamsPerTrack; ++i) {
+                    tp.p[i] = static_cast<float>(std::rand() % 1000) / 1000.0f;
+                }
+                tp.lpf_cutoff = 0.20f + static_cast<float>(std::rand() % 750) / 1000.0f;
+                tp.lpf_resonance = static_cast<float>(std::rand() % 800) / 1000.0f;
+                c.audio.setTrackParams(t, tp);
+                c.app.last_action = "SYNTH: SCREEN RANDOM";
+            } else if (c.app.synth_submode == SynthSubmode::kMod) {
+                tp.lfo1.depth = static_cast<float>(std::rand() % 1000) / 1000.0f;
+                tp.lfo1.rate = static_cast<float>(std::rand() % 1000) / 1000.0f;
+                tp.lfo2.depth = static_cast<float>(std::rand() % 1000) / 1000.0f;
+                tp.lfo2.rate = static_cast<float>(std::rand() % 1000) / 1000.0f;
+                tp.env2.attack = 0.01f + static_cast<float>(std::rand() % 500) / 1000.0f;
+                tp.env2.decay = 0.05f + static_cast<float>(std::rand() % 1000) / 1000.0f;
+                c.audio.setTrackParams(t, tp);
+                c.app.last_action = "MOD: SCREEN RANDOM";
+            } else if (c.app.synth_submode == SynthSubmode::kFx) {
+                tp.fx.dist_drive = static_cast<float>(std::rand() % 1000) / 1000.0f;
+                tp.fx.dist_mix = static_cast<float>(std::rand() % 800) / 1000.0f;
+                tp.fx.chorus_mix = static_cast<float>(std::rand() % 800) / 1000.0f;
+                c.audio.setTrackParams(t, tp);
+                c.app.last_action = "FX: SCREEN RANDOM";
+            }
+            return;
+        }
+        if (c.app.active_view == ViewId::kFx) {
+            auto tp = c.audio.getTrackParams(c.app.selected_track);
+            tp.delay_send = static_cast<float>(std::rand() % 800) / 1000.0f;
+            tp.reverb_send = static_cast<float>(std::rand() % 800) / 1000.0f;
+            tp.chorus_send = static_cast<float>(std::rand() % 800) / 1000.0f;
+            c.audio.setTrackParams(c.app.selected_track, tp);
+            c.app.last_action = "SENDS: RANDOM";
+            return;
+        }
+        if (c.app.active_view == ViewId::kArp) {
+            ActionRegistry::instance().run("ARP.RANDOMIZE", c);
+            return;
+        }
     }});
 
     // ---------------- РЕЖИМ ПЕРФОРМАНСУ (PERF.*) ----------------

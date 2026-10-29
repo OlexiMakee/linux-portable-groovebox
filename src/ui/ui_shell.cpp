@@ -191,23 +191,94 @@ void UiShell::renderTabBar(Canvas& cv, const UiContext& ctx) {
             slot_accent = palette::kAccentOrange;
         }
 
-        const int text_w = Canvas::textWidth(title);
-        const int text_x = tx + (tw - text_w) / 2;
-
         if (is_active) {
-            ColorRGB accent = slot_accent;
-            if (ctx.in.btn_select) accent = palette::kParamTrig;
-            cv.fill(tx + 1, 1, tw - 2, kTabBarH - 3, accent);
-            cv.text(text_x, 5, title, palette::kBgDark);
+            // Заголовок активної вкладки заливається лише нейтральним сірим кольором
+            cv.fill(tx + 1, 1, tw - 2, kTabBarH - 3, palette::kHeaderSel);
+            cv.rect(tx + 1, 1, tw - 2, kTabBarH - 3, palette::kTextDim);
         } else if (is_held) {
-            cv.fill(tx + 1, 1, tw - 2, kTabBarH - 3, slot_accent);
-            cv.text(text_x, 5, title, palette::kBgDark);
+            cv.fill(tx + 1, 1, tw - 2, kTabBarH - 3, ColorRGB{32, 34, 42});
+            cv.rect(tx + 1, 1, tw - 2, kTabBarH - 3, palette::kGridDim);
         } else if (ctx.in.btn_select) {
             cv.rect(tx + 1, 1, tw - 2, kTabBarH - 3, palette::kParamTrig);
-            cv.text(text_x, 5, title, palette::kParamTrig);
         } else {
             cv.rect(tx + 1, 1, tw - 2, kTabBarH - 3, palette::kGridDim);
-            cv.text(text_x, 5, title, (slot.key_label == "[G]") ? palette::kAccentOrange : palette::kTextMain);
+        }
+
+        if (slot.key_label == "[L2]" && !ctx.in.btn_select) {
+            int cx = tx + 3;
+            cv.text(cx, 5, "[L2]", is_active ? palette::kTextMain : palette::kTextDim);
+            cx += 23;
+            if (ctx.app.synth_submode == SynthSubmode::kSynth) {
+                cv.text(cx, 5, "<SYN>", ColorRGB{60, 160, 255});
+                cx += 27;
+            } else {
+                cv.text(cx, 5, "syn-", palette::kTextDim);
+                cx += 19;
+            }
+            if (ctx.app.synth_submode == SynthSubmode::kMod) {
+                cv.text(cx, 5, "<MOD>", palette::kAccentPurple);
+                cx += 27;
+            } else {
+                cv.text(cx, 5, "mod-", palette::kTextDim);
+                cx += 19;
+            }
+            if (ctx.app.synth_submode == SynthSubmode::kFx) {
+                cv.text(cx, 5, "<FX>", palette::kLevelOk);
+            } else {
+                cv.text(cx, 5, "fx", palette::kTextDim);
+            }
+        } else if (slot.key_label == "[L1]" && !ctx.in.btn_select) {
+            int cx = tx + 3;
+            cv.text(cx, 5, "[L1]", is_active ? palette::kTextMain : palette::kTextDim);
+            cx += 23;
+            if (ctx.app.seq_submode == SeqSubmode::kMatrix) {
+                cv.text(cx, 5, "<SEQ>", palette::kAccentOrange);
+                cx += 27;
+            } else {
+                cv.text(cx, 5, "seq-", palette::kTextDim);
+                cx += 19;
+            }
+            if (ctx.app.seq_submode == SeqSubmode::kPianoRoll) {
+                cv.text(cx, 5, "<ROL>", palette::kParamTrig);
+                cx += 27;
+            } else {
+                cv.text(cx, 5, "rol-", palette::kTextDim);
+                cx += 19;
+            }
+            if (ctx.app.seq_submode == SeqSubmode::kSong) {
+                cv.text(cx, 5, "<SON>", palette::kLevelWarnClip);
+            } else {
+                cv.text(cx, 5, "son", palette::kTextDim);
+            }
+        } else if (slot.key_label == "[R2]" && !ctx.in.btn_select) {
+            int cx = tx + 3;
+            cv.text(cx, 5, "[R2]", is_active ? palette::kTextMain : palette::kTextDim);
+            cx += 23;
+            if (ctx.app.mix_submode == MixSubmode::kMix) {
+                cv.text(cx, 5, "<MIX>", palette::kAccentCyan);
+                cx += 27;
+            } else {
+                cv.text(cx, 5, "mix-", palette::kTextDim);
+                cx += 19;
+            }
+            if (ctx.app.mix_submode == MixSubmode::kSend) {
+                cv.text(cx, 5, "<SND>", palette::kAccentPurple);
+                cx += 27;
+            } else {
+                cv.text(cx, 5, "snd-", palette::kTextDim);
+                cx += 19;
+            }
+            if (ctx.app.mix_submode == MixSubmode::kMaster) {
+                cv.text(cx, 5, "<MST>", palette::kAccentOrange);
+            } else {
+                cv.text(cx, 5, "mst", palette::kTextDim);
+            }
+        } else {
+            const int text_w = Canvas::textWidth(title);
+            const int text_x = tx + (tw - text_w) / 2;
+            ColorRGB font_col = (slot.key_label == "[G]") ? palette::kAccentOrange : (is_active ? palette::kCursorWhite : palette::kTextMain);
+            if (ctx.in.btn_select) font_col = palette::kParamTrig;
+            cv.text(text_x, 5, title, font_col);
         }
 
         tx += tw;

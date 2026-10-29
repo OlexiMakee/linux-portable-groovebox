@@ -27,7 +27,7 @@ Keymap::Keymap() {
     bind(ALL, Layer::kBase, Button::kL3, Gesture::kHold, "FILL.ON");
     bind(ALL, Layer::kBase, Button::kL3, Gesture::kTap,  "ARP.TOGGLE");
     bind(ALL, Layer::kBase, Button::kR3, Gesture::kPress, "PARAM.DEFAULT");
-    bind(ALL, Layer::kSelect, Button::kR3, Gesture::kPress, "PARAM.RANDOMIZE");
+    bind(ALL, Layer::kSelect, Button::kR3, Gesture::kPress, "UNIVERSAL.RANDOMIZE");
 
     // D-Pad навігація за замовчуванням
     bind(ALL, Layer::kBase, Button::kDpadUp,    Gesture::kPress, "NAV.UP");
@@ -51,10 +51,12 @@ Keymap::Keymap() {
 
     // Digitakt Quick Temp Save & Recall (працює глобально в усіх екранах)
     bind(ALL, Layer::kSelect, Button::kFn,    Gesture::kPress, "PROJECT.TEMP_SAVE");
-    bind(ALL, Layer::kSelect, Button::kStart, Gesture::kPress, "PROJECT.TEMP_RELOAD");
 
-    // Запис майстер-виходу у WAV (SELECT + R3)
-    bind(ALL, Layer::kSelect, Button::kR3,    Gesture::kPress, "REC.MASTER_TOGGLE");
+    // Запис майстер-виходу у WAV (SELECT + START)
+    bind(ALL, Layer::kSelect, Button::kStart, Gesture::kPress, "REC.MASTER_TOGGLE");
+
+    // Універсальний рандомайзер (SELECT + R3)
+    bind(ALL, Layer::kSelect, Button::kR3,    Gesture::kPress, "UNIVERSAL.RANDOMIZE");
 
     // =========================================================================
     // 2. СЕКВЕНСОР (ViewId::kSeq)
@@ -136,7 +138,7 @@ Keymap::Keymap() {
     bind(ViewId::kInspect, Layer::kBase, Button::kDpadDown,  Gesture::kPress, "NAV.DOWN");
     bind(ViewId::kInspect, Layer::kBase, Button::kDpadLeft,  Gesture::kPress, "PARAM.DEC");
     bind(ViewId::kInspect, Layer::kBase, Button::kDpadRight, Gesture::kPress, "PARAM.INC");
-    bind(ViewId::kInspect, Layer::kBase, Button::kX,         Gesture::kPress, "INSPECT.CLOSE");
+    bind(ViewId::kInspect, Layer::kBase, Button::kX,         Gesture::kPress, "INSPECT.CYCLE");
     bind(ViewId::kInspect, Layer::kBase, Button::kY,         Gesture::kPress, "PARAM.INC_FAST");
     bind(ViewId::kInspect, Layer::kBase, Button::kA,         Gesture::kPress, "SEQ.TRIG");
     bind(ViewId::kInspect, Layer::kBase, Button::kB,         Gesture::kPress, "INSPECT.CLOSE");
