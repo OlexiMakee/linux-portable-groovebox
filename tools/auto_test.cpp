@@ -968,6 +968,25 @@ static void testInputRouterAndStepEditor() {
     TEST_ASSERT(std::memcmp(wave, "WAVE", 4) == 0, "Recorded file format is WAVE");
     wav_in.close();
     std::remove(test_rec_path.c_str());
+
+    // Тестування розширених Elektron P-Locks
+    SequencerStep plock_step{};
+    plock_step.enabled = true;
+    plock_step.has_plock = true;
+    plock_step.note = 60;
+    plock_step.plock_p[0] = 0.95f;
+    plock_step.plock_p[4] = 0.80f;
+    plock_step.plock_delay_send = 0.70f;
+    audio.setStep(0, 0, plock_step);
+
+    SequencerStep retrieved_step = audio.getStep(0, 0);
+    TEST_ASSERT(retrieved_step.has_plock == true, "getStep retrieves has_plock == true");
+    TEST_ASSERT(std::abs(retrieved_step.plock_p[0] - 0.95f) < 0.001f, "getStep preserves plock_p[0]");
+    TEST_ASSERT(std::abs(retrieved_step.plock_p[4] - 0.80f) < 0.001f, "getStep preserves plock_p[4]");
+    TEST_ASSERT(std::abs(retrieved_step.plock_delay_send - 0.70f) < 0.001f, "getStep preserves plock_delay_send");
+
+    audio.triggerNote(0, 60, 0.90f, -1.0f, false, 0.60f, &retrieved_step);
+    TEST_ASSERT(true, "triggerNote successfully applies expanded P-Locks to voice");
 }
 
 static void testViewsRendering() {
