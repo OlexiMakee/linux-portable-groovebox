@@ -774,6 +774,18 @@ void AudioEngine::noteOff(int track, int midi_note) {
     }
 }
 
+bool AudioEngine::isVoicePlayingNote(int track, int midi_note) const {
+    if (track < 0 || track >= kMaxTracks) return false;
+    const int base = track * kVoicesPerTrack;
+    for (int i = 0; i < kVoicesPerTrack; ++i) {
+        int r = base + i;
+        if (voices_[r].active && voices_[r].amp_adsr.stage != AdsrStage::kIdle && voices_[r].note_num == midi_note) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void AudioEngine::noteOffAll() {
     const float sr = static_cast<float>(active_sample_rate_.load(std::memory_order_relaxed));
     std::lock_guard<std::mutex> lock(state_mutex_);

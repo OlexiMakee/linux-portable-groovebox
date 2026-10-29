@@ -197,6 +197,9 @@ public:
     float getLiveModOffset(int track, ModTarget target) const;
     float getLiveModValue(int track, ModTarget target, float base_val) const;
 
+    // Перевірка, чи грає зараз голос конкретну MIDI ноту на треку (для візуалізації клавіш)
+    bool isVoicePlayingNote(int track, int midi_note) const;
+
     // Публічний метод рендерингу аудіоблоку (для тестів, експорту та офлайн-обробки)
     void renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_t sample_rate);
 
