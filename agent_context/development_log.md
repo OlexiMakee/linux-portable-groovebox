@@ -1115,3 +1115,36 @@
 
 
 
+
+## [2026-10-29 16:00] Milestone 37: 6-Engine Add Track Hierarchy, TB-303 Monophonic Legato Slides, VA Supersaw, and Master 6-Param Filter Row
+
+* **Компактний верхній таббар (src/ui/ui_shell.cpp):**
+  * Видалено застарілі префікси `[L1]`, `[L2]`, `[R2]`, `[R1]` та дефіси, які викликали переповнення та наїзд тексту.
+  * Реалізовано чистий, центрований мінімалістичний вигляд: `<SEQ> ROL SON`, `<SYN> MOD FX`, `<MIX> SND MST`, `SAMPLE`, `SYS`.
+* **Ієрархія рушіїв у меню вибору (Add Track / Engine Selector) (src/synth_engines.hpp, src/ui/actions.cpp, src/ui/ui_shell.cpp):**
+  * Видалено окремий рушій `loop slicer` (об'єднано як режим всередині `sample player`).
+  * Зафіксовано точний список із 6 рушіїв синтезу у визначеному порядку:
+    1. `sample player`
+    2. `303 Bassline`
+    3. `dx7`
+    4. `chord pad`
+    5. `Virtual Analog`
+    6. `midi out`
+* **Roland TB-303 Monophonic Architecture & Legato Slides (src/audio_engine.cpp):**
+  * Рушій `kAcid303` переведено на строго монофонічну структуру: `allocateVoice()` для треку 303 завжди повертає голос 0.
+  * Нашарування нот на одному кроці (або тригер нової ноти під час звучання попередньої) автоматично інтерпретується як легато-слайд (`slide = true`).
+  * Застосовано класичну 60-мілісекундну постійно-часову експоненційну RC-криву ковзання висоти тону без скидання фази осцилятора чи перезапуску огинаючих ADSR.
+* **Розширення Virtual Analog (kVaMono) та Roland JP-8000 Supersaw (src/synth_engines.hpp, src/audio_engine.cpp):**
+  * Додано селектор 6 форм хвилі (`P1 WAVE`): `Saw`, `Pulse` (з PWM від `P2 PULSE W`), `Triangle`, `Sine`, `Noise`, `Supersaw`.
+  * Реалізовано 7-осциляторний PolyBLEP Supersaw за алгоритмом Roland JP-8000 з коефіцієнтами розстроювання та регулюванням ширини розстроювання (`eff_p[1]`).
+  * Додано суб-осцилятор на 1 октаву нижче (`P3 SUB LVL`, `P4 SUB WAVE`: Sine/Square).
+* **Усунення свисту та стабілізація фільтрів Cytomic SVF (src/audio_engine.cpp):**
+  * Виправлено проблему з надмірним підсиленням резонансу у 4-полюсних 24 dB каскадах: додано Linkwitz-Riley демпфування для 2-го каскаду SVF, що усунуло паразитний свист/вищання при низькому/середньому резонансі.
+  * Використано змінні `lpf_reso` та `hpf_reso`, усунуто всі попередження компілятора.
+* **Рядок фільтрів Master та маркери на графіку АЧХ (src/synth_engines.hpp, src/audio_engine.cpp, src/ui/params.cpp, src/ui/layout.cpp, src/ui/views.cpp):**
+  * Рядок `FILT` вкладки Master містить рівно 6 параметрів у заданому порядку: `Hp cut, hp res, hp slp, lp cut, lp res, lp slp`.
+  * Master HPF та LPF переведено на стабільні Cytomic SVF фільтри з підтримкою резонансу `hpf_resonance` та `lpf_resonance`.
+  * На графіку АЧХ (жовта/помаранчева лінія) нанесені зелені крапки 3×3 (`palette::kLevelOk`) на частотах зрізу HPF, LPF та центральних частотах трьох смуг параметричного Bell EQ.
+  * Прибрано застарілі `TRK.GLIDE` та `FX.DRIVE`/`FX.DRV_TONE`.
+* **Верифікація:**
+  * Усі 243 тести пройдені успішно без жодної помилки чи попередження компілятора (`build-macos/auto_test`: 243/243 PASSED).
