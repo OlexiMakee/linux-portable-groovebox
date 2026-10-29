@@ -560,10 +560,12 @@ struct MasterFxParameters {
     float sc_attack = 0.010f;     // 0.001 .. 0.100s
     float sc_release = 0.150f;    // 0.020 .. 1.000s
 
-    // 3. Master HPF & LPF with 12 dB / 24 dB slope
+    // 3. Master HPF & LPF with 12 dB / 24 dB slope and resonance
     float hpf_cutoff = 0.0f;      // 0.0 .. 1.0 (20 Hz .. 16 kHz, 0.0 = OFF)
+    float hpf_resonance = 0.0f;   // 0.0 .. 0.95
     bool hpf_slope_24 = false;    // false = 12 dB/oct (2-pole), true = 24 dB/oct (4-pole)
     float lpf_cutoff = 1.0f;      // 0.0 .. 1.0 (20 Hz .. 20 kHz, 1.0 = OFF)
+    float lpf_resonance = 0.0f;   // 0.0 .. 0.95
     bool lpf_slope_24 = false;    // false = 12 dB/oct (2-pole), true = 24 dB/oct (4-pole)
 
     // 4. Parametric Bell EQ Filter 1 (Low-Mid)

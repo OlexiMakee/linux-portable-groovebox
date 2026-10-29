@@ -1001,6 +1001,19 @@ ParamRegistry::ParamRegistry() {
     }
     {
         Param p;
+        p.id = "MST.HPF_RES";
+        p.label = "HP RES";
+        p.value = [](const UiContext& c) { return fmtPct(c.audio.getMasterFx().hpf_resonance); };
+        p.norm = [](const UiContext& c) { return c.audio.getMasterFx().hpf_resonance; };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            auto mfx = c.audio.getMasterFx();
+            mfx.hpf_resonance = std::clamp(mfx.hpf_resonance + dir * (coarse ? 0.05f : 0.01f), 0.0f, 0.95f);
+            c.audio.setMasterFx(mfx);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
         p.id = "MST.HPF_SLP";
         p.label = "HP SLP";
         p.value = [](const UiContext& c) { return c.audio.getMasterFx().hpf_slope_24 ? "24 dB" : "12 dB"; };
@@ -1021,6 +1034,19 @@ ParamRegistry::ParamRegistry() {
         p.step = [](UiContext& c, int dir, bool coarse) {
             auto mfx = c.audio.getMasterFx();
             mfx.lpf_cutoff = std::clamp(mfx.lpf_cutoff + dir * (coarse ? 0.05f : 0.01f), 0.05f, 1.0f);
+            c.audio.setMasterFx(mfx);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "MST.LPF_RES";
+        p.label = "LP RES";
+        p.value = [](const UiContext& c) { return fmtPct(c.audio.getMasterFx().lpf_resonance); };
+        p.norm = [](const UiContext& c) { return c.audio.getMasterFx().lpf_resonance; };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            auto mfx = c.audio.getMasterFx();
+            mfx.lpf_resonance = std::clamp(mfx.lpf_resonance + dir * (coarse ? 0.05f : 0.01f), 0.0f, 0.95f);
             c.audio.setMasterFx(mfx);
         };
         add(std::move(p));

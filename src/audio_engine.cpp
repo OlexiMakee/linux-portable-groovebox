@@ -1885,31 +1885,34 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
         m_l *= mst_sc_gain_;
         m_r *= mst_sc_gain_;
 
-        // 3. Master HPF (12 dB 2-pole or 24 dB 4-pole)
+        // 3. Master HPF (Cytomic SVF, 12 dB 2-pole or 24 dB 4-pole) with Resonance
         if (local_mfx.hpf_cutoff > 0.005f) {
-            float f_hpf = std::clamp(2.0f * std::sin(3.14159265f * (20.0f * std::pow(800.0f, local_mfx.hpf_cutoff)) * inv_sr), 0.005f, 0.88f);
-            // Stage 1 (12 dB/oct)
-            mst_hpf1_low_l_ += f_hpf * mst_hpf1_band_l_;
-            float high1_l = m_l - mst_hpf1_low_l_ - 1.414f * mst_hpf1_band_l_;
-            mst_hpf1_band_l_ += f_hpf * high1_l;
-            m_l = high1_l;
+            float f_hpf_hz = std::clamp(20.0f * std::pow(800.0f, local_mfx.hpf_cutoff), 20.0f, static_cast<float>(sample_rate) * 0.45f);
+            float g_hpf = std::tan(3.14159265f * f_hpf_hz * inv_sr);
+            float k_hpf = 2.0f - 1.9f * std::clamp(local_mfx.hpf_resonance, 0.0f, 0.95f);
+            float a1_h = 1.0f / (1.0f + g_hpf * (g_hpf + k_hpf));
+            float a2_h = g_hpf * a1_h;
+            float a3_h = g_hpf * a2_h;
 
-            mst_hpf1_low_r_ += f_hpf * mst_hpf1_band_r_;
-            float high1_r = m_r - mst_hpf1_low_r_ - 1.414f * mst_hpf1_band_r_;
-            mst_hpf1_band_r_ += f_hpf * high1_r;
-            m_r = high1_r;
+            auto processHpfStage = [&](float in, float& s1, float& s2, float k, float a1, float a2, float a3) -> float {
+                float v3 = in - s2;
+                float v1 = a1 * s1 + a2 * v3;
+                float v2 = s2 + a2 * s1 + a3 * v3;
+                s1 = 2.0f * v1 - s1;
+                s2 = 2.0f * v2 - s2;
+                return in - k * v1 - v2;
+            };
 
-            // Stage 2 (24 dB/oct if enabled)
+            m_l = processHpfStage(m_l, mst_hpf1_low_l_, mst_hpf1_band_l_, k_hpf, a1_h, a2_h, a3_h);
+            m_r = processHpfStage(m_r, mst_hpf1_low_r_, mst_hpf1_band_r_, k_hpf, a1_h, a2_h, a3_h);
+
             if (local_mfx.hpf_slope_24) {
-                mst_hpf2_low_l_ += f_hpf * mst_hpf2_band_l_;
-                float high2_l = m_l - mst_hpf2_low_l_ - 1.414f * mst_hpf2_band_l_;
-                mst_hpf2_band_l_ += f_hpf * high2_l;
-                m_l = high2_l;
-
-                mst_hpf2_low_r_ += f_hpf * mst_hpf2_band_r_;
-                float high2_r = m_r - mst_hpf2_low_r_ - 1.414f * mst_hpf2_band_r_;
-                mst_hpf2_band_r_ += f_hpf * high2_r;
-                m_r = high2_r;
+                float k_hpf2 = 1.414f + (k_hpf - 1.414f) * 0.35f;
+                float a1_h2 = 1.0f / (1.0f + g_hpf * (g_hpf + k_hpf2));
+                float a2_h2 = g_hpf * a1_h2;
+                float a3_h2 = g_hpf * a2_h2;
+                m_l = processHpfStage(m_l, mst_hpf2_low_l_, mst_hpf2_band_l_, k_hpf2, a1_h2, a2_h2, a3_h2);
+                m_r = processHpfStage(m_r, mst_hpf2_low_r_, mst_hpf2_band_r_, k_hpf2, a1_h2, a2_h2, a3_h2);
             }
         }
 
@@ -2003,31 +2006,34 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             m_r = y_r;
         }
 
-        // 5. Master LPF (12 dB 2-pole or 24 dB 4-pole)
+        // 5. Master LPF (Cytomic SVF, 12 dB 2-pole or 24 dB 4-pole) with Resonance
         if (local_mfx.lpf_cutoff < 0.995f) {
-            float f_lpf = std::clamp(2.0f * std::sin(3.14159265f * (20.0f * std::pow(1000.0f, local_mfx.lpf_cutoff)) * inv_sr), 0.02f, 0.88f);
-            // Stage 1 (12 dB/oct)
-            mst_lpf1_low_l_ += f_lpf * mst_lpf1_band_l_;
-            float high1_l = m_l - mst_lpf1_low_l_ - 1.414f * mst_lpf1_band_l_;
-            mst_lpf1_band_l_ += f_lpf * high1_l;
-            m_l = mst_lpf1_low_l_;
+            float f_lpf_hz = std::clamp(20.0f * std::pow(1000.0f, local_mfx.lpf_cutoff), 20.0f, static_cast<float>(sample_rate) * 0.45f);
+            float g_lpf = std::tan(3.14159265f * f_lpf_hz * inv_sr);
+            float k_lpf = 2.0f - 1.9f * std::clamp(local_mfx.lpf_resonance, 0.0f, 0.95f);
+            float a1_l = 1.0f / (1.0f + g_lpf * (g_lpf + k_lpf));
+            float a2_l = g_lpf * a1_l;
+            float a3_l = g_lpf * a2_l;
 
-            mst_lpf1_low_r_ += f_lpf * mst_lpf1_band_r_;
-            float high1_r = m_r - mst_lpf1_low_r_ - 1.414f * mst_lpf1_band_r_;
-            mst_lpf1_band_r_ += f_lpf * high1_r;
-            m_r = mst_lpf1_low_r_;
+            auto processLpfStage = [&](float in, float& s1, float& s2, float a1, float a2, float a3) -> float {
+                float v3 = in - s2;
+                float v1 = a1 * s1 + a2 * v3;
+                float v2 = s2 + a2 * s1 + a3 * v3;
+                s1 = 2.0f * v1 - s1;
+                s2 = 2.0f * v2 - s2;
+                return v2;
+            };
 
-            // Stage 2 (24 dB/oct if enabled)
+            m_l = processLpfStage(m_l, mst_lpf1_low_l_, mst_lpf1_band_l_, a1_l, a2_l, a3_l);
+            m_r = processLpfStage(m_r, mst_lpf1_low_r_, mst_lpf1_band_r_, a1_l, a2_l, a3_l);
+
             if (local_mfx.lpf_slope_24) {
-                mst_lpf2_low_l_ += f_lpf * mst_lpf2_band_l_;
-                float high2_l = m_l - mst_lpf2_low_l_ - 1.414f * mst_lpf2_band_l_;
-                mst_lpf2_band_l_ += f_lpf * high2_l;
-                m_l = mst_lpf2_low_l_;
-
-                mst_lpf2_low_r_ += f_lpf * mst_lpf2_band_r_;
-                float high2_r = m_r - mst_lpf2_low_r_ - 1.414f * mst_lpf2_band_r_;
-                mst_lpf2_band_r_ += f_lpf * high2_r;
-                m_r = mst_lpf2_low_r_;
+                float k_lpf2 = 1.414f + (k_lpf - 1.414f) * 0.35f;
+                float a1_l2 = 1.0f / (1.0f + g_lpf * (g_lpf + k_lpf2));
+                float a2_l2 = g_lpf * a1_l2;
+                float a3_l2 = g_lpf * a2_l2;
+                m_l = processLpfStage(m_l, mst_lpf2_low_l_, mst_lpf2_band_l_, a1_l2, a2_l2, a3_l2);
+                m_r = processLpfStage(m_r, mst_lpf2_low_r_, mst_lpf2_band_r_, a1_l2, a2_l2, a3_l2);
             }
         }
 
