@@ -270,9 +270,16 @@ void AudioEngine::setTrackParams(int track, const TrackParameters& tp) {
 void AudioEngine::cycleTrackEngine(int track, int dir) {
     std::lock_guard<std::mutex> lock(state_mutex_);
     auto& tr = tracks_[std::clamp(track, 0, kMaxTracks - 1)];
-    int count = static_cast<int>(EngineType::kCount);
-    int next = (static_cast<int>(tr.engine) + dir + count) % count;
-    tr.engine = static_cast<EngineType>(next);
+    int cur_idx = 0;
+    const int count = static_cast<int>(kSelectableEngines.size());
+    for (int i = 0; i < count; ++i) {
+        if (kSelectableEngines[i] == tr.engine) {
+            cur_idx = i;
+            break;
+        }
+    }
+    int next_idx = (cur_idx + dir + count) % count;
+    tr.engine = kSelectableEngines[next_idx];
 }
 
 void AudioEngine::adjustTrackParam(int track, int param_idx, float delta) {
