@@ -116,10 +116,10 @@ static void testAudioDspEngines() {
 
     // 4. Тестування єдиного 16-доріжкового масиву, динамічного додавання та іменування треків
     TEST_ASSERT(audio.getActiveRowCount() == 8, "Initial active track count is exactly 8");
-    TEST_ASSERT(audio.getTrackName(0) == "909 KICK", "Track 1 is 909 KICK");
-    TEST_ASSERT(audio.getTrackName(5) == "303 BASS", "Track 6 is 303 BASS");
-    TEST_ASSERT(audio.getTrackName(6) == "DX7 KEYS", "Track 7 is DX7 KEYS");
-    TEST_ASSERT(audio.getTrackName(7) == "CHORD PAD", "Track 8 is CHORD PAD");
+    TEST_ASSERT(audio.getTrackName(0) == "TRACK 01", "Track 1 is TRACK 01");
+    TEST_ASSERT(audio.getTrackName(5) == "TRACK 06", "Track 6 is TRACK 06");
+    TEST_ASSERT(audio.getTrackName(6) == "TRACK 07", "Track 7 is TRACK 07");
+    TEST_ASSERT(audio.getTrackName(7) == "TRACK 08", "Track 8 is TRACK 08");
 
     int t9 = audio.addTrack(EngineType::kVaMono, "LEAD 09");
     TEST_ASSERT(t9 == 8 && audio.getActiveRowCount() == 9, "addTrack dynamically creates Track 9");
