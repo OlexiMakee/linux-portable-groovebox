@@ -269,6 +269,14 @@ private:
         float plock_reverb_send = -1.0f;
         uint8_t drum_slot = 0;
         Dx7Voice dx7_voice{};
+
+        // Кешовані коефіцієнти Cytomic SVF для суб-блокової децимації (control rate 8x)
+        float hpf_a1 = 0.0f, hpf_a2 = 0.0f, hpf_a3 = 0.0f, hpf_k = 2.0f;
+        float hpf_a1_b = 0.0f, hpf_a2_b = 0.0f, hpf_a3_b = 0.0f, hpf_k_b = 1.414f;
+        float lpf_a1 = 0.0f, lpf_a2 = 0.0f, lpf_a3 = 0.0f, lpf_k = 2.0f;
+        float lpf_a1_b = 0.0f, lpf_a2_b = 0.0f, lpf_a3_b = 0.0f, lpf_k_b = 1.414f;
+        float sample_pitch_ratio = 1.0f;
+        float last_sample_pitch_note = -999.0f;
     };
 
     std::array<VoiceState, kTotalVoices> voices_{};

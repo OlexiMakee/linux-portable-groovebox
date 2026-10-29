@@ -76,6 +76,14 @@ inline float polyBlep(float t, float dt) {
     return 0.0f;
 }
 
+// Швидка раціональна апроксимація гіперболічного тангенса Паде (похибка < 0.001)
+inline float fast_tanh(float x) {
+    if (x <= -3.0f) return -1.0f;
+    if (x >= 3.0f) return 1.0f;
+    float x2 = x * x;
+    return x * (27.0f + x2) / (27.0f + 9.0f * x2);
+}
+
 } // namespace
 
 AudioEngine::AudioEngine()
@@ -1226,6 +1234,82 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
     uint32_t sc_idx = scope_write_idx_.load(std::memory_order_relaxed);
     const uint32_t delay_len = (sample_rate == 48000u) ? 12000u : 8000u; // ~250ms tempo delay
 
+    // Прекомпіляція параметрів Master HPF на рівні блоку
+    float mst_g_hpf = 0.0f, mst_k_hpf = 0.0f, mst_a1_h = 0.0f, mst_a2_h = 0.0f, mst_a3_h = 0.0f;
+    float mst_k_hpf2 = 0.0f, mst_a1_h2 = 0.0f, mst_a2_h2 = 0.0f, mst_a3_h2 = 0.0f;
+    if (local_mfx.hpf_cutoff > 0.005f) {
+        float f_hpf_hz = std::clamp(20.0f * std::pow(800.0f, local_mfx.hpf_cutoff), 20.0f, static_cast<float>(sample_rate) * 0.45f);
+        mst_g_hpf = std::tan(3.14159265f * f_hpf_hz * inv_sr);
+        mst_k_hpf = 2.0f - 1.9f * std::clamp(local_mfx.hpf_resonance, 0.0f, 0.95f);
+        mst_a1_h = 1.0f / (1.0f + mst_g_hpf * (mst_g_hpf + mst_k_hpf));
+        mst_a2_h = mst_g_hpf * mst_a1_h;
+        mst_a3_h = mst_g_hpf * mst_a2_h;
+        if (local_mfx.hpf_slope_24) {
+            mst_k_hpf2 = 1.414f + (mst_k_hpf - 1.414f) * 0.35f;
+            mst_a1_h2 = 1.0f / (1.0f + mst_g_hpf * (mst_g_hpf + mst_k_hpf2));
+            mst_a2_h2 = mst_g_hpf * mst_a1_h2;
+            mst_a3_h2 = mst_g_hpf * mst_a2_h2;
+        }
+    }
+
+    // Прекомпіляція параметрів Master Bell 1, 2, 3
+    struct BellCoeffs {
+        bool active = false;
+        float b0_n = 1.0f, b1_n = 0.0f, b2_n = 0.0f, a1_n = 0.0f, a2_n = 0.0f;
+    };
+    auto calcBellCoeffs = [&](float freq_norm, float gain_db, float q) -> BellCoeffs {
+        BellCoeffs bc;
+        if (std::fabs(gain_db) <= 0.05f) return bc;
+        bc.active = true;
+        float f0 = std::clamp(20.0f * std::pow(900.0f, freq_norm), 20.0f, 18000.0f);
+        float gain_lin = std::pow(10.0f, gain_db / 40.0f);
+        float w0 = 2.0f * 3.14159265f * f0 * inv_sr;
+        float alpha = std::sin(w0) / (2.0f * std::clamp(q, 0.2f, 10.0f));
+        float cosw0 = std::cos(w0);
+
+        float b0 = 1.0f + alpha * gain_lin;
+        float b1 = -2.0f * cosw0;
+        float b2 = 1.0f - alpha * gain_lin;
+        float a0 = 1.0f + alpha / gain_lin;
+        float a1 = -2.0f * cosw0;
+        float a2 = 1.0f - alpha / gain_lin;
+
+        float inv_a0 = 1.0f / a0;
+        bc.b0_n = b0 * inv_a0;
+        bc.b1_n = b1 * inv_a0;
+        bc.b2_n = b2 * inv_a0;
+        bc.a1_n = a1 * inv_a0;
+        bc.a2_n = a2 * inv_a0;
+        return bc;
+    };
+    BellCoeffs bell1_c = calcBellCoeffs(local_mfx.bell_freq, local_mfx.bell_gain, local_mfx.bell_q);
+    BellCoeffs bell2_c = calcBellCoeffs(local_mfx.bell2_freq, local_mfx.bell2_gain, local_mfx.bell2_q);
+    BellCoeffs bell3_c = calcBellCoeffs(local_mfx.bell3_freq, local_mfx.bell3_gain, local_mfx.bell3_q);
+
+    // Прекомпіляція параметрів Master LPF
+    float mst_g_lpf = 0.0f, mst_k_lpf = 0.0f, mst_a1_l = 0.0f, mst_a2_l = 0.0f, mst_a3_l = 0.0f;
+    float mst_k_lpf2 = 0.0f, mst_a1_l2 = 0.0f, mst_a2_l2 = 0.0f, mst_a3_l2 = 0.0f;
+    if (local_mfx.lpf_cutoff < 0.995f) {
+        float f_lpf_hz = std::clamp(20.0f * std::pow(1000.0f, local_mfx.lpf_cutoff), 20.0f, static_cast<float>(sample_rate) * 0.45f);
+        mst_g_lpf = std::tan(3.14159265f * f_lpf_hz * inv_sr);
+        mst_k_lpf = 2.0f - 1.9f * std::clamp(local_mfx.lpf_resonance, 0.0f, 0.95f);
+        mst_a1_l = 1.0f / (1.0f + mst_g_lpf * (mst_g_lpf + mst_k_lpf));
+        mst_a2_l = mst_g_lpf * mst_a1_l;
+        mst_a3_l = mst_g_lpf * mst_a2_l;
+        if (local_mfx.lpf_slope_24) {
+            mst_k_lpf2 = 1.414f + (mst_k_lpf - 1.414f) * 0.35f;
+            mst_a1_l2 = 1.0f / (1.0f + mst_g_lpf * (mst_g_lpf + mst_k_lpf2));
+            mst_a2_l2 = mst_g_lpf * mst_a1_l2;
+            mst_a3_l2 = mst_g_lpf * mst_a2_l2;
+        }
+    }
+
+    // Прекомпіляція коефіцієнтів Master Sidechain
+    float mst_sc_atk_c = std::exp(-1.0f / (std::clamp(local_mfx.sc_attack, 0.001f, 0.100f) * static_cast<float>(sample_rate)));
+    float mst_sc_rel_c = std::exp(-1.0f / (std::clamp(local_mfx.sc_release, 0.020f, 1.000f) * static_cast<float>(sample_rate)));
+    float mst_sc_thresh_lin = std::pow(10.0f, local_mfx.sc_thresh / 20.0f);
+    float mst_sc_ratio_inv = 1.0f / std::max(1.0f, local_mfx.sc_ratio);
+
     for (uint32_t i = 0; i < frames; ++i) {
         float mix_l = 0.0f;
         float mix_r = 0.0f;
@@ -1310,8 +1394,11 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                         if (loop_f >= end_f) loop_f = start_f;
 
                         float note_pitch = static_cast<float>(v.note_num) - 48.0f + tp.sample.tune + (eff_p[1] - 0.5f) * 48.0f;
-                        float pitch_ratio = std::pow(2.0f, note_pitch / 12.0f);
-                        float step = pitch_ratio * (static_cast<float>(sb.sample_rate) * inv_sr);
+                        if (note_pitch != v.last_sample_pitch_note) {
+                            v.last_sample_pitch_note = note_pitch;
+                            v.sample_pitch_ratio = std::pow(2.0f, note_pitch / 12.0f);
+                        }
+                        float step = v.sample_pitch_ratio * (static_cast<float>(sb.sample_rate) * inv_sr);
 
                         uint32_t f0 = static_cast<uint32_t>(std::clamp(v.phase1, 0.0f, total_f - 1.0f));
                         uint32_t f1 = std::min(f0 + 1, sb.lengthFrames() - 1);
@@ -1360,8 +1447,12 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                     int s_idx = std::clamp(static_cast<int>(eff_p[1] * (sampler().sliceCount() - 1) + 0.5f), 0, sampler().sliceCount() - 1);
                     SlicePoint pt = sampler().getSlice(s_idx);
                     if (sb.loaded && pt.length_frames > 0) {
-                        float pitch_ratio = std::pow(2.0f, (tp.sample.tune / 12.0f) + (eff_p[2] - 0.5f) * 4.0f);
-                        float step = pitch_ratio * (static_cast<float>(sb.sample_rate) * inv_sr);
+                        float slice_pitch = (tp.sample.tune / 12.0f) + (eff_p[2] - 0.5f) * 4.0f;
+                        if (slice_pitch != v.last_sample_pitch_note) {
+                            v.last_sample_pitch_note = slice_pitch;
+                            v.sample_pitch_ratio = std::pow(2.0f, slice_pitch);
+                        }
+                        float step = v.sample_pitch_ratio * (static_cast<float>(sb.sample_rate) * inv_sr);
                         uint32_t cur_f = pt.start_frame + static_cast<uint32_t>(v.phase1);
                         if (v.phase1 < static_cast<float>(pt.length_frames) && cur_f + 1 < sb.lengthFrames()) {
                             float frac = v.phase1 - static_cast<float>(static_cast<uint32_t>(v.phase1));
@@ -1447,7 +1538,9 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                                     for (int s = 0; s < 7; ++s) {
                                         float det = 1.0f + kSupersawDetune[s] * det_spread;
                                         float dt_s = dt * det;
-                                        float ph = std::fmod(v.phase1 * det + s * (1.0f / 7.0f), 1.0f);
+                                        float ph = v.phase1 * det + s * (1.0f / 7.0f);
+                                        ph -= static_cast<float>(static_cast<int>(ph));
+                                        if (ph < 0.0f) ph += 1.0f;
                                         ss += (2.0f * ph - 1.0f) - polyBlep(ph, dt_s);
                                     }
                                     osc = ss * (1.0f / 7.0f) * 1.6f;
@@ -1516,34 +1609,38 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                 // Dual filter 1: High Pass Filter (Cytomic SVF, 12 dB or cascaded 24 dB) with Bipolar Decay Envelope
                 float eff_hpf = std::clamp(tp.hpf_cutoff + hpf_offset + (tp.hpf_env + hpf_env_offset) * v.hpf_env_val, 0.0f, 0.98f);
                 if (eff_hpf > 0.005f) {
-                    float f_hpf_hz = std::clamp(20.0f * std::pow(800.0f, eff_hpf), 20.0f, static_cast<float>(sample_rate) * 0.45f);
-                    float g_hpf = std::tan(3.14159265f * f_hpf_hz * inv_sr);
-                    float k_hpf = 2.0f - 1.9f * hpf_reso;
-                    float a1_h = 1.0f / (1.0f + g_hpf * (g_hpf + k_hpf));
-                    float a2_h = g_hpf * a1_h;
-                    float a3_h = g_hpf * a2_h;
+                    if ((i & 7) == 0) {
+                        float f_hpf_hz = std::clamp(20.0f * std::pow(800.0f, eff_hpf), 20.0f, static_cast<float>(sample_rate) * 0.45f);
+                        float g_hpf = std::tan(3.14159265f * f_hpf_hz * inv_sr);
+                        v.hpf_k = 2.0f - 1.9f * hpf_reso;
+                        v.hpf_a1 = 1.0f / (1.0f + g_hpf * (g_hpf + v.hpf_k));
+                        v.hpf_a2 = g_hpf * v.hpf_a1;
+                        v.hpf_a3 = g_hpf * v.hpf_a2;
+
+                        if (tp.hpf_24db) {
+                            // Stage 2 (4-pole 24 dB/oct, Linkwitz-Riley damped to prevent resonance squeal)
+                            v.hpf_k_b = 1.414f + (v.hpf_k - 1.414f) * 0.35f;
+                            v.hpf_a1_b = 1.0f / (1.0f + g_hpf * (g_hpf + v.hpf_k_b));
+                            v.hpf_a2_b = g_hpf * v.hpf_a1_b;
+                            v.hpf_a3_b = g_hpf * v.hpf_a2_b;
+                        }
+                    }
 
                     // Stage 1 (12 dB/oct)
                     float v3_h1 = raw - v.hpf_s2;
-                    float v1_h1 = a1_h * v.hpf_s1 + a2_h * v3_h1;
-                    float v2_h1 = v.hpf_s2 + a2_h * v.hpf_s1 + a3_h * v3_h1;
+                    float v1_h1 = v.hpf_a1 * v.hpf_s1 + v.hpf_a2 * v3_h1;
+                    float v2_h1 = v.hpf_s2 + v.hpf_a2 * v.hpf_s1 + v.hpf_a3 * v3_h1;
                     v.hpf_s1 = 2.0f * v1_h1 - v.hpf_s1;
                     v.hpf_s2 = 2.0f * v2_h1 - v.hpf_s2;
-                    float hp1 = raw - k_hpf * v1_h1 - v2_h1;
+                    float hp1 = raw - v.hpf_k * v1_h1 - v2_h1;
 
                     if (tp.hpf_24db) {
-                        // Stage 2 (4-pole 24 dB/oct, Linkwitz-Riley damped to prevent resonance squeal)
-                        float k_hpf2 = 1.414f + (k_hpf - 1.414f) * 0.35f;
-                        float a1_h2 = 1.0f / (1.0f + g_hpf * (g_hpf + k_hpf2));
-                        float a2_h2 = g_hpf * a1_h2;
-                        float a3_h2 = g_hpf * a2_h2;
-
                         float v3_h2 = hp1 - v.hpf_s2_b;
-                        float v1_h2 = a1_h2 * v.hpf_s1_b + a2_h2 * v3_h2;
-                        float v2_h2 = v.hpf_s2_b + a2_h2 * v.hpf_s1_b + a3_h2 * v3_h2;
+                        float v1_h2 = v.hpf_a1_b * v.hpf_s1_b + v.hpf_a2_b * v3_h2;
+                        float v2_h2 = v.hpf_s2_b + v.hpf_a2_b * v.hpf_s1_b + v.hpf_a3_b * v3_h2;
                         v.hpf_s1_b = 2.0f * v1_h2 - v.hpf_s1_b;
                         v.hpf_s2_b = 2.0f * v2_h2 - v.hpf_s2_b;
-                        raw = hp1 - k_hpf2 * v1_h2 - v2_h2;
+                        raw = hp1 - v.hpf_k_b * v1_h2 - v2_h2;
                     } else {
                         raw = hp1;
                     }
@@ -1552,31 +1649,36 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                 // Dual filter 2: Low Pass Filter (Cytomic SVF, 12 dB or cascaded 24 dB) with Bipolar Decay Envelope
                 float base_cut = (v.plock_cutoff >= 0.0f) ? v.plock_cutoff : tp.lpf_cutoff;
                 float eff_lpf = std::clamp(base_cut + cut_offset + (tp.lpf_env + env_offset) * v.lpf_env_val, 0.01f, 1.0f);
-                float f_lpf_hz = std::clamp(20.0f * std::pow(1000.0f, eff_lpf), 20.0f, static_cast<float>(sample_rate) * 0.45f);
-                float g_lpf = std::tan(3.14159265f * f_lpf_hz * inv_sr);
-                float k_lpf = 2.0f - 1.9f * lpf_reso;
-                float a1_l = 1.0f / (1.0f + g_lpf * (g_lpf + k_lpf));
-                float a2_l = g_lpf * a1_l;
-                float a3_l = g_lpf * a2_l;
+                if ((i & 7) == 0) {
+                    float f_lpf_hz = std::clamp(20.0f * std::pow(1000.0f, eff_lpf), 20.0f, static_cast<float>(sample_rate) * 0.45f);
+                    float g_lpf = std::tan(3.14159265f * f_lpf_hz * inv_sr);
+                    v.lpf_k = 2.0f - 1.9f * lpf_reso;
+                    v.lpf_a1 = 1.0f / (1.0f + g_lpf * (g_lpf + v.lpf_k));
+                    v.lpf_a2 = g_lpf * v.lpf_a1;
+                    v.lpf_a3 = g_lpf * v.lpf_a2;
+
+                    if (tp.lpf_24db) {
+                        // Stage 2 (4-pole 24 dB/oct, Linkwitz-Riley damped to prevent resonance squeal)
+                        v.lpf_k_b = 1.414f + (v.lpf_k - 1.414f) * 0.35f;
+                        v.lpf_a1_b = 1.0f / (1.0f + g_lpf * (g_lpf + v.lpf_k_b));
+                        v.lpf_a2_b = g_lpf * v.lpf_a1_b;
+                        v.lpf_a3_b = g_lpf * v.lpf_a2_b;
+                    }
+                }
 
                 // Stage 1 (12 dB/oct)
                 float v3_l1 = raw - v.lpf_s2;
-                float v1_l1 = a1_l * v.lpf_s1 + a2_l * v3_l1;
-                float v2_l1 = v.lpf_s2 + a2_l * v.lpf_s1 + a3_l * v3_l1;
+                float v1_l1 = v.lpf_a1 * v.lpf_s1 + v.lpf_a2 * v3_l1;
+                float v2_l1 = v.lpf_s2 + v.lpf_a2 * v.lpf_s1 + v.lpf_a3 * v3_l1;
                 v.lpf_s1 = 2.0f * v1_l1 - v.lpf_s1;
                 v.lpf_s2 = 2.0f * v2_l1 - v.lpf_s2;
                 float lp_out = v2_l1;
 
                 if (tp.lpf_24db) {
                     // Stage 2 (4-pole 24 dB/oct, Linkwitz-Riley damped to prevent resonance squeal)
-                    float k_lpf2 = 1.414f + (k_lpf - 1.414f) * 0.35f;
-                    float a1_l2 = 1.0f / (1.0f + g_lpf * (g_lpf + k_lpf2));
-                    float a2_l2 = g_lpf * a1_l2;
-                    float a3_l2 = g_lpf * a2_l2;
-
                     float v3_l2 = lp_out - v.lpf_s2_b;
-                    float v1_l2 = a1_l2 * v.lpf_s1_b + a2_l2 * v3_l2;
-                    float v2_l2 = v.lpf_s2_b + a2_l2 * v.lpf_s1_b + a3_l2 * v3_l2;
+                    float v1_l2 = v.lpf_a1_b * v.lpf_s1_b + v.lpf_a2_b * v3_l2;
+                    float v2_l2 = v.lpf_s2_b + v.lpf_a2_b * v.lpf_s1_b + v.lpf_a3_b * v3_l2;
                     v.lpf_s1_b = 2.0f * v1_l2 - v.lpf_s1_b;
                     v.lpf_s2_b = 2.0f * v2_l2 - v.lpf_s2_b;
                     lp_out = v2_l2;
@@ -1595,7 +1697,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             } else {
                 // Вище нуля: теплий синусоїдальний/гіперболічний овердрайв (guitar crunch)
                 float drive = 1.0f + g * 5.0f;
-                float sat = std::tanh(trk_sum * drive);
+                float sat = fast_tanh(trk_sum * drive);
                 float comp = 1.0f / std::sqrt(1.0f + g * 3.5f);
                 out_s = sat * comp;
             }
@@ -1610,7 +1712,7 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
             // 1. Bitcrusher (Elektron style: bit reduction 16 down to 1 bit)
             if (fx_p.bit_depth < 16) {
                 int b = std::clamp(fx_p.bit_depth, 1, 16);
-                float steps = std::pow(2.0f, static_cast<float>(b)) - 1.0f;
+                float steps = static_cast<float>((1 << b) - 1);
                 float half = steps * 0.5f;
                 s_l = std::round(s_l * half) / half;
                 s_r = std::round(s_r * half) / half;
@@ -1691,13 +1793,15 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                     } else {
                         fx_state.sc_env = sc_level + rel_c * (fx_state.sc_env - sc_level);
                     }
-                    float thresh_lin = std::pow(10.0f, fx_p.sc_thresh / 20.0f);
-                    if (fx_state.sc_env > thresh_lin && thresh_lin > 0.0001f) {
-                        float over_db = 20.0f * std::log10(fx_state.sc_env / thresh_lin);
-                        float gr_db = over_db * (1.0f - 1.0f / std::max(1.0f, fx_p.sc_ratio));
-                        fx_state.sc_gain = std::pow(10.0f, -gr_db / 20.0f);
-                    } else {
-                        fx_state.sc_gain = 1.0f;
+                    if ((i & 15) == 0) {
+                        float thresh_lin = std::pow(10.0f, fx_p.sc_thresh / 20.0f);
+                        if (fx_state.sc_env > thresh_lin && thresh_lin > 0.0001f) {
+                            float over_db = 20.0f * std::log10(fx_state.sc_env / thresh_lin);
+                            float gr_db = over_db * (1.0f - 1.0f / std::max(1.0f, fx_p.sc_ratio));
+                            fx_state.sc_gain = std::pow(10.0f, -gr_db / 20.0f);
+                        } else {
+                            fx_state.sc_gain = 1.0f;
+                        }
                     }
                     sig_l *= fx_state.sc_gain;
                     sig_r *= fx_state.sc_gain;
@@ -1843,8 +1947,8 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
         // Tanh Overdrive / Сатуратор із фільтром тембру
         if (drv_amt > 0.01f) {
             float drive_gain = 1.0f + drv_amt * 7.0f;
-            float sat_l = std::tanh(mix_l * drive_gain);
-            float sat_r = std::tanh(mix_r * drive_gain);
+            float sat_l = fast_tanh(mix_l * drive_gain);
+            float sat_r = fast_tanh(mix_r * drive_gain);
             float alpha = std::clamp(drv_tone * 0.85f + 0.10f, 0.05f, 0.95f);
             drive_lp_l_ += alpha * (sat_l - drive_lp_l_);
             drive_lp_r_ += alpha * (sat_r - drive_lp_r_);
@@ -1901,41 +2005,33 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
         } else {
             float drive = 1.0f + mg * 4.0f;
             float comp = 1.0f / std::sqrt(1.0f + mg * 3.0f);
-            m_l = std::tanh(m_l * drive) * comp;
-            m_r = std::tanh(m_r * drive) * comp;
+            m_l = fast_tanh(m_l * drive) * comp;
+            m_r = fast_tanh(m_r * drive) * comp;
         }
 
         // 2. Master Sidechain Compressor
         float sc_in = (local_mfx.sc_source == 0)
                           ? (std::fabs(m_l) + std::fabs(m_r)) * 0.5f
                           : std::fabs(last_track_sample_[std::clamp(local_mfx.sc_source - 1, 0, kMaxTracks - 1)]);
-        float m_atk = std::exp(-1.0f / (std::clamp(local_mfx.sc_attack, 0.001f, 0.100f) * static_cast<float>(sample_rate)));
-        float m_rel = std::exp(-1.0f / (std::clamp(local_mfx.sc_release, 0.020f, 1.000f) * static_cast<float>(sample_rate)));
         if (sc_in > mst_sc_env_) {
-            mst_sc_env_ = sc_in + m_atk * (mst_sc_env_ - sc_in);
+            mst_sc_env_ = sc_in + mst_sc_atk_c * (mst_sc_env_ - sc_in);
         } else {
-            mst_sc_env_ = sc_in + m_rel * (mst_sc_env_ - sc_in);
+            mst_sc_env_ = sc_in + mst_sc_rel_c * (mst_sc_env_ - sc_in);
         }
-        float m_thresh_lin = std::pow(10.0f, local_mfx.sc_thresh / 20.0f);
-        if (local_mfx.sc_thresh < -0.1f && mst_sc_env_ > m_thresh_lin && m_thresh_lin > 0.0001f) {
-            float over_db = 20.0f * std::log10(mst_sc_env_ / m_thresh_lin);
-            float gr_db = over_db * (1.0f - 1.0f / std::max(1.0f, local_mfx.sc_ratio));
-            mst_sc_gain_ = std::pow(10.0f, -gr_db / 20.0f);
-        } else {
-            mst_sc_gain_ = 1.0f;
+        if ((i & 15) == 0) {
+            if (local_mfx.sc_thresh < -0.1f && mst_sc_env_ > mst_sc_thresh_lin && mst_sc_thresh_lin > 0.0001f) {
+                float over_db = 20.0f * std::log10(mst_sc_env_ / mst_sc_thresh_lin);
+                float gr_db = over_db * (1.0f - mst_sc_ratio_inv);
+                mst_sc_gain_ = std::pow(10.0f, -gr_db / 20.0f);
+            } else {
+                mst_sc_gain_ = 1.0f;
+            }
         }
         m_l *= mst_sc_gain_;
         m_r *= mst_sc_gain_;
 
         // 3. Master HPF (Cytomic SVF, 12 dB 2-pole or 24 dB 4-pole) with Resonance
         if (local_mfx.hpf_cutoff > 0.005f) {
-            float f_hpf_hz = std::clamp(20.0f * std::pow(800.0f, local_mfx.hpf_cutoff), 20.0f, static_cast<float>(sample_rate) * 0.45f);
-            float g_hpf = std::tan(3.14159265f * f_hpf_hz * inv_sr);
-            float k_hpf = 2.0f - 1.9f * std::clamp(local_mfx.hpf_resonance, 0.0f, 0.95f);
-            float a1_h = 1.0f / (1.0f + g_hpf * (g_hpf + k_hpf));
-            float a2_h = g_hpf * a1_h;
-            float a3_h = g_hpf * a2_h;
-
             auto processHpfStage = [&](float in, float& s1, float& s2, float k, float a1, float a2, float a3) -> float {
                 float v3 = in - s2;
                 float v1 = a1 * s1 + a2 * v3;
@@ -1945,118 +2041,56 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                 return in - k * v1 - v2;
             };
 
-            m_l = processHpfStage(m_l, mst_hpf1_low_l_, mst_hpf1_band_l_, k_hpf, a1_h, a2_h, a3_h);
-            m_r = processHpfStage(m_r, mst_hpf1_low_r_, mst_hpf1_band_r_, k_hpf, a1_h, a2_h, a3_h);
+            m_l = processHpfStage(m_l, mst_hpf1_low_l_, mst_hpf1_band_l_, mst_k_hpf, mst_a1_h, mst_a2_h, mst_a3_h);
+            m_r = processHpfStage(m_r, mst_hpf1_low_r_, mst_hpf1_band_r_, mst_k_hpf, mst_a1_h, mst_a2_h, mst_a3_h);
 
             if (local_mfx.hpf_slope_24) {
-                float k_hpf2 = 1.414f + (k_hpf - 1.414f) * 0.35f;
-                float a1_h2 = 1.0f / (1.0f + g_hpf * (g_hpf + k_hpf2));
-                float a2_h2 = g_hpf * a1_h2;
-                float a3_h2 = g_hpf * a2_h2;
-                m_l = processHpfStage(m_l, mst_hpf2_low_l_, mst_hpf2_band_l_, k_hpf2, a1_h2, a2_h2, a3_h2);
-                m_r = processHpfStage(m_r, mst_hpf2_low_r_, mst_hpf2_band_r_, k_hpf2, a1_h2, a2_h2, a3_h2);
+                m_l = processHpfStage(m_l, mst_hpf2_low_l_, mst_hpf2_band_l_, mst_k_hpf2, mst_a1_h2, mst_a2_h2, mst_a3_h2);
+                m_r = processHpfStage(m_r, mst_hpf2_low_r_, mst_hpf2_band_r_, mst_k_hpf2, mst_a1_h2, mst_a2_h2, mst_a3_h2);
             }
         }
 
         // 4. Master Parametric Bell EQ Filter 1 (Low-Mid)
-        if (std::fabs(local_mfx.bell_gain) > 0.05f) {
-            float f0 = std::clamp(20.0f * std::pow(900.0f, local_mfx.bell_freq), 20.0f, 18000.0f);
-            float gain_lin = std::pow(10.0f, local_mfx.bell_gain / 40.0f);
-            float w0 = 2.0f * 3.14159265f * f0 * inv_sr;
-            float alpha = std::sin(w0) / (2.0f * std::clamp(local_mfx.bell_q, 0.2f, 10.0f));
-            float cosw0 = std::cos(w0);
-
-            float b0 = 1.0f + alpha * gain_lin;
-            float b1 = -2.0f * cosw0;
-            float b2 = 1.0f - alpha * gain_lin;
-            float a0 = 1.0f + alpha / gain_lin;
-            float a1 = -2.0f * cosw0;
-            float a2 = 1.0f - alpha / gain_lin;
-
-            float inv_a0 = 1.0f / a0;
-            float b0_n = b0 * inv_a0, b1_n = b1 * inv_a0, b2_n = b2 * inv_a0;
-            float a1_n = a1 * inv_a0, a2_n = a2 * inv_a0;
-
-            float y_l = b0_n * m_l + mst_bell_x1_l_;
-            mst_bell_x1_l_ = b1_n * m_l - a1_n * y_l + mst_bell_x2_l_;
-            mst_bell_x2_l_ = b2_n * m_l - a2_n * y_l;
+        if (bell1_c.active) {
+            float y_l = bell1_c.b0_n * m_l + mst_bell_x1_l_;
+            mst_bell_x1_l_ = bell1_c.b1_n * m_l - bell1_c.a1_n * y_l + mst_bell_x2_l_;
+            mst_bell_x2_l_ = bell1_c.b2_n * m_l - bell1_c.a2_n * y_l;
             m_l = y_l;
 
-            float y_r = b0_n * m_r + mst_bell_x1_r_;
-            mst_bell_x1_r_ = b1_n * m_r - a1_n * y_r + mst_bell_x2_r_;
-            mst_bell_x2_r_ = b2_n * m_r - a2_n * y_r;
+            float y_r = bell1_c.b0_n * m_r + mst_bell_x1_r_;
+            mst_bell_x1_r_ = bell1_c.b1_n * m_r - bell1_c.a1_n * y_r + mst_bell_x2_r_;
+            mst_bell_x2_r_ = bell1_c.b2_n * m_r - bell1_c.a2_n * y_r;
             m_r = y_r;
         }
 
         // 4b. Master Parametric Bell EQ Filter 2 (Mid)
-        if (std::fabs(local_mfx.bell2_gain) > 0.05f) {
-            float f0 = std::clamp(20.0f * std::pow(900.0f, local_mfx.bell2_freq), 20.0f, 18000.0f);
-            float gain_lin = std::pow(10.0f, local_mfx.bell2_gain / 40.0f);
-            float w0 = 2.0f * 3.14159265f * f0 * inv_sr;
-            float alpha = std::sin(w0) / (2.0f * std::clamp(local_mfx.bell2_q, 0.2f, 10.0f));
-            float cosw0 = std::cos(w0);
-
-            float b0 = 1.0f + alpha * gain_lin;
-            float b1 = -2.0f * cosw0;
-            float b2 = 1.0f - alpha * gain_lin;
-            float a0 = 1.0f + alpha / gain_lin;
-            float a1 = -2.0f * cosw0;
-            float a2 = 1.0f - alpha / gain_lin;
-
-            float inv_a0 = 1.0f / a0;
-            float b0_n = b0 * inv_a0, b1_n = b1 * inv_a0, b2_n = b2 * inv_a0;
-            float a1_n = a1 * inv_a0, a2_n = a2 * inv_a0;
-
-            float y_l = b0_n * m_l + mst_bell2_x1_l_;
-            mst_bell2_x1_l_ = b1_n * m_l - a1_n * y_l + mst_bell2_x2_l_;
-            mst_bell2_x2_l_ = b2_n * m_l - a2_n * y_l;
+        if (bell2_c.active) {
+            float y_l = bell2_c.b0_n * m_l + mst_bell2_x1_l_;
+            mst_bell2_x1_l_ = bell2_c.b1_n * m_l - bell2_c.a1_n * y_l + mst_bell2_x2_l_;
+            mst_bell2_x2_l_ = bell2_c.b2_n * m_l - bell2_c.a2_n * y_l;
             m_l = y_l;
 
-            float y_r = b0_n * m_r + mst_bell2_x1_r_;
-            mst_bell2_x1_r_ = b1_n * m_r - a1_n * y_r + mst_bell2_x2_r_;
-            mst_bell2_x2_r_ = b2_n * m_r - a2_n * y_r;
+            float y_r = bell2_c.b0_n * m_r + mst_bell2_x1_r_;
+            mst_bell2_x1_r_ = bell2_c.b1_n * m_r - bell2_c.a1_n * y_r + mst_bell2_x2_r_;
+            mst_bell2_x2_r_ = bell2_c.b2_n * m_r - bell2_c.a2_n * y_r;
             m_r = y_r;
         }
 
         // 4c. Master Parametric Bell EQ Filter 3 (High-Mid)
-        if (std::fabs(local_mfx.bell3_gain) > 0.05f) {
-            float f0 = std::clamp(20.0f * std::pow(900.0f, local_mfx.bell3_freq), 20.0f, 18000.0f);
-            float gain_lin = std::pow(10.0f, local_mfx.bell3_gain / 40.0f);
-            float w0 = 2.0f * 3.14159265f * f0 * inv_sr;
-            float alpha = std::sin(w0) / (2.0f * std::clamp(local_mfx.bell3_q, 0.2f, 10.0f));
-            float cosw0 = std::cos(w0);
-
-            float b0 = 1.0f + alpha * gain_lin;
-            float b1 = -2.0f * cosw0;
-            float b2 = 1.0f - alpha * gain_lin;
-            float a0 = 1.0f + alpha / gain_lin;
-            float a1 = -2.0f * cosw0;
-            float a2 = 1.0f - alpha / gain_lin;
-
-            float inv_a0 = 1.0f / a0;
-            float b0_n = b0 * inv_a0, b1_n = b1 * inv_a0, b2_n = b2 * inv_a0;
-            float a1_n = a1 * inv_a0, a2_n = a2 * inv_a0;
-
-            float y_l = b0_n * m_l + mst_bell3_x1_l_;
-            mst_bell3_x1_l_ = b1_n * m_l - a1_n * y_l + mst_bell3_x2_l_;
-            mst_bell3_x2_l_ = b2_n * m_l - a2_n * y_l;
+        if (bell3_c.active) {
+            float y_l = bell3_c.b0_n * m_l + mst_bell3_x1_l_;
+            mst_bell3_x1_l_ = bell3_c.b1_n * m_l - bell3_c.a1_n * y_l + mst_bell3_x2_l_;
+            mst_bell3_x2_l_ = bell3_c.b2_n * m_l - bell3_c.a2_n * y_l;
             m_l = y_l;
 
-            float y_r = b0_n * m_r + mst_bell3_x1_r_;
-            mst_bell3_x1_r_ = b1_n * m_r - a1_n * y_r + mst_bell3_x2_r_;
-            mst_bell3_x2_r_ = b2_n * m_r - a2_n * y_r;
+            float y_r = bell3_c.b0_n * m_r + mst_bell3_x1_r_;
+            mst_bell3_x1_r_ = bell3_c.b1_n * m_r - bell3_c.a1_n * y_r + mst_bell3_x2_r_;
+            mst_bell3_x2_r_ = bell3_c.b2_n * m_r - bell3_c.a2_n * y_r;
             m_r = y_r;
         }
 
         // 5. Master LPF (Cytomic SVF, 12 dB 2-pole or 24 dB 4-pole) with Resonance
         if (local_mfx.lpf_cutoff < 0.995f) {
-            float f_lpf_hz = std::clamp(20.0f * std::pow(1000.0f, local_mfx.lpf_cutoff), 20.0f, static_cast<float>(sample_rate) * 0.45f);
-            float g_lpf = std::tan(3.14159265f * f_lpf_hz * inv_sr);
-            float k_lpf = 2.0f - 1.9f * std::clamp(local_mfx.lpf_resonance, 0.0f, 0.95f);
-            float a1_l = 1.0f / (1.0f + g_lpf * (g_lpf + k_lpf));
-            float a2_l = g_lpf * a1_l;
-            float a3_l = g_lpf * a2_l;
-
             auto processLpfStage = [&](float in, float& s1, float& s2, float a1, float a2, float a3) -> float {
                 float v3 = in - s2;
                 float v1 = a1 * s1 + a2 * v3;
@@ -2066,16 +2100,12 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                 return v2;
             };
 
-            m_l = processLpfStage(m_l, mst_lpf1_low_l_, mst_lpf1_band_l_, a1_l, a2_l, a3_l);
-            m_r = processLpfStage(m_r, mst_lpf1_low_r_, mst_lpf1_band_r_, a1_l, a2_l, a3_l);
+            m_l = processLpfStage(m_l, mst_lpf1_low_l_, mst_lpf1_band_l_, mst_a1_l, mst_a2_l, mst_a3_l);
+            m_r = processLpfStage(m_r, mst_lpf1_low_r_, mst_lpf1_band_r_, mst_a1_l, mst_a2_l, mst_a3_l);
 
             if (local_mfx.lpf_slope_24) {
-                float k_lpf2 = 1.414f + (k_lpf - 1.414f) * 0.35f;
-                float a1_l2 = 1.0f / (1.0f + g_lpf * (g_lpf + k_lpf2));
-                float a2_l2 = g_lpf * a1_l2;
-                float a3_l2 = g_lpf * a2_l2;
-                m_l = processLpfStage(m_l, mst_lpf2_low_l_, mst_lpf2_band_l_, a1_l2, a2_l2, a3_l2);
-                m_r = processLpfStage(m_r, mst_lpf2_low_r_, mst_lpf2_band_r_, a1_l2, a2_l2, a3_l2);
+                m_l = processLpfStage(m_l, mst_lpf2_low_l_, mst_lpf2_band_l_, mst_a1_l2, mst_a2_l2, mst_a3_l2);
+                m_r = processLpfStage(m_r, mst_lpf2_low_r_, mst_lpf2_band_r_, mst_a1_l2, mst_a2_l2, mst_a3_l2);
             }
         }
 
