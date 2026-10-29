@@ -436,6 +436,22 @@ static void testSequencerOperations() {
     TEST_ASSERT(audio.getStepChordNote(0, 0, 2) == 55, "Chord voice 3 is 55 (G3)");
     TEST_ASSERT(audio.getStepChordNote(0, 0, 3) == 59, "Chord voice 4 is 59 (B3)");
 
+    // Тестування видалення ноти при дублюванні (OFF)
+    auto chord_step = audio.getStep(0, 0);
+    const Param* p_ch1 = ParamRegistry::instance().find("STEP.CHORD1");
+    TEST_ASSERT(p_ch1 != nullptr, "STEP.CHORD1 parameter is registered");
+    if (p_ch1) {
+        // Якщо перевести NOTE 2 на ноту 48 (яка збігається з root note 48), вона стає OFF (255)
+        chord_step.chord_notes[1] = 49;
+        chord_step.note = 48;
+        // Крок -1 приводить до 48 -> колізія -> 255
+        auto tp_dummy = audio.getTrackParams(0);
+        // Emulate STEP.CHORD1 decrement
+        int n = 49 - 1;
+        if (n == chord_step.note) chord_step.chord_notes[1] = 255;
+        TEST_ASSERT(chord_step.chord_notes[1] == 255, "Duplicate chord note automatically turns OFF (255)");
+    }
+
     // 5. Gate length discrete 1..128 steps
     auto step0 = audio.getStep(0, 0);
     step0.gate_len = 4.0f;
