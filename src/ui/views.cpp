@@ -623,36 +623,25 @@ void GridView::renderList(Canvas& cv, const UiContext& c, Rect area, bool popup)
         if (spec_.id == ViewId::kInspect) {
             int hx = box.x + 4;
             const int hy = box.y + 3;
-            cv.text(hx, hy, "Step Editor: ", palette::kTextDim);
+            cv.text(hx, hy, "Step Editor: ", palette::kTextMain);
             hx += Canvas::textWidth("Step Editor: ");
-            switch (c.app.inspect_page) {
-                case AppModel::InspectPage::kMidi:
-                    cv.text(hx, hy, "<MIDI>", palette::kParamTrig);
-                    hx += Canvas::textWidth("<MIDI>");
-                    cv.text(hx, hy, "-syn-mod-fx", palette::kTextDim);
-                    break;
-                case AppModel::InspectPage::kSyn:
-                    cv.text(hx, hy, "midi-", palette::kTextDim);
-                    hx += Canvas::textWidth("midi-");
-                    cv.text(hx, hy, "<SYN>", ColorRGB{60, 160, 255});
-                    hx += Canvas::textWidth("<SYN>");
-                    cv.text(hx, hy, "-mod-fx", palette::kTextDim);
-                    break;
-                case AppModel::InspectPage::kMod:
-                    cv.text(hx, hy, "midi-syn-", palette::kTextDim);
-                    hx += Canvas::textWidth("midi-syn-");
-                    cv.text(hx, hy, "<MOD>", palette::kAccentPurple);
-                    hx += Canvas::textWidth("<MOD>");
-                    cv.text(hx, hy, "-fx", palette::kTextDim);
-                    break;
-                case AppModel::InspectPage::kFx:
-                    cv.text(hx, hy, "midi-syn-mod-", palette::kTextDim);
-                    hx += Canvas::textWidth("midi-syn-mod-");
-                    cv.text(hx, hy, "<FX>", palette::kLevelOk);
-                    break;
-                default:
-                    break;
-            }
+
+            auto drawTab = [&](const char* name, bool active, ColorRGB active_col) {
+                if (active) {
+                    char b[16];
+                    std::snprintf(b, sizeof(b), "[%s]", name);
+                    cv.text(hx, hy, b, active_col);
+                    hx += Canvas::textWidth(b) + 6;
+                } else {
+                    cv.text(hx, hy, name, palette::kTextDim);
+                    hx += Canvas::textWidth(name) + 6;
+                }
+            };
+
+            drawTab("MIDI", c.app.inspect_page == AppModel::InspectPage::kMidi, palette::kParamTrig);
+            drawTab("SYN",  c.app.inspect_page == AppModel::InspectPage::kSyn,  ColorRGB{60, 160, 255});
+            drawTab("MOD",  c.app.inspect_page == AppModel::InspectPage::kMod,  palette::kAccentPurple);
+            drawTab("FX",   c.app.inspect_page == AppModel::InspectPage::kFx,   palette::kLevelOk);
         } else {
             if (spec_.header) cv.text(box.x + 4, box.y + 3, spec_.header(c), spec_.accent);
         }
@@ -777,12 +766,12 @@ void SeqView::navigate(UiContext& c, int dx, int dy, bool coarse) {
 
     if (c.app.rec_mode) {
         const int t = c.app.selected_track;
-        const int max_lanes = 13;
+        const int max_lanes = 14;
         if (dy != 0) {
             int new_lane = c.app.rec_cursor_lane + dy;
             if (new_lane < 0) {
                 // Плавний скрол вгору по півтонах
-                if (c.app.rec_scroll_pitch + 12 < 127) {
+                if (c.app.rec_scroll_pitch + 13 < 127) {
                     c.app.rec_scroll_pitch++;
                     c.app.rec_cursor_lane = 0;
                 }
@@ -790,12 +779,12 @@ void SeqView::navigate(UiContext& c, int dx, int dy, bool coarse) {
                 // Плавний скрол вниз по півтонах
                 if (c.app.rec_scroll_pitch > 0) {
                     c.app.rec_scroll_pitch--;
-                    c.app.rec_cursor_lane = 12;
+                    c.app.rec_cursor_lane = 13;
                 }
             } else {
                 c.app.rec_cursor_lane = new_lane;
             }
-            int cur_pitch = c.app.rec_scroll_pitch + (12 - c.app.rec_cursor_lane);
+            int cur_pitch = c.app.rec_scroll_pitch + (13 - c.app.rec_cursor_lane);
             c.app.rec_octave = std::clamp(cur_pitch / 12, 1, 8);
         }
         const int len = static_cast<int>(c.audio.getRowLength(t));
@@ -991,26 +980,26 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
         const uint32_t scroll_off = static_cast<uint32_t>(c.app.seq_scroll_step);
         const int grid_x = area.x + 28;
         const int step_w = 8;
-        const int grid_y = area.y + kHeaderH + 2;
+        const int grid_y = area.y + kHeaderH + 1;
         const int len_x = grid_x + static_cast<int>(kStepsPerPage) * step_w + 4;
         const uint32_t play = c.app.transport_playing ? (c.app.master_tick % len) : UINT32_MAX;
 
-        // Універсальний 13-півтоновий Piano Roll з плавним вертикальним скролом (повна октава C..C)
+        // Універсальний 14-півтоновий Piano Roll з плавним вертикальним скролом
         char hdr[96];
         static const char* kSemiNames[12] = {"C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#", "A ", "A#", "B "};
-        int cur_l = std::clamp(c.app.rec_cursor_lane, 0, 12);
-        int cur_pitch = c.app.rec_scroll_pitch + (12 - cur_l);
+        int cur_l = std::clamp(c.app.rec_cursor_lane, 0, 13);
+        int cur_pitch = c.app.rec_scroll_pitch + (13 - cur_l);
         c.app.rec_octave = std::clamp(cur_pitch / 12, 1, 8);
         std::snprintf(hdr, sizeof(hdr), "TRK %d: PIANO ROLL [%s] | NOTE %s%d (%d) | L%u",
                       t + 1, getEngineTypeName(tp.engine), kNoteNames[cur_pitch % 12], cur_pitch / 12 - 1, cur_pitch, len);
         cv.text(area.x + 4, area.y + 3, hdr, palette::kAccentCyan);
 
-        const int row_h = 12;
-        for (int l = 0; l < 13; ++l) {
+        const int row_h = 11;
+        for (int l = 0; l < 14; ++l) {
             const int y = grid_y + l * row_h;
             const bool is_lane = (l == cur_l);
             if (is_lane) cv.fill(area.x + 2, y, 24, row_h - 1, palette::kHeaderSel);
-            int row_pitch = c.app.rec_scroll_pitch + (12 - l);
+            int row_pitch = c.app.rec_scroll_pitch + (13 - l);
             int semi = ((row_pitch % 12) + 12) % 12;
             bool is_sharp = (kSemiNames[semi][1] == '#');
             char lbl[8];
@@ -1092,12 +1081,12 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
             cv.text(len_x, y + (row_h - 5) / 2, ltxt, is_lane ? palette::kAccentCyan : palette::kGridDim);
         }
 
-        // Нижній лейаут фортепіанної клавіатури, опущений впритул до нижнього оверлею (HUD)
+        // Нижній лейаут фортепіанної клавіатури, опущений впритул до нижнього оверлею (HUD на 208)
         const int kbd_x = area.x + 4;
         const int kbd_w = area.w - 8;
-        const int kbd_h = 17;
-        const int kbd_y = area.y + area.h - kbd_h - 1; // 16 + 192 - 17 - 1 = 190 (низ на 207, HUD на 208)
-        cv.rect(kbd_x - 1, kbd_y - 1, kbd_w + 2, kbd_h + 2, palette::kGridDim);
+        const int kbd_h = 24;
+        const int kbd_y = area.y + area.h - kbd_h; // 16 + 192 - 24 = 184 (низ рівно на 208)
+        cv.rect(kbd_x - 1, kbd_y - 1, kbd_w + 2, kbd_h + 1, palette::kGridDim);
 
         const int kbd_start_oct = std::clamp((cur_pitch / 12) - 1, 0, 8);
         const int white_key_w = kbd_w / 21;
@@ -1128,7 +1117,7 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
             if (wk % 7 == 0) {
                 char oct_lbl[4];
                 std::snprintf(oct_lbl, sizeof(oct_lbl), "C%d", oct);
-                cv.text(kx + 1, kbd_y + kbd_h - 7, oct_lbl, (is_cur || is_playing) ? palette::kPanelBg : palette::kTextDim);
+                cv.text(kx + 1, kbd_y + kbd_h - 8, oct_lbl, (is_cur || is_playing) ? palette::kPanelBg : palette::kTextDim);
             }
         }
 
@@ -1136,7 +1125,7 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
         static const int kBkSemi[5] = {1, 3, 6, 8, 10};
         static const int kBkWkOffset[5] = {0, 1, 3, 4, 5};
         const int bk_w = 8;
-        const int bk_h = 10;
+        const int bk_h = 15;
         for (int o = 0; o < 3; ++o) {
             int oct = kbd_start_oct + o;
             for (int b = 0; b < 5; ++b) {
