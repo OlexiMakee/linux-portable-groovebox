@@ -243,17 +243,17 @@ void setupAppLayout(UiShell& shell) {
             char b[96];
             switch (c.app.inspect_page) {
                 case AppModel::InspectPage::kSyn:
-                    std::snprintf(b, sizeof(b), "Step Editor: midi-<SYN>-mod-fx");
+                    std::snprintf(b, sizeof(b), "Step Editor: MIDI  [SYN]  MOD  FX");
                     break;
                 case AppModel::InspectPage::kMod:
-                    std::snprintf(b, sizeof(b), "Step Editor: midi-syn-<MOD>-fx");
+                    std::snprintf(b, sizeof(b), "Step Editor: MIDI  SYN  [MOD]  FX");
                     break;
                 case AppModel::InspectPage::kFx:
-                    std::snprintf(b, sizeof(b), "Step Editor: midi-syn-mod-<FX>");
+                    std::snprintf(b, sizeof(b), "Step Editor: MIDI  SYN  MOD  [FX]");
                     break;
                 case AppModel::InspectPage::kMidi:
                 default:
-                    std::snprintf(b, sizeof(b), "Step Editor: <MIDI>-syn-mod-fx");
+                    std::snprintf(b, sizeof(b), "Step Editor: [MIDI]  SYN  MOD  FX");
                     break;
             }
             return std::string(b);
@@ -266,24 +266,37 @@ void setupAppLayout(UiShell& shell) {
                     std::vector<std::string> pids;
                     switch (tp.engine) {
                         case EngineType::kDx7:
+                            pids = {"DX7.BANK", "TRK.PRESET", "TRK.P1", "TRK.GAIN_OVER", "TRK.P5", "TRK.P6", "TRK.P3", "TRK.P4", "TRK.P2"};
+                            break;
                         case EngineType::kAcid303:
+                            pids = {"TRK.PRESET", "TRK.P6", "TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5"};
+                            break;
                         case EngineType::kFm2Op:
                         case EngineType::kChordPad:
-                        case EngineType::kMidiOut:
                         case EngineType::kVaMono:
                         default:
                             pids = {"TRK.PRESET", "TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5", "TRK.P6"};
                             break;
                         case EngineType::kSampleOneShot:
                         case EngineType::kSliceSampler:
-                            pids = {"SMP.PLAY_MODE", "SMP.TUNE", "TRK.GAIN_OVER", "SMP.LOOP", "SMP.START", "SMP.LOOP_PT", "SMP.END", "SMP.SLICE"};
+                            if (tp.sample.play_mode == SampleEngineMode::kSlicer) {
+                                pids = {"SMP.PLAY_MODE", "SMP.TUNE", "TRK.GAIN_OVER", "SMP.GRID", "SMP.SLICE", "SMP.START", "SMP.END", "SMP.LOOP"};
+                            } else {
+                                pids = {"SMP.PLAY_MODE", "SMP.TUNE", "TRK.GAIN_OVER", "SMP.LOOP", "SMP.START", "SMP.LOOP_PT", "SMP.END", "SMP.SLICE"};
+                            }
                             break;
+                        case EngineType::kMidiOut:
+                            pids = {"TRK.PRESET", "TRK.P1", "TRK.P6", "TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5"};
+                            for (const auto& pid : pids) {
+                                syn_rows.push_back({"", {pid}});
+                            }
+                            return syn_rows;
                     }
-                    // Додаємо всі налаштування фільтрів та обвідної
+                    // Додаємо абсолютно всі фільтри та обвідні з вкладки SYN
                     std::vector<std::string> filter_pids = {
                         "TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC",
                         "TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC",
-                        "TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"
+                        "TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL", "TRK.LVL"
                     };
                     pids.insert(pids.end(), filter_pids.begin(), filter_pids.end());
                     for (const auto& pid : pids) {
@@ -312,7 +325,8 @@ void setupAppLayout(UiShell& shell) {
                         "FX.SC_SRC", "FX.SC_THR", "FX.SC_RAT", "FX.SC_ATK", "FX.SC_REL",
                         "FX.DLY_DIV", "FX.DLY_FBK", "FX.DLY_WID", "FX.DLY_MIX",
                         "FX.REV_DEC", "FX.REV_HICUT", "FX.REV_LOCUT", "FX.REV_PRE", "FX.REV_MIX",
-                        "STEP.DLY_SEND", "STEP.REV_SEND", "TRK.CHR"
+                        "TRK.DLY", "TRK.REV", "TRK.CHR",
+                        "STEP.DLY_SEND", "STEP.REV_SEND"
                     };
                     std::vector<GridRow> fx_rows;
                     for (const char* pid : kFxPids) {
