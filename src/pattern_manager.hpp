@@ -20,6 +20,7 @@ struct PatternData {
     char name[16] = "PATTERN";
     float bpm = 120.0f;
     uint32_t pattern_length = 64;
+    int active_rows_count = 8;
     std::array<TrackParameters, kTracksCount> tracks{};
     std::array<uint32_t, kTotalRows> row_lengths{};
     std::array<std::array<SequencerStep, kMaxSteps>, kTotalRows> steps{};

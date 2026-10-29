@@ -73,14 +73,15 @@ void PatternManager::switchPatternNow(int bank, int pattern, AudioEngine& engine
     auto& p = patterns_[idx];
     if (!p.initialized) {
         p.bpm = bpm;
-        p.pattern_length = engine.getPatternLength();
+        p.pattern_length = 16;
+        p.active_rows_count = 8;
         for (int t = 0; t < kTracksCount; ++t) {
             p.tracks[t] = engine.getTrackParams(t);
         }
         for (int r = 0; r < kTotalRows; ++r) {
-            p.row_lengths[r] = engine.getRowLength(r);
+            p.row_lengths[r] = 16;
             for (uint32_t s = 0; s < kMaxSteps; ++s) {
-                p.steps[r][s] = SequencerStep{};
+                p.steps[r][s] = SequencerStep{false, false, false, 48, {48, 255, 255, 255}, 0.90f, 0.60f, 100, TrigCondition::kNone, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
             }
         }
         p.initialized = true;
@@ -118,6 +119,7 @@ void PatternManager::captureCurrent(const AudioEngine& engine, float bpm) {
     }
 
     const int act = engine.getActiveRowCount();
+    p.active_rows_count = act;
     for (int r = 0; r < act; ++r) {
         p.row_lengths[r] = engine.getRowLength(r);
         for (uint32_t s = 0; s < p.pattern_length && s < kMaxSteps; ++s) {
@@ -134,12 +136,13 @@ void PatternManager::applyCurrent(AudioEngine& engine, float& bpm) {
 
     bpm = p.bpm;
     engine.setPatternLength(p.pattern_length);
+    engine.setActiveRowCount(p.active_rows_count);
 
     for (int t = 0; t < kTracksCount; ++t) {
         engine.setTrackParams(t, p.tracks[t]);
     }
 
-    const int act = engine.getActiveRowCount();
+    const int act = p.active_rows_count;
     for (int r = 0; r < act; ++r) {
         engine.setRowLength(r, p.row_lengths[r]);
         for (uint32_t s = 0; s < p.pattern_length && s < kMaxSteps; ++s) {
