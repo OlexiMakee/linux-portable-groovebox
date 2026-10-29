@@ -215,13 +215,15 @@ Param info(std::string id, std::string label, std::function<std::string(const Ui
 }
 
 // Параметри кроку під курсором секвенсора (для INSPECT)
-using StepMutator = void (*)(SequencerStep&, const TrackParameters&, int dir, bool coarse);
-using StepFormatter = std::string (*)(const SequencerStep&, const TrackParameters&);
+using StepMutator = std::function<void(SequencerStep&, const TrackParameters&, int dir, bool coarse)>;
+using StepFormatter = std::function<std::string(const SequencerStep&, const TrackParameters&)>;
 
-Param stepParam(std::string id, std::string label, StepFormatter fmt, StepMutator mut) {
+Param stepParam(std::string id, std::string label, StepFormatter fmt, StepMutator mut,
+                std::function<std::string(const UiContext&)> dyn_lbl = nullptr) {
     Param p;
     p.id = std::move(id);
     p.label = std::move(label);
+    if (dyn_lbl) p.dyn_label = std::move(dyn_lbl);
     p.value = [=](const UiContext& c) {
         const auto st = c.audio.getStep(c.app.cursor_row, c.app.cursor_step);
         return fmt(st, c.audio.getTrackParams(c.audio.getRowTrack(c.app.cursor_row)));
@@ -234,8 +236,38 @@ Param stepParam(std::string id, std::string label, StepFormatter fmt, StepMutato
     return p;
 }
 
-float lockedOr(float v, float dflt) { return v >= 0.0f ? v : dflt; }
+[[maybe_unused]] float lockedOr(float v, float dflt) { return v >= 0.0f ? v : dflt; }
 float stepNorm(int dir, bool coarse) { return dir * (coarse ? 8.0f : 1.0f) / 127.0f; }
+
+inline void updateStepHasPlock(SequencerStep& s) {
+    bool any = (s.plock_cutoff >= 0.0f) || (s.plock_val >= 0.0f) ||
+               (s.attack >= 0.0f) || (s.decay >= 0.0f) || (s.sustain >= 0.0f) || (s.release >= 0.0f) ||
+               (s.plock_sample_start >= 0.0f) || (s.plock_sample_end >= 0.0f) || (s.plock_sample_loop >= 0.0f) ||
+               (s.plock_delay_send >= 0.0f) || (s.plock_reverb_send >= 0.0f);
+    for (float p : s.plock_p) {
+        if (p >= 0.0f) any = true;
+    }
+    s.has_plock = any;
+}
+
+inline void stepPlockFloat(float& val, float dflt, int dir, bool coarse, SequencerStep& s) {
+    if (dir > 0) {
+        if (val < 0.0f) {
+            val = std::clamp(dflt + stepNorm(dir, coarse), 0.0f, 1.0f);
+        } else {
+            val = std::clamp(val + stepNorm(dir, coarse), 0.0f, 1.0f);
+        }
+    } else if (dir < 0) {
+        if (val < 0.0f) {
+            val = std::clamp(dflt + stepNorm(dir, coarse), 0.0f, 1.0f);
+        } else if (val <= 0.01f) {
+            val = -1.0f;
+        } else {
+            val = std::clamp(val + stepNorm(dir, coarse), 0.0f, 1.0f);
+        }
+    }
+    updateStepHasPlock(s);
+}
 
 const char* lfoWaveName(LfoWave w) { return getLfoWaveName(w); }
 const char* lfoModeName(LfoMode m) { return getLfoModeName(m); }
@@ -1421,33 +1453,88 @@ ParamRegistry::ParamRegistry() {
         [](SequencerStep& s, const TrackParameters&, int, bool) {
             s.slide = !s.slide;
         }));
-    add(stepParam("STEP.ATK", "ATTACK",
-        [](const SequencerStep& s, const TrackParameters& tp) { return fmt127(lockedOr(s.attack, tp.attack)) + (s.attack >= 0 ? " L" : ""); },
-        [](SequencerStep& s, const TrackParameters& tp, int dir, bool coarse) {
-            s.attack = std::clamp(lockedOr(s.attack, tp.attack) + stepNorm(dir, coarse), 0.0f, 1.0f);
-        }));
-    add(stepParam("STEP.DEC", "DECAY",
-        [](const SequencerStep& s, const TrackParameters& tp) { return fmt127(lockedOr(s.decay, tp.decay)) + (s.decay >= 0 ? " L" : ""); },
-        [](SequencerStep& s, const TrackParameters& tp, int dir, bool coarse) {
-            s.decay = std::clamp(lockedOr(s.decay, tp.decay) + stepNorm(dir, coarse), 0.01f, 1.0f);
-        }));
-    add(stepParam("STEP.SUS", "SUSTAIN",
-        [](const SequencerStep& s, const TrackParameters& tp) { return fmt127(lockedOr(s.sustain, tp.sustain)) + (s.sustain >= 0 ? " L" : ""); },
-        [](SequencerStep& s, const TrackParameters& tp, int dir, bool coarse) {
-            s.sustain = std::clamp(lockedOr(s.sustain, tp.sustain) + stepNorm(dir, coarse), 0.0f, 1.0f);
-        }));
-    add(stepParam("STEP.REL", "RELEASE",
-        [](const SequencerStep& s, const TrackParameters& tp) { return fmt127(lockedOr(s.release, tp.release)) + (s.release >= 0 ? " L" : ""); },
-        [](SequencerStep& s, const TrackParameters& tp, int dir, bool coarse) {
-            s.release = std::clamp(lockedOr(s.release, tp.release) + stepNorm(dir, coarse), 0.01f, 1.0f);
-        }));
     add(stepParam("STEP.CUT", "CUT LOCK",
         [](const SequencerStep& s, const TrackParameters&) {
-            return s.has_plock ? fmt127(lockedOr(s.plock_cutoff, 0.5f)) + " L" : std::string("---");
+            return s.plock_cutoff >= 0.0f ? fmt127(s.plock_cutoff) + " L" : std::string("--- (TRK)");
         },
-        [](SequencerStep& s, const TrackParameters&, int dir, bool coarse) {
-            s.has_plock = true;
-            s.plock_cutoff = std::clamp(lockedOr(s.plock_cutoff, 0.5f) + stepNorm(dir, coarse), 0.05f, 0.95f);
+        [](SequencerStep& s, const TrackParameters& tp, int dir, bool coarse) {
+            stepPlockFloat(s.plock_cutoff, tp.lpf_cutoff, dir, coarse, s);
+        }));
+    add(stepParam("STEP.ATK", "ATTACK",
+        [](const SequencerStep& s, const TrackParameters&) {
+            return s.attack >= 0.0f ? fmt127(s.attack) + " L" : std::string("--- (TRK)");
+        },
+        [](SequencerStep& s, const TrackParameters& tp, int dir, bool coarse) {
+            stepPlockFloat(s.attack, tp.attack, dir, coarse, s);
+        }));
+    add(stepParam("STEP.DEC", "DECAY",
+        [](const SequencerStep& s, const TrackParameters&) {
+            return s.decay >= 0.0f ? fmt127(s.decay) + " L" : std::string("--- (TRK)");
+        },
+        [](SequencerStep& s, const TrackParameters& tp, int dir, bool coarse) {
+            stepPlockFloat(s.decay, tp.decay, dir, coarse, s);
+        }));
+    add(stepParam("STEP.SUS", "SUSTAIN",
+        [](const SequencerStep& s, const TrackParameters&) {
+            return s.sustain >= 0.0f ? fmt127(s.sustain) + " L" : std::string("--- (TRK)");
+        },
+        [](SequencerStep& s, const TrackParameters& tp, int dir, bool coarse) {
+            stepPlockFloat(s.sustain, tp.sustain, dir, coarse, s);
+        }));
+    add(stepParam("STEP.REL", "RELEASE",
+        [](const SequencerStep& s, const TrackParameters&) {
+            return s.release >= 0.0f ? fmt127(s.release) + " L" : std::string("--- (TRK)");
+        },
+        [](SequencerStep& s, const TrackParameters& tp, int dir, bool coarse) {
+            stepPlockFloat(s.release, tp.release, dir, coarse, s);
+        }));
+    for (int i = 0; i < 6; ++i) {
+        add(stepParam("STEP.P" + std::to_string(i + 1), "P" + std::to_string(i + 1),
+            [i](const SequencerStep& s, const TrackParameters&) {
+                return s.plock_p[i] >= 0.0f ? fmt127(s.plock_p[i]) + " L" : std::string("--- (TRK)");
+            },
+            [i](SequencerStep& s, const TrackParameters& tp, int dir, bool coarse) {
+                stepPlockFloat(s.plock_p[i], tp.p[i], dir, coarse, s);
+            },
+            [i](const UiContext& c) {
+                const auto tp = c.audio.getTrackParams(c.audio.getRowTrack(c.app.cursor_row));
+                return "P" + std::to_string(i + 1) + " " + std::string(getParamName(tp.engine, i));
+            }));
+    }
+    add(stepParam("STEP.SMP_START", "SMP START",
+        [](const SequencerStep& s, const TrackParameters&) {
+            return s.plock_sample_start >= 0.0f ? fmt127(s.plock_sample_start) + " L" : std::string("--- (TRK)");
+        },
+        [](SequencerStep& s, const TrackParameters& tp, int dir, bool coarse) {
+            stepPlockFloat(s.plock_sample_start, tp.sample.start, dir, coarse, s);
+        }));
+    add(stepParam("STEP.SMP_LOOP", "SMP LOOP",
+        [](const SequencerStep& s, const TrackParameters&) {
+            return s.plock_sample_loop >= 0.0f ? fmt127(s.plock_sample_loop) + " L" : std::string("--- (TRK)");
+        },
+        [](SequencerStep& s, const TrackParameters& tp, int dir, bool coarse) {
+            stepPlockFloat(s.plock_sample_loop, tp.sample.loop_point, dir, coarse, s);
+        }));
+    add(stepParam("STEP.SMP_END", "SMP END",
+        [](const SequencerStep& s, const TrackParameters&) {
+            return s.plock_sample_end >= 0.0f ? fmt127(s.plock_sample_end) + " L" : std::string("--- (TRK)");
+        },
+        [](SequencerStep& s, const TrackParameters& tp, int dir, bool coarse) {
+            stepPlockFloat(s.plock_sample_end, tp.sample.end, dir, coarse, s);
+        }));
+    add(stepParam("STEP.DLY_SEND", "DLY SEND",
+        [](const SequencerStep& s, const TrackParameters&) {
+            return s.plock_delay_send >= 0.0f ? fmt127(s.plock_delay_send) + " L" : std::string("--- (TRK)");
+        },
+        [](SequencerStep& s, const TrackParameters& tp, int dir, bool coarse) {
+            stepPlockFloat(s.plock_delay_send, tp.delay_send, dir, coarse, s);
+        }));
+    add(stepParam("STEP.REV_SEND", "REV SEND",
+        [](const SequencerStep& s, const TrackParameters&) {
+            return s.plock_reverb_send >= 0.0f ? fmt127(s.plock_reverb_send) + " L" : std::string("--- (TRK)");
+        },
+        [](SequencerStep& s, const TrackParameters& tp, int dir, bool coarse) {
+            stepPlockFloat(s.plock_reverb_send, tp.reverb_send, dir, coarse, s);
         }));
     add(stepParam("STEP.PROB", "PROB",
         [](const SequencerStep& s, const TrackParameters&) { return std::to_string(s.probability) + "%"; },

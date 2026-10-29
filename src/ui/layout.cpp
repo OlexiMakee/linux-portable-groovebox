@@ -263,9 +263,24 @@ void setupAppLayout(UiShell& shell) {
             {"", {"STEP.VEL"}},
             {"", {"STEP.GATE"}},
             {"", {"STEP.SLIDE"}},
-            {"", {"STEP.CUT"}},
             {"", {"STEP.PROB"}},
-            {"", {"STEP.COND"}}
+            {"", {"STEP.COND"}},
+            {"", {"STEP.CUT"}},
+            {"", {"STEP.ATK"}},
+            {"", {"STEP.DEC"}},
+            {"", {"STEP.SUS"}},
+            {"", {"STEP.REL"}},
+            {"", {"STEP.P1"}},
+            {"", {"STEP.P2"}},
+            {"", {"STEP.P3"}},
+            {"", {"STEP.P4"}},
+            {"", {"STEP.P5"}},
+            {"", {"STEP.P6"}},
+            {"", {"STEP.SMP_START"}},
+            {"", {"STEP.SMP_LOOP"}},
+            {"", {"STEP.SMP_END"}},
+            {"", {"STEP.DLY_SEND"}},
+            {"", {"STEP.REV_SEND"}}
         };
         shell.registerView(std::make_unique<GridView>(std::move(ins_spec)));
     }
