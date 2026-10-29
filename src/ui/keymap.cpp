@@ -69,7 +69,8 @@ Keymap::Keymap() {
 
     // SELECT шар у секвенсорі (Elektron Pattern / Track Operations & Polymetry)
     bind(ViewId::kSeq, Layer::kSelect, Button::kA,         Gesture::kPress, "STEP.PREVIEW");
-    bind(ViewId::kSeq, Layer::kSelect, Button::kB,         Gesture::kPress, "SEQ.CLEAR_TRACK");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kB,         Gesture::kTap,   "SEQ.CLEAR_TRACK");
+    bind(ViewId::kSeq, Layer::kSelect, Button::kB,         Gesture::kHold,  "SEQ.DEL_TRACK_MODAL");
     bind(ViewId::kSeq, Layer::kSelect, Button::kL1,        Gesture::kPress, "SEQ.DEL_TRACK_SAFE");
     bind(ViewId::kSeq, Layer::kSelect, Button::kX,         Gesture::kPress, "STEP.COPY");
     bind(ViewId::kSeq, Layer::kSelect, Button::kY,         Gesture::kPress, "STEP.PASTE");

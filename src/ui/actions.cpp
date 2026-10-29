@@ -191,6 +191,17 @@ ActionRegistry::ActionRegistry() {
 
     // ---------------- Секвенсор: кроки, ноти, патерни ----------------
     add(Action{"SEQ.TRIG", "TRIG", [](UiContext& c) {
+        if (c.app.delete_track_modal_open) {
+            c.audio.deleteRow(c.app.delete_track_modal_target);
+            if (c.app.cursor_row >= c.audio.getActiveRowCount()) {
+                c.app.cursor_row = std::max(0, c.audio.getActiveRowCount() - 1);
+            }
+            c.app.delete_track_modal_open = false;
+            c.app.modal_cooldown_until_ms = c.now_ms + 250;
+            c.app.last_action = "TRACK DELETED";
+            return;
+        }
+
         if (c.app.rec_mode) {
             int t = c.app.selected_track;
             int step = c.app.cursor_step;
@@ -423,6 +434,13 @@ ActionRegistry::ActionRegistry() {
         }
     }});
     add(Action{"SEQ.CLEAR_STEP", "DEL", [](UiContext& c) {
+        if (c.app.delete_track_modal_open) {
+            c.app.delete_track_modal_open = false;
+            c.app.modal_cooldown_until_ms = c.now_ms + 250;
+            c.app.last_action = "CANCELLED";
+            return;
+        }
+
         if (c.app.seq_submode == SeqSubmode::kSong) {
             if (c.app.song_cursor_row < c.app.song_rows_count) {
                 auto& cur_s = c.app.song_chain[c.app.song_cursor_row];
@@ -525,17 +543,53 @@ ActionRegistry::ActionRegistry() {
             if (c.app.cursor_step >= static_cast<int>(next)) c.app.cursor_step = static_cast<int>(next - 1);
         }
     }});
-    add(Action{"SEQ.CLEAR_TRACK", "CLEAR TRK", [](UiContext& c) {
+    add(Action{"SEQ.DEL_TRACK_MODAL", "DEL TRK", [](UiContext& c) {
+        const int act = c.audio.getActiveRowCount();
+        if (act > 1 && c.app.cursor_row < act) {
+            c.app.delete_track_modal_target = c.app.cursor_row;
+            c.app.delete_track_modal_open = true;
+            c.app.last_action = "DELETE TRACK?";
+        } else {
+            c.app.last_action = "CANNOT DELETE LAST TRACK";
+        }
+    }});
+    add(Action{"SEQ.CLEAR_TRACK", "CLR", [](UiContext& c) {
         const int act = c.audio.getActiveRowCount();
         if (c.app.cursor_row >= 0 && c.app.cursor_row < act) {
             const uint32_t len = c.audio.getRowLength(c.app.cursor_row);
+
+            // Перевіряємо, чи є активні кроки на поточному треку
+            bool has_active_steps = false;
             for (uint32_t s = 0; s < len; ++s) {
+                if (c.audio.getStep(c.app.cursor_row, s).enabled) {
+                    has_active_steps = true;
+                    break;
+                }
+            }
+
+            // Якщо трек порожній і ми щойно його очистили — відновлюємо (Undo)
+            if (!has_active_steps && c.app.clear_track_undo_row == c.app.cursor_row && !c.app.clear_track_undo_steps.empty()) {
+                for (size_t s = 0; s < c.app.clear_track_undo_steps.size() && s < len; ++s) {
+                    c.audio.setStep(c.app.cursor_row, static_cast<int>(s), c.app.clear_track_undo_steps[s]);
+                }
+                c.app.clear_track_undo_steps.clear();
+                c.app.clear_track_undo_row = -1;
+                c.app.last_action = "TRACK RESTORED";
+                return;
+            }
+
+            // Зберігаємо поточні кроки для можливості скасування (Undo)
+            c.app.clear_track_undo_steps.clear();
+            c.app.clear_track_undo_steps.reserve(len);
+            for (uint32_t s = 0; s < len; ++s) {
+                c.app.clear_track_undo_steps.push_back(c.audio.getStep(c.app.cursor_row, s));
                 c.audio.clearStep(c.app.cursor_row, s);
             }
+            c.app.clear_track_undo_row = c.app.cursor_row;
             c.app.last_action = "TRACK CLEARED";
         }
     }});
-    add(Action{"STEP.COPY", "COPY TRIG", [](UiContext& c) {
+    add(Action{"STEP.COPY", "CPY", [](UiContext& c) {
         const int act = c.audio.getActiveRowCount();
         if (c.app.cursor_row >= 0 && c.app.cursor_row < act) {
             c.app.clipboard_step = c.audio.getStep(c.app.cursor_row, c.app.cursor_step);
@@ -543,7 +597,7 @@ ActionRegistry::ActionRegistry() {
             c.app.last_action = "TRIG COPIED";
         }
     }});
-    add(Action{"STEP.PASTE", "PASTE TRIG", [](UiContext& c) {
+    add(Action{"STEP.PASTE", "PST", [](UiContext& c) {
         const int act = c.audio.getActiveRowCount();
         if (c.app.has_clipboard_step && c.app.cursor_row >= 0 && c.app.cursor_row < act) {
             c.audio.setStep(c.app.cursor_row, c.app.cursor_step, c.app.clipboard_step);
@@ -653,9 +707,12 @@ ActionRegistry::ActionRegistry() {
             c.app.last_action = ok ? "REC STARTED" : "ERR: REC FAIL";
         }
     }});
-    add(Action{"STEP.PREVIEW", "PREV", [](UiContext& c) {
+    add(Action{"STEP.PREVIEW", "PRV", [](UiContext& c) {
         if (c.app.cursor_row < c.audio.getActiveRowCount()) {
-            c.audio.previewStep(c.app.cursor_row, c.app.cursor_step);
+            auto st = c.audio.getStep(c.app.cursor_row, c.app.cursor_step);
+            if (st.enabled) {
+                c.audio.previewStep(c.app.cursor_row, c.app.cursor_step);
+            }
         }
     }});
     add(Action{"TRACK.PREVIEW_NOTE", "PREV", [](UiContext& c) {

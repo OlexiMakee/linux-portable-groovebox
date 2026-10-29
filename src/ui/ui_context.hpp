@@ -185,6 +185,14 @@ struct AppModel {
     bool mod_picker_open = false;
     int mod_picker_sel = 0;
     std::string mod_picker_param_id;
+
+    // Контекстне модальне вікно видалення треку (SELECT + B Hold)
+    bool delete_track_modal_open = false;
+    int delete_track_modal_target = 0;
+
+    // Undo буфер для Clear Track (повторне натискання повертає стертий патерн)
+    int clear_track_undo_row = -1;
+    std::vector<SequencerStep> clear_track_undo_steps;
 };
 
 inline bool isModalView(ViewId v) {
@@ -210,6 +218,7 @@ inline void closeAllModals(AppModel& app) {
     app.engine_menu_open = false;
     app.step_inspector_open = false;
     app.arp_modal_open = false;
+    app.delete_track_modal_open = false;
 }
 
 // Контекст, який отримують усі Param / Action / View (DIP: залежність від абстракції контексту)
