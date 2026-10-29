@@ -105,6 +105,7 @@ struct AppModel {
     }();
     int rec_cursor_lane = 0;// 0..7 (Drum Lanes) або 0..11 (Piano Roll Semitones)
     int rec_octave = 3;     // Октава піанорола 1..8 (C1..C8)
+    int rec_scroll_pitch = 36; // Нижній півтон у поточному вікні піанорола 0..115 (плавний скрол)
     uint32_t voice_limit_alert_until_ms = 0; // Показ червоного попередження "VOICE LIMIT: MAX 4"
 
     // Режим перформансу (жива гра на педах/інструментах)

@@ -175,7 +175,8 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
     const int sel_c = colOf(c);
 
     const bool has_pinned_bottom = (spec_.id == ViewId::kMix || spec_.id == ViewId::kFx);
-    const int vis = has_pinned_bottom ? 7 : visibleRows(spec_, area);
+    const bool is_master = (spec_.id == ViewId::kMix && c.app.mix_submode == MixSubmode::kMaster);
+    const int vis = is_master ? 6 : (has_pinned_bottom ? 7 : visibleRows(spec_, area));
     const int scroll = std::clamp(c.app.grid_scroll[static_cast<int>(spec_.id)], 0, std::max(0, total_rows - vis));
     const int rows_to_draw = std::min(vis, total_rows - scroll);
 
@@ -368,31 +369,36 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
 
     // Закріплений знизу над HUD лейаут індикації (Scope + VU для кожного треку + Master)
     if (has_pinned_bottom) {
-        const int lower_y = area.y + area.h - 26;
+        const bool is_master = (spec_.id == ViewId::kMix && c.app.mix_submode == MixSubmode::kMaster);
+        const int lower_h = is_master ? 40 : 26;
+        const int lower_y = area.y + area.h - lower_h;
         cv.line(area.x, lower_y, area.x + area.w - 1, lower_y, palette::kGridDim);
-        cv.fill(area.x, lower_y + 1, area.w, 25, palette::kPanelBg);
+        cv.fill(area.x, lower_y + 1, area.w, lower_h - 1, palette::kPanelBg);
 
         const int mst_x = area.x + area.w - 24;
 
-        if (spec_.id == ViewId::kMix && c.app.mix_submode == MixSubmode::kMaster) {
+        if (is_master) {
             // ЕКРАН МАСТЕРИНГУ: графік еквалайзеру (АЧХ) ліворуч/по центру,
-            // а праворуч від АЧХ — смуги мастера
+            // а праворуч від АЧХ — смуги мастера на всю висоту 36px
             const int eq_x0 = area.x + 6;
             const int eq_w = mst_x - eq_x0 - 6;
             const int eq_y0 = lower_y + 2;
-            const int eq_h = 22;
+            const int eq_h = 36;
             const int zero_y = eq_y0 + eq_h / 2;
 
             // Рамка та частотна сітка еквалайзера
             cv.rect(eq_x0 - 1, eq_y0 - 1, eq_w + 2, eq_h + 2, palette::kGridDim);
 
-            const int x_100 = eq_x0 + static_cast<int>(eq_w * 0.233f);
-            const int x_1k  = eq_x0 + static_cast<int>(eq_w * 0.566f);
-            const int x_10k = eq_x0 + static_cast<int>(eq_w * 0.900f);
+            const float ln_range = std::log(1200.0f);
+            const int x_100 = eq_x0 + static_cast<int>(eq_w * (std::log(100.0f / 20.0f) / ln_range));
+            const int x_1k  = eq_x0 + static_cast<int>(eq_w * (std::log(1000.0f / 20.0f) / ln_range));
+            const int x_10k = eq_x0 + static_cast<int>(eq_w * (std::log(10000.0f / 20.0f) / ln_range));
+            const int x_20k = eq_x0 + static_cast<int>(eq_w * (std::log(20000.0f / 20.0f) / ln_range));
 
             cv.line(x_100, eq_y0, x_100, eq_y0 + eq_h - 1, palette::kGridDim);
             cv.line(x_1k,  eq_y0, x_1k,  eq_y0 + eq_h - 1, palette::kGridDim);
             cv.line(x_10k, eq_y0, x_10k, eq_y0 + eq_h - 1, palette::kGridDim);
+            cv.line(x_20k, eq_y0, x_20k, eq_y0 + eq_h - 1, palette::kGridDim);
 
             // Нульова лінія 0 dB (пунктир)
             for (int dx = 0; dx < eq_w; dx += 4) {
@@ -425,14 +431,22 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
             const auto mfx = c.audio.getMasterFx();
             float f_hpf = (mfx.hpf_cutoff > 0.005f) ? (20.0f * std::pow(800.0f, mfx.hpf_cutoff)) : 0.0f;
             float hpf_order = mfx.hpf_slope_24 ? 4.0f : 2.0f;
-            float f_bell = 40.0f * std::pow(400.0f, mfx.bell_freq);
-            float bell_q = std::clamp(mfx.bell_q, 0.2f, 10.0f);
+
+            float f_bell1 = 40.0f * std::pow(400.0f, mfx.bell_freq);
+            float bell1_q = std::clamp(mfx.bell_q, 0.2f, 10.0f);
+
+            float f_bell2 = 40.0f * std::pow(400.0f, mfx.bell2_freq);
+            float bell2_q = std::clamp(mfx.bell2_q, 0.2f, 10.0f);
+
+            float f_bell3 = 40.0f * std::pow(400.0f, mfx.bell3_freq);
+            float bell3_q = std::clamp(mfx.bell3_q, 0.2f, 10.0f);
+
             float f_lpf = (mfx.lpf_cutoff < 0.995f) ? (20.0f * std::pow(1000.0f, mfx.lpf_cutoff)) : 30000.0f;
             float lpf_order = mfx.lpf_slope_24 ? 4.0f : 2.0f;
 
             int prev_cy = zero_y;
             for (int dx = 0; dx < eq_w; ++dx) {
-                float f = 20.0f * std::pow(1000.0f, static_cast<float>(dx) / static_cast<float>(eq_w));
+                float f = 20.0f * std::pow(1200.0f, static_cast<float>(dx) / static_cast<float>(eq_w));
 
                 float hpf_db = 0.0f;
                 if (f_hpf > 20.0f) {
@@ -440,10 +454,22 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
                     hpf_db = -10.0f * std::log10(1.0f + std::pow(1.0f / std::max(0.001f, r), hpf_order));
                 }
 
-                float bell_db = 0.0f;
+                float bell1_db = 0.0f;
                 if (std::fabs(mfx.bell_gain) > 0.05f) {
-                    float f_ratio = f / std::max(1.0f, f_bell) - f_bell / std::max(1.0f, f);
-                    bell_db = mfx.bell_gain / (1.0f + bell_q * bell_q * f_ratio * f_ratio);
+                    float f_ratio = f / std::max(1.0f, f_bell1) - f_bell1 / std::max(1.0f, f);
+                    bell1_db = mfx.bell_gain / (1.0f + bell1_q * bell1_q * f_ratio * f_ratio);
+                }
+
+                float bell2_db = 0.0f;
+                if (std::fabs(mfx.bell2_gain) > 0.05f) {
+                    float f_ratio = f / std::max(1.0f, f_bell2) - f_bell2 / std::max(1.0f, f);
+                    bell2_db = mfx.bell2_gain / (1.0f + bell2_q * bell2_q * f_ratio * f_ratio);
+                }
+
+                float bell3_db = 0.0f;
+                if (std::fabs(mfx.bell3_gain) > 0.05f) {
+                    float f_ratio = f / std::max(1.0f, f_bell3) - f_bell3 / std::max(1.0f, f);
+                    bell3_db = mfx.bell3_gain / (1.0f + bell3_q * bell3_q * f_ratio * f_ratio);
                 }
 
                 float lpf_db = 0.0f;
@@ -452,8 +478,8 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
                     lpf_db = -10.0f * std::log10(1.0f + std::pow(r, lpf_order));
                 }
 
-                float total_db = hpf_db + bell_db + lpf_db;
-                int cur_cy = zero_y - static_cast<int>(std::clamp(total_db * (10.0f / 18.0f), -10.0f, 10.0f));
+                float total_db = hpf_db + bell1_db + bell2_db + bell3_db + lpf_db;
+                int cur_cy = zero_y - static_cast<int>(std::clamp(total_db * (16.0f / 18.0f), -16.0f, 16.0f));
 
                 if (dx == 0) {
                     cv.fill(eq_x0 + dx, cur_cy, 1, 1, palette::kAccentOrange);
@@ -466,10 +492,11 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
             cv.text(x_100 - 6, eq_y0 + 2, "100", palette::kTextDim);
             cv.text(x_1k  - 4, eq_y0 + 2, "1K",  palette::kTextDim);
             cv.text(x_10k - 6, eq_y0 + 2, "10K", palette::kTextDim);
+            cv.text(x_20k - 6, eq_y0 + 2, "20K", palette::kTextDim);
 
-            // Праворуч від АЧХ залишаємо повнорозмірні смуги мастера на всю висоту 22px
-            widgets::verticalMeter(cv, Rect{mst_x, lower_y + 2, 8, 22}, c.tel.vu_left);
-            widgets::verticalMeter(cv, Rect{mst_x + 10, lower_y + 2, 8, 22}, c.tel.vu_right);
+            // Праворуч від АЧХ залишаємо повнорозмірні смуги мастера на всю висоту 36px
+            widgets::verticalMeter(cv, Rect{mst_x, lower_y + 2, 8, 36}, c.tel.vu_left);
+            widgets::verticalMeter(cv, Rect{mst_x + 10, lower_y + 2, 8, 36}, c.tel.vu_right);
         } else {
             // 1. Квадратний міні-осцилограф висотою 22px
             widgets::scope(cv, Rect{area.x + 4, lower_y + 2, 22, 22}, c.tel.scope_samples, palette::kAccentCyan);
@@ -523,9 +550,42 @@ void GridView::renderList(Canvas& cv, const UiContext& c, Rect area, bool popup)
         box.x = area.x + (area.w - box.w) / 2;
         box.y = area.y + 6;
         cv.fill(box.x, box.y, box.w, box.h, palette::kPanelBg);
-        cv.rect(box.x, box.y, box.w, box.h, spec_.accent);
+        cv.rect(box.x, box.y, box.w, box.h, palette::kTextDim);
         cv.fill(box.x + 1, box.y + 1, box.w - 2, 10, palette::kHeaderSel);
-        if (spec_.header) cv.text(box.x + 4, box.y + 3, spec_.header(c), spec_.accent);
+        if (spec_.id == ViewId::kInspect) {
+            int hx = box.x + 4;
+            const int hy = box.y + 3;
+            switch (c.app.inspect_page) {
+                case AppModel::InspectPage::kMidi:
+                    cv.text(hx, hy, "<MIDI>", palette::kParamTrig);
+                    hx += Canvas::textWidth("<MIDI>");
+                    cv.text(hx, hy, "-syn-mod-fx", palette::kTextDim);
+                    break;
+                case AppModel::InspectPage::kSyn:
+                    cv.text(hx, hy, "midi-", palette::kTextDim);
+                    hx += Canvas::textWidth("midi-");
+                    cv.text(hx, hy, "<SYN>", ColorRGB{60, 160, 255});
+                    hx += Canvas::textWidth("<SYN>");
+                    cv.text(hx, hy, "-mod-fx", palette::kTextDim);
+                    break;
+                case AppModel::InspectPage::kMod:
+                    cv.text(hx, hy, "midi-syn-", palette::kTextDim);
+                    hx += Canvas::textWidth("midi-syn-");
+                    cv.text(hx, hy, "<MOD>", palette::kAccentPurple);
+                    hx += Canvas::textWidth("<MOD>");
+                    cv.text(hx, hy, "-fx", palette::kTextDim);
+                    break;
+                case AppModel::InspectPage::kFx:
+                    cv.text(hx, hy, "midi-syn-mod-", palette::kTextDim);
+                    hx += Canvas::textWidth("midi-syn-mod-");
+                    cv.text(hx, hy, "<FX>", palette::kLevelOk);
+                    break;
+                default:
+                    break;
+            }
+        } else {
+            if (spec_.header) cv.text(box.x + 4, box.y + 3, spec_.header(c), spec_.accent);
+        }
         y0 = box.y + 14;
 
         // Міні-піанорол акорду праворуч (Digitakt chord mini-roll)
@@ -649,24 +709,22 @@ void SeqView::navigate(UiContext& c, int dx, int dy, bool coarse) {
         if (dy != 0) {
             int new_lane = c.app.rec_cursor_lane + dy;
             if (new_lane < 0) {
-                // Вгору за межі октави (назва B знаходиться вгорі, lane 0)
-                if (c.app.rec_octave < 8) {
-                    c.app.rec_octave++;
-                    c.app.rec_cursor_lane = 11;
-                } else {
+                // Плавний скрол вгору по півтонах
+                if (c.app.rec_scroll_pitch + 11 < 127) {
+                    c.app.rec_scroll_pitch++;
                     c.app.rec_cursor_lane = 0;
                 }
             } else if (new_lane >= max_lanes) {
-                // Вниз за межі октави (назва C знаходиться внизу, lane 11)
-                if (c.app.rec_octave > 1) {
-                    c.app.rec_octave--;
-                    c.app.rec_cursor_lane = 0;
-                } else {
+                // Плавний скрол вниз по півтонах
+                if (c.app.rec_scroll_pitch > 0) {
+                    c.app.rec_scroll_pitch--;
                     c.app.rec_cursor_lane = 11;
                 }
             } else {
                 c.app.rec_cursor_lane = new_lane;
             }
+            int cur_pitch = c.app.rec_scroll_pitch + (11 - c.app.rec_cursor_lane);
+            c.app.rec_octave = std::clamp(cur_pitch / 12, 1, 8);
         }
         const int len = static_cast<int>(c.audio.getRowLength(t));
         if (dx != 0 && len > 0) {
@@ -865,25 +923,26 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
         const int len_x = grid_x + static_cast<int>(kStepsPerPage) * step_w + 4;
         const uint32_t play = c.app.transport_playing ? (c.app.current_step % len) : UINT32_MAX;
 
-        // Універсальний 12-півтоновий Piano Roll для всіх доріжок (включаючи Sampler)
+        // Універсальний 12-півтоновий Piano Roll з плавним вертикальним скролом
         char hdr[96];
-        static const char* kSemiNames[12] = {"B ", "A#", "A ", "G#", "G ", "F#", "F ", "E ", "D#", "D ", "C#", "C "};
-        static const int kSemiIntervals[12] = {11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+        static const char* kSemiNames[12] = {"C ", "C#", "D ", "D#", "E ", "F ", "F#", "G ", "G#", "A ", "A#", "B "};
         int cur_l = std::clamp(c.app.rec_cursor_lane, 0, 11);
-        int cur_pitch = c.app.rec_octave * 12 + kSemiIntervals[cur_l];
-        std::snprintf(hdr, sizeof(hdr), "TRK %d: PIANO ROLL [%s] | OCT %d | NOTE %s%d | L%u",
-                      t + 1, getEngineTypeName(tp.engine), c.app.rec_octave, kNoteNames[cur_pitch % 12], cur_pitch / 12 - 1, len);
+        int cur_pitch = c.app.rec_scroll_pitch + (11 - cur_l);
+        c.app.rec_octave = std::clamp(cur_pitch / 12, 1, 8);
+        std::snprintf(hdr, sizeof(hdr), "TRK %d: PIANO ROLL [%s] | NOTE %s%d (%d) | L%u",
+                      t + 1, getEngineTypeName(tp.engine), kNoteNames[cur_pitch % 12], cur_pitch / 12 - 1, cur_pitch, len);
         cv.text(area.x + 4, area.y + 3, hdr, palette::kAccentCyan);
 
-        const int row_h = std::clamp((area.h - kHeaderH - 4) / 12, 8, 12);
+        const int row_h = 12;
         for (int l = 0; l < 12; ++l) {
             const int y = grid_y + l * row_h;
             const bool is_lane = (l == cur_l);
             if (is_lane) cv.fill(area.x + 2, y, 24, row_h - 1, palette::kHeaderSel);
-            int row_pitch = c.app.rec_octave * 12 + kSemiIntervals[l];
-            bool is_sharp = (kSemiNames[l][1] == '#');
+            int row_pitch = c.app.rec_scroll_pitch + (11 - l);
+            int semi = ((row_pitch % 12) + 12) % 12;
+            bool is_sharp = (kSemiNames[semi][1] == '#');
             char lbl[8];
-            std::snprintf(lbl, sizeof(lbl), "%-3s", kSemiNames[l]);
+            std::snprintf(lbl, sizeof(lbl), "%-3s", kSemiNames[semi]);
             cv.text(area.x + 4, y + (row_h - 5) / 2, lbl, is_lane ? palette::kAccentCyan : (is_sharp ? palette::kGridDim : palette::kTextDim));
 
             const int th = row_h - 2;
@@ -891,19 +950,30 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
                 const uint32_t idx = scroll_off + s;
                 const int x = grid_x + static_cast<int>(s) * step_w;
                 if (idx < len) {
+                    const auto sd = c.audio.getStep(t, static_cast<int>(idx));
+                    const bool is_plock_column = sd.has_plock || sd.is_param_trig;
+
                     const bool beat_alt = (((s / 4) + l) % 2 == 1);
-                    ColorRGB bg_col = is_sharp ? (beat_alt ? ColorRGB{14, 14, 18} : ColorRGB{10, 10, 14})
-                                               : (beat_alt ? ColorRGB{26, 26, 32} : ColorRGB{18, 18, 24});
+                    ColorRGB bg_col;
+                    if (is_plock_column) {
+                        bg_col = is_sharp ? (beat_alt ? ColorRGB{36, 32, 10} : ColorRGB{28, 24, 8})
+                                          : (beat_alt ? ColorRGB{52, 46, 16} : ColorRGB{42, 38, 12});
+                    } else {
+                        bg_col = is_sharp ? (beat_alt ? ColorRGB{14, 14, 18} : ColorRGB{10, 10, 14})
+                                          : (beat_alt ? ColorRGB{26, 26, 32} : ColorRGB{18, 18, 24});
+                    }
                     cv.fill(x, y + 1, step_w - 1, th, bg_col);
 
-                    const auto sd = c.audio.getStep(t, static_cast<int>(idx));
-                    bool active_note = sd.enabled && (sd.note == row_pitch ||
-                                                      sd.chord_notes[0] == row_pitch ||
-                                                      sd.chord_notes[1] == row_pitch ||
-                                                      sd.chord_notes[2] == row_pitch ||
-                                                      sd.chord_notes[3] == row_pitch);
+                    bool active_note = sd.enabled && (
+                        (sd.note != 255 && sd.note == row_pitch) ||
+                        (sd.chord_notes[0] != 255 && sd.chord_notes[0] == row_pitch) ||
+                        (sd.chord_notes[1] != 255 && sd.chord_notes[1] == row_pitch) ||
+                        (sd.chord_notes[2] != 255 && sd.chord_notes[2] == row_pitch) ||
+                        (sd.chord_notes[3] != 255 && sd.chord_notes[3] == row_pitch)
+                    );
+
                     if (active_note) {
-                        cv.fill(x + 1, y + 1, step_w - 3, th - 1, sd.is_param_trig ? palette::kParamTrig : palette::kAccentCyan);
+                        cv.fill(x + 1, y + 1, step_w - 3, th - 1, is_plock_column ? palette::kParamTrig : palette::kAccentCyan);
                     } else {
                         if (s % 4 == 0) cv.fill(x + 2, y + row_h / 2 - 1, 2, 2, palette::kGridDim);
                         else cv.fill(x + 3, y + row_h / 2, 1, 1, ColorRGB{36, 36, 44});
@@ -922,6 +992,65 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
             char ltxt[8];
             std::snprintf(ltxt, sizeof(ltxt), "%u", len);
             cv.text(len_x, y + (row_h - 5) / 2, ltxt, is_lane ? palette::kAccentCyan : palette::kGridDim);
+        }
+
+        // Нижній лейаут фортепіанної клавіатури:
+        // - виділена клавіша курсору (Cyan)
+        // - активні клавіші поточного кроку (Amber / kParamTrig)
+        const int kbd_x = area.x + 4;
+        const int kbd_y = grid_y + 12 * row_h + 4;
+        const int kbd_w = area.w - 8;
+        const int kbd_h = 16;
+        cv.rect(kbd_x - 1, kbd_y - 1, kbd_w + 2, kbd_h + 2, palette::kGridDim);
+
+        const int kbd_start_oct = std::clamp((cur_pitch / 12) - 1, 0, 8);
+        const int white_key_w = kbd_w / 21;
+        const auto cur_st = c.audio.getStep(t, c.app.cursor_step);
+        auto isStepPitch = [&](int p) -> bool {
+            if (!cur_st.enabled) return false;
+            if (cur_st.note != 255 && cur_st.note == p) return true;
+            for (int i = 0; i < 4; ++i) {
+                if (cur_st.chord_notes[i] != 255 && cur_st.chord_notes[i] == p) return true;
+            }
+            return false;
+        };
+
+        static const int kWkSemi[7] = {0, 2, 4, 5, 7, 9, 11};
+        for (int wk = 0; wk < 21; ++wk) {
+            int oct = kbd_start_oct + (wk / 7);
+            int pitch = oct * 12 + kWkSemi[wk % 7];
+            bool is_cur = (pitch == cur_pitch);
+            bool is_step = isStepPitch(pitch);
+
+            ColorRGB col = is_cur ? palette::kAccentCyan : (is_step ? palette::kParamTrig : ColorRGB{190, 195, 205});
+            int kx = kbd_x + wk * white_key_w;
+            cv.fill(kx, kbd_y, white_key_w - 1, kbd_h, col);
+
+            if (wk % 7 == 0) {
+                char oct_lbl[4];
+                std::snprintf(oct_lbl, sizeof(oct_lbl), "C%d", oct);
+                cv.text(kx + 1, kbd_y + kbd_h - 7, oct_lbl, is_cur ? palette::kPanelBg : palette::kTextDim);
+            }
+        }
+
+        // Чорні клавіші
+        static const int kBkSemi[5] = {1, 3, 6, 8, 10};
+        static const int kBkWkOffset[5] = {0, 1, 3, 4, 5};
+        const int bk_w = 8;
+        const int bk_h = 9;
+        for (int o = 0; o < 3; ++o) {
+            int oct = kbd_start_oct + o;
+            for (int b = 0; b < 5; ++b) {
+                int pitch = oct * 12 + kBkSemi[b];
+                int wk_idx = o * 7 + kBkWkOffset[b];
+                int bx = kbd_x + wk_idx * white_key_w + (white_key_w * 7 / 10);
+                bool is_cur = (pitch == cur_pitch);
+                bool is_step = isStepPitch(pitch);
+
+                ColorRGB col = is_cur ? palette::kAccentCyan : (is_step ? palette::kParamTrig : ColorRGB{24, 28, 36});
+                cv.fill(bx, kbd_y, bk_w, bk_h, col);
+                cv.rect(bx, kbd_y, bk_w, bk_h, palette::kPanelBg);
+            }
         }
 
         // Червоне повідомлення про вичерпання голосів (макс 4 ноти на крок)
