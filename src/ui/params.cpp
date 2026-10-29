@@ -1292,9 +1292,18 @@ ParamRegistry::ParamRegistry() {
     {
         Param p;
         p.id = "SMP.THRS";
-        p.label = "THRESH";
-        p.value = [](const UiContext&) { return "-18 DB"; };
-        p.step = [](UiContext& c, int, bool) { c.app.last_action = "THRESH SET"; };
+        p.label = "TRANSIENT";
+        p.value = [](const UiContext& c) {
+            char b[32];
+            std::snprintf(b, sizeof(b), "AUTO %d%%", static_cast<int>(c.app.sample_transient_sens * 100.0f));
+            return std::string(b);
+        };
+        p.step = [](UiContext& c, int dir, bool coarse) {
+            float delta = coarse ? 0.20f : 0.05f;
+            c.app.sample_transient_sens = std::clamp(c.app.sample_transient_sens + dir * delta, 0.05f, 0.95f);
+            c.app.sampler.sliceTransients(c.app.sample_transient_sens);
+            c.app.last_action = "TRANSIENTS: " + std::to_string(c.app.sampler.sliceCount()) + " SLICES";
+        };
         add(std::move(p));
     }
     {

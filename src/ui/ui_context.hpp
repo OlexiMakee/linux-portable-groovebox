@@ -118,10 +118,11 @@ struct AppModel {
 
     // Семплер, лупер та слайсер
     SamplerEngine sampler;
-    float sample_trim_start = 0.0f; // 0.0 .. 1.0 (Digitakt Trim Start)
-    float sample_trim_end = 1.0f;   // 0.0 .. 1.0 (Digitakt Trim End)
-    int sample_zoom = 1;            // 1x .. 8x
-    int sample_target_track = 0;    // 0..3 (призначення семплу на трек)
+    float sample_trim_start = 0.0f;     // 0.0 .. 1.0 (Digitakt Trim Start)
+    float sample_trim_end = 1.0f;       // 0.0 .. 1.0 (Digitakt Trim End)
+    float sample_transient_sens = 0.5f; // Чутливість автодетекції транзієнтів (0.05 .. 0.95)
+    int sample_zoom = 1;                // 1x .. 8x
+    int sample_target_track = 0;        // 0..3 (призначення семплу на трек)
 
     // Курсор (рядок/колонка/скрол) для кожного табличного вікна
     std::array<int, kViewCount> grid_row{};

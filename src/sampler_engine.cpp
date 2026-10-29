@@ -140,6 +140,7 @@ void SamplerEngine::sliceGrid(int slice_count) {
 
 void SamplerEngine::sliceTransients(float sensitivity) {
     uint32_t total = rec_write_idx_.load(std::memory_order_relaxed);
+    if (total == 0) total = static_cast<uint32_t>(rec_buffer_.data_l.size());
     if (total < 1024) {
         sliceGrid(16);
         return;
@@ -148,26 +149,26 @@ void SamplerEngine::sliceTransients(float sensitivity) {
     std::vector<uint32_t> transient_points;
     transient_points.push_back(0);
 
-    float threshold = 0.05f + (1.0f - std::clamp(sensitivity, 0.0f, 1.0f)) * 0.35f;
-    float prev_energy = 0.0f;
+    float threshold = 0.02f + (1.0f - std::clamp(sensitivity, 0.0f, 1.0f)) * 0.28f;
+    float prev_energy = 0.001f;
     constexpr uint32_t kWindow = 256;
 
     for (uint32_t i = kWindow; i + kWindow < total; i += kWindow) {
         float energy = 0.0f;
         for (uint32_t j = 0; j < kWindow; ++j) {
-            float s = rec_buffer_.data_l[i + j];
+            float s = (i + j < rec_buffer_.data_l.size()) ? rec_buffer_.data_l[i + j] : 0.0f;
             energy += s * s;
         }
         energy /= static_cast<float>(kWindow);
 
-        if (energy > threshold && energy > prev_energy * 2.2f) {
+        if (energy > threshold && energy > prev_energy * 1.8f) {
             // Знайдено перепад енергії (транзієнт)
-            if (i - transient_points.back() > 2000) { // мінімум ~50мс між слайсами
+            if (i - transient_points.back() > 1600) { // мінімум ~50мс між слайсами (при 32к)
                 transient_points.push_back(i);
                 if (transient_points.size() >= static_cast<size_t>(kMaxSlices)) break;
             }
         }
-        prev_energy = energy;
+        prev_energy = std::max(energy, prev_energy * 0.95f);
     }
 
     if (transient_points.size() < 4) {
@@ -179,7 +180,7 @@ void SamplerEngine::sliceTransients(float sensitivity) {
     for (int i = 0; i < active_slices_; ++i) {
         slices_[i].start_frame = transient_points[i];
         uint32_t next = (i + 1 < active_slices_) ? transient_points[i + 1] : total;
-        slices_[i].length_frames = next - transient_points[i];
+        slices_[i].length_frames = (next > transient_points[i]) ? (next - transient_points[i]) : 16;
     }
 }
 
@@ -368,22 +369,58 @@ void SamplerEngine::sliceToDrumSlots(float trim_st, float trim_end) {
     uint32_t end_f = static_cast<uint32_t>(std::clamp(trim_end, trim_st + 0.01f, 1.0f) * total);
     if (end_f <= st_f) end_f = std::min(total, st_f + 512);
 
-    uint32_t span = end_f - st_f;
-    uint32_t slice_len = span / kDrumSlots;
-    if (slice_len < 16) return;
+    // Шукаємо транзієнти всередині виділеного діапазону обрізки (Trim Start .. Trim End)
+    std::vector<uint32_t> cuts;
+    cuts.push_back(st_f);
+
+    constexpr uint32_t kWindow = 256;
+    float prev_energy = 0.001f;
+    for (uint32_t i = st_f + kWindow; i + kWindow < end_f; i += kWindow) {
+        float energy = 0.0f;
+        for (uint32_t j = 0; j < kWindow; ++j) {
+            float s = (i + j < rec_buffer_.data_l.size()) ? rec_buffer_.data_l[i + j] : 0.0f;
+            energy += s * s;
+        }
+        energy /= static_cast<float>(kWindow);
+        if (energy > 0.02f && energy > prev_energy * 1.8f) {
+            if (i - cuts.back() > 1600) {
+                cuts.push_back(i);
+                if (cuts.size() >= static_cast<size_t>(kDrumSlots)) break;
+            }
+        }
+        prev_energy = std::max(energy, prev_energy * 0.95f);
+    }
+
+    // Якщо знайдено менше ніж 4 транзієнти, нарізаємо рівномірною сіткою
+    if (cuts.size() < 4) {
+        cuts.clear();
+        uint32_t span = end_f - st_f;
+        uint32_t slice_len = span / kDrumSlots;
+        for (int i = 0; i < kDrumSlots; ++i) {
+            cuts.push_back(st_f + i * slice_len);
+        }
+    }
+    while (cuts.size() < static_cast<size_t>(kDrumSlots)) {
+        cuts.push_back(end_f);
+    }
+    cuts.push_back(end_f);
 
     for (int i = 0; i < kDrumSlots; ++i) {
+        uint32_t slice_start = cuts[i];
+        uint32_t slice_next = cuts[i + 1];
+        uint32_t slice_len = (slice_next > slice_start) ? (slice_next - slice_start) : 16;
+        if (slice_start + slice_len > total) slice_len = (total > slice_start) ? (total - slice_start) : 16;
+
         SampleBuffer buf;
         buf.sample_rate = rec_buffer_.sample_rate;
         buf.name = "SLC " + std::to_string(i + 1);
         buf.data_l.resize(slice_len);
         buf.data_r.resize(slice_len);
-        uint32_t offset = st_f + i * slice_len;
 
         float peak = 0.001f;
         for (uint32_t s = 0; s < slice_len; ++s) {
-            float l = rec_buffer_.data_l[offset + s];
-            float r = rec_buffer_.data_r[offset + s];
+            float l = (slice_start + s < rec_buffer_.data_l.size()) ? rec_buffer_.data_l[slice_start + s] : 0.0f;
+            float r = (slice_start + s < rec_buffer_.data_r.size()) ? rec_buffer_.data_r[slice_start + s] : 0.0f;
             buf.data_l[s] = l;
             buf.data_r[s] = r;
             peak = std::max(peak, std::max(std::fabs(l), std::fabs(r)));
