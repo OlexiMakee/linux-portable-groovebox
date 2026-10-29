@@ -932,7 +932,11 @@ bool AudioEngine::start(int card_index, bool is_usb_48k, bool headphones_plugged
     current_usb_48k_.store(is_usb_48k);
     const auto& prof = activeProfile();
     const bool use_usb = (card_index > 0) && is_usb_48k && !force_internal_.load(std::memory_order_relaxed);
-    const uint32_t target_rate = use_usb ? static_cast<uint32_t>(prof.usb_rate) : static_cast<uint32_t>(prof.internal_rate);
+    uint32_t target_rate = use_usb ? static_cast<uint32_t>(prof.usb_rate) : static_cast<uint32_t>(prof.internal_rate);
+    const uint32_t usr_sr = user_sample_rate_.load(std::memory_order_relaxed);
+    if (!use_usb && usr_sr > 0) {
+        target_rate = usr_sr;
+    }
     active_sample_rate_.store(target_rate);
     active_period_frames_.store(target_period_frames_.load(std::memory_order_relaxed));
 
@@ -1016,18 +1020,56 @@ void AudioEngine::toggleOutputOverride() {
     start(card, is_usb, hp);
 }
 
-void AudioEngine::cycleBufferSize() {
-    uint32_t cur = target_period_frames_.load(std::memory_order_relaxed);
-    uint32_t next = 1024;
-    if (cur == 96) next = 128;
-    else if (cur == 128) next = 256;
-    else if (cur == 256) next = 512;
-    else if (cur == 512) next = 1024;
-    else if (cur == 1024) next = 2048;
-    else next = 96;
+void AudioEngine::stepBufferSize(int dir) {
+    const uint32_t cur = target_period_frames_.load(std::memory_order_relaxed);
+    int idx = 4; // дефолтний 1024
+    for (size_t i = 0; i < kBufferSizes.size(); ++i) {
+        if (kBufferSizes[i] == cur) {
+            idx = static_cast<int>(i);
+            break;
+        }
+    }
+    const int count = static_cast<int>(kBufferSizes.size());
+    const int next_idx = (idx + dir % count + count) % count;
+    const uint32_t next = kBufferSizes[next_idx];
     target_period_frames_.store(next, std::memory_order_relaxed);
-    std::printf("[AudioEngine] Buffer size cycled to %u frames (%.1f ms)\n",
+    std::printf("[AudioEngine] Buffer size stepped to %u frames (%.1f ms)\n",
                 next, (next * 1000.0f) / active_sample_rate_.load());
+    int card = current_card_.load();
+    bool is_usb = current_usb_48k_.load();
+    bool hp = current_hp_.load();
+    start(card, is_usb, hp);
+}
+
+void AudioEngine::cycleBufferSize() {
+    stepBufferSize(1);
+}
+
+void AudioEngine::stepSampleRate(int dir) {
+    uint32_t cur = user_sample_rate_.load(std::memory_order_relaxed);
+    if (cur == 0) cur = active_sample_rate_.load(std::memory_order_relaxed);
+    int idx = 1; // дефолтний 32000 (індекс 1)
+    for (size_t i = 0; i < kSampleRates.size(); ++i) {
+        if (kSampleRates[i] == cur) {
+            idx = static_cast<int>(i);
+            break;
+        }
+    }
+    const int count = static_cast<int>(kSampleRates.size());
+    const int next_idx = (idx + dir % count + count) % count;
+    const uint32_t next_sr = kSampleRates[next_idx];
+    user_sample_rate_.store(next_sr, std::memory_order_relaxed);
+    active_sample_rate_.store(next_sr, std::memory_order_relaxed);
+    std::printf("[AudioEngine] Sample rate switched to %u Hz\n", next_sr);
+    int card = current_card_.load();
+    bool is_usb = current_usb_48k_.load();
+    bool hp = current_hp_.load();
+    start(card, is_usb, hp);
+}
+
+void AudioEngine::setUserSampleRate(uint32_t sr) {
+    user_sample_rate_.store(sr, std::memory_order_relaxed);
+    active_sample_rate_.store(sr, std::memory_order_relaxed);
     int card = current_card_.load();
     bool is_usb = current_usb_48k_.load();
     bool hp = current_hp_.load();

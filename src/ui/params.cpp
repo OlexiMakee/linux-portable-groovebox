@@ -1246,7 +1246,7 @@ ParamRegistry::ParamRegistry() {
             std::snprintf(b, sizeof(b), "%u SMP (%.1f MS)", c.tel.period_frames, ms);
             return std::string(b);
         };
-        p.step = [](UiContext& c, int, bool) { c.audio.cycleBufferSize(); };
+        p.step = [](UiContext& c, int dir, bool) { c.audio.stepBufferSize(dir != 0 ? dir : 1); };
         add(std::move(p));
     }
     {
@@ -1269,11 +1269,25 @@ ParamRegistry::ParamRegistry() {
         p.step = [](UiContext& c, int, bool) { c.audio.panic(); };
         add(std::move(p));
     }
-    add(info("SYS.SR", "SAMPLE RATE", [](const UiContext& c) {
-        char b[40];
-        std::snprintf(b, sizeof(b), "%u HZ (%s)", c.tel.sample_rate, c.hw.usb_role == "host" ? "USB UAC2" : "RK817 DAC");
-        return std::string(b);
-    }));
+    {
+        Param p;
+        p.id = "SYS.SR";
+        p.label = "SAMPLE RATE";
+        p.value = [](const UiContext& c) {
+            const uint32_t sr = c.tel.sample_rate;
+            if (sr == 24000) return std::string("24 KHZ");
+            if (sr == 32000) return std::string("32 KHZ");
+            if (sr == 44100) return std::string("44.1 KHZ");
+            if (sr == 48000) return std::string("48 KHZ");
+            char b[32];
+            std::snprintf(b, sizeof(b), "%u HZ", sr);
+            return std::string(b);
+        };
+        p.step = [](UiContext& c, int dir, bool) {
+            c.audio.stepSampleRate(dir != 0 ? dir : 1);
+        };
+        add(std::move(p));
+    }
     add(info("SYS.OUT", "OUTPUT", [](const UiContext& c) {
         return std::string(c.in.headphones_plugged ? "HEADPHONES" : "SPEAKER");
     }));

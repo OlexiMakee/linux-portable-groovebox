@@ -90,7 +90,17 @@ public:
     void toggleOutputOverride();
     bool isOutputForcedInternal() const;
 
-    // Циклічне перемикання розміру буфера/періоду (128 -> 256 -> 512 -> 1024 -> 2048)
+    // Підтримувані частоти дискретизації та розміри періоду/буфера
+    static constexpr std::array<uint32_t, 3> kSampleRates = {24000, 32000, 44100};
+    static constexpr std::array<uint32_t, 6> kBufferSizes = {96, 128, 256, 512, 1024, 2048};
+
+    // Перемикання частоти дискретизації списком (dir: -1 / +1)
+    void stepSampleRate(int dir);
+    uint32_t getUserSampleRate() const { return user_sample_rate_.load(std::memory_order_relaxed); }
+    void setUserSampleRate(uint32_t sr);
+
+    // Перемикання розміру буфера/періоду списком (dir: -1 / +1)
+    void stepBufferSize(int dir);
     void cycleBufferSize();
     uint32_t getTargetPeriodFrames() const { return target_period_frames_.load(std::memory_order_relaxed); }
 
@@ -425,6 +435,7 @@ private:
     std::atomic<bool> current_usb_48k_{false};
     std::atomic<bool> current_hp_{false};
     std::atomic<bool> force_internal_{false};
+    std::atomic<uint32_t> user_sample_rate_{0};
     std::atomic<uint32_t> active_sample_rate_{32000};
     std::atomic<uint32_t> target_period_frames_{1024};
     std::atomic<uint32_t> active_period_frames_{1024};
