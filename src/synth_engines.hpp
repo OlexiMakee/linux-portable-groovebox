@@ -499,8 +499,11 @@ struct SampleConfig {
     float loop_point = 0.0f;  // 0.0 .. 1.0 (LOOP point)
     float end = 1.0f;         // 0.0 .. 1.0 (END point, default 100%)
     float tune = 0.0f;        // -24.0 .. +24.0 semitones
-    int slice_index = 0;      // 0..15 (активний слайс для SLICER режиму)
+    int slice_index = 0;      // 0..127 (активний слайс для SLICER режиму)
+    int slice_grid_count = 16;// Кількість пропорційних слайсів: 8, 16, 32, 64, 128
 };
+
+inline constexpr std::array<int, 5> kSliceGridSizes = {8, 16, 32, 64, 128};
 
 // Індивідуальні ефекти на кожну доріжку (Per-Track FX Insert Chain)
 // Послідовність роутингу:

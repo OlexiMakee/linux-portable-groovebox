@@ -198,9 +198,13 @@ void AudioEngine::initDefaultPattern() {
         tracks_[i].level = kDrumLevels[i]; tracks_[i].pan = 0.00f; tracks_[i].delay_send = 0.0f; tracks_[i].reverb_send = 0.0f;
 
         static const char* kCandidates[] = {
+            "/storage/roms/groovebox/oneshots/02_tr909/",
             "/storage/roms/groovebox/samples/drums/02_tr909/",
+            "/storage/dev/groovebox/res/oneshots/02_tr909/",
             "/storage/dev/groovebox/res/samples/drums/02_tr909/",
+            "res/oneshots/02_tr909/",
             "res/samples/drums/02_tr909/",
+            "../res/oneshots/02_tr909/",
             "../res/samples/drums/02_tr909/"
         };
         for (const char* prefix : kCandidates) {
@@ -394,10 +398,12 @@ void AudioEngine::deleteRow(int row) {
         row_lengths_[r].store(row_lengths_[r + 1].load(std::memory_order_relaxed), std::memory_order_relaxed);
         row_track_[r] = static_cast<uint8_t>(r);
         row_voice_[r] = 0;
+        sampler().trackSample(r) = std::move(sampler().trackSample(r + 1));
     }
     tracks_[active_rows_count_ - 1] = TrackParameters{};
     pattern_[active_rows_count_ - 1].fill(SequencerStep{});
     row_lengths_[active_rows_count_ - 1].store(16, std::memory_order_relaxed);
+    sampler().trackSample(active_rows_count_ - 1) = SampleBuffer{};
     active_rows_count_--;
 }
 
@@ -682,12 +688,40 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
             float total_f = (sb.loaded && sb.lengthFrames() > 0) ? static_cast<float>(sb.lengthFrames()) : 1000.0f;
             float start_f = std::clamp(tracks_[t].sample.start, 0.0f, 0.999f) * total_f;
             float end_f = std::clamp(tracks_[t].sample.end, tracks_[t].sample.start + 0.001f, 1.0f) * total_f;
-            if (tracks_[t].sample.loop_mode == SampleLoopMode::kReverse) {
-                v.phase1 = end_f - 1.0f;
-                v.loop_forward = false;
-            } else {
-                v.phase1 = start_f;
+
+            if (tracks_[t].sample.play_mode == SampleEngineMode::kSlicer) {
+                // Строго пропорційне розбиття на N слайсів (8, 16, 32, 64, 128)
+                int grid = std::clamp(tracks_[t].sample.slice_grid_count, 8, 128);
+                // Нота обирає слайс: C3 (48) -> слайс 0; якщо нота поза діапазоном, береться sample.slice_index
+                int s_idx = tracks_[t].sample.slice_index;
+                if (midi_note >= 48 && (midi_note - 48) < grid) {
+                    s_idx = midi_note - 48;
+                } else if (midi_note > 0 && midi_note < 48) {
+                    s_idx = (midi_note % grid);
+                }
+                s_idx = std::clamp(s_idx, 0, grid - 1);
+                v.slice_index = s_idx;
+
+                float span = std::max(10.0f, end_f - start_f);
+                float slice_len = span / static_cast<float>(grid);
+                float sl_start = start_f + static_cast<float>(s_idx) * slice_len;
+                float sl_end = std::min(end_f, sl_start + slice_len);
+
+                v.slice_start_f = sl_start;
+                v.slice_end_f = sl_end;
+                v.phase1 = sl_start;
                 v.loop_forward = true;
+            } else {
+                v.slice_index = -1;
+                v.slice_start_f = start_f;
+                v.slice_end_f = end_f;
+                if (tracks_[t].sample.loop_mode == SampleLoopMode::kReverse) {
+                    v.phase1 = end_f - 1.0f;
+                    v.loop_forward = false;
+                } else {
+                    v.phase1 = start_f;
+                    v.loop_forward = true;
+                }
             }
             v.amp_adsr.trigger(tracks_[t].attack, tracks_[t].decay, tracks_[t].sustain, sr);
             v.filter_adsr.trigger(tracks_[t].attack * 0.6f, tracks_[t].decay, tracks_[t].sustain, sr);
@@ -705,7 +739,9 @@ int AudioEngine::allocateVoice(int track, int midi_note) {
     const int base = track * kVoicesPerTrack;
 
     // TB-303 є строго монофонічним інструментом: завжди виділяємо голос 0
-    if (tracks_[track].engine == EngineType::kAcid303) {
+    // Слайсер також є строго монофонічним: завжди виділяємо голос 0 для choke/моно-нарізки без акордів
+    if (tracks_[track].engine == EngineType::kAcid303 ||
+        (tracks_[track].engine == EngineType::kSampleOneShot && tracks_[track].sample.play_mode == SampleEngineMode::kSlicer)) {
         return base;
     }
 
@@ -1413,16 +1449,27 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                     const auto& sb = sampler().trackSample(t);
                     if (sb.loaded && sb.lengthFrames() > 0) {
                         float total_f = static_cast<float>(sb.lengthFrames());
-                        float s_norm = (v.plock_sample_start >= 0.0f) ? v.plock_sample_start : tp.sample.start;
-                        float l_norm = (v.plock_sample_loop >= 0.0f) ? v.plock_sample_loop : tp.sample.loop_point;
-                        float e_norm = (v.plock_sample_end >= 0.0f) ? v.plock_sample_end : tp.sample.end;
-                        float start_f = std::clamp(s_norm, 0.0f, 0.999f) * total_f;
-                        float loop_f = std::clamp(l_norm, 0.0f, 0.999f) * total_f;
-                        float end_f = std::clamp(e_norm, 0.001f, 1.0f) * total_f;
-                        if (end_f <= start_f) end_f = std::min(total_f, start_f + 10.0f);
-                        if (loop_f >= end_f) loop_f = start_f;
+                        float start_f = 0.0f, loop_f = 0.0f, end_f = total_f;
+                        float note_pitch = 0.0f;
 
-                        float note_pitch = static_cast<float>(v.note_num) - 48.0f + tp.sample.tune + (eff_p[1] - 0.5f) * 48.0f;
+                        if (tp.sample.play_mode == SampleEngineMode::kSlicer) {
+                            start_f = v.slice_start_f;
+                            end_f = v.slice_end_f;
+                            loop_f = start_f;
+                            // У режимі слайсера висота звуку регулюється TUNE, а не номером слайсу
+                            note_pitch = tp.sample.tune + (eff_p[1] - 0.5f) * 48.0f;
+                        } else {
+                            float s_norm = (v.plock_sample_start >= 0.0f) ? v.plock_sample_start : tp.sample.start;
+                            float l_norm = (v.plock_sample_loop >= 0.0f) ? v.plock_sample_loop : tp.sample.loop_point;
+                            float e_norm = (v.plock_sample_end >= 0.0f) ? v.plock_sample_end : tp.sample.end;
+                            start_f = std::clamp(s_norm, 0.0f, 0.999f) * total_f;
+                            loop_f = std::clamp(l_norm, 0.0f, 0.999f) * total_f;
+                            end_f = std::clamp(e_norm, 0.001f, 1.0f) * total_f;
+                            if (end_f <= start_f) end_f = std::min(total_f, start_f + 10.0f);
+                            if (loop_f >= end_f) loop_f = start_f;
+                            note_pitch = static_cast<float>(v.note_num) - 48.0f + tp.sample.tune + (eff_p[1] - 0.5f) * 48.0f;
+                        }
+
                         if (note_pitch != v.last_sample_pitch_note) {
                             v.last_sample_pitch_note = note_pitch;
                             v.sample_pitch_ratio = std::pow(2.0f, note_pitch / 12.0f);

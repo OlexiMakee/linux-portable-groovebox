@@ -270,6 +270,9 @@ private:
         float plock_sample_loop = -1.0f;
         float plock_delay_send = -1.0f;
         float plock_reverb_send = -1.0f;
+        float slice_start_f = 0.0f;
+        float slice_end_f = 0.0f;
+        int slice_index = -1;
         uint8_t drum_slot = 0;
         Dx7Voice dx7_voice{};
 
