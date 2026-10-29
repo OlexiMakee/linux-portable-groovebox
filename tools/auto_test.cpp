@@ -784,8 +784,8 @@ static void testInputRouterAndStepEditor() {
     TEST_ASSERT(app.engine_menu_open == true, "Triggering [+] ADD TRACK opens engine selection popup modal");
     TEST_ASSERT(app.engine_menu_is_add == true, "Engine modal is marked as add-mode");
 
-    // Підтвердження вибору рушія додає трек і закриває меню
-    app.engine_menu_sel = static_cast<int>(EngineType::kSampleOneShot);
+    // Підтвердження вибору рушія додає трек і закриває меню (індекс 0 = kSampleOneShot у kSelectableEngines)
+    app.engine_menu_sel = 0;
     int prev_count = audio.getActiveRowCount();
     ActionRegistry::instance().run("ENGINE.MENU_CONFIRM", ctx);
     TEST_ASSERT(audio.getActiveRowCount() == prev_count + 1, "ENGINE.MENU_CONFIRM dynamically adds track");

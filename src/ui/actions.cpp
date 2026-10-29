@@ -1041,14 +1041,24 @@ ActionRegistry::ActionRegistry() {
             return;
         }
         c.app.engine_menu_open = true;
-        c.app.engine_menu_sel = static_cast<int>(c.audio.getTrackParams(c.app.selected_track).engine);
+        auto cur_eng = c.audio.getTrackParams(c.app.selected_track).engine;
+        int found_sel = 0;
+        for (size_t i = 0; i < kSelectableEngines.size(); ++i) {
+            if (kSelectableEngines[i] == cur_eng) {
+                found_sel = static_cast<int>(i);
+                break;
+            }
+        }
+        c.app.engine_menu_sel = found_sel;
         c.app.last_action = "ENGINE SELECTOR";
     }});
     add(Action{"ENGINE.MENU_UP", "UP", [](UiContext& c) {
-        c.app.engine_menu_sel = (c.app.engine_menu_sel - 1 + static_cast<int>(EngineType::kCount)) % static_cast<int>(EngineType::kCount);
+        const int n = static_cast<int>(kSelectableEngines.size());
+        c.app.engine_menu_sel = (c.app.engine_menu_sel - 1 + n) % n;
     }});
     add(Action{"ENGINE.MENU_DOWN", "DOWN", [](UiContext& c) {
-        c.app.engine_menu_sel = (c.app.engine_menu_sel + 1) % static_cast<int>(EngineType::kCount);
+        const int n = static_cast<int>(kSelectableEngines.size());
+        c.app.engine_menu_sel = (c.app.engine_menu_sel + 1) % n;
     }});
     add(Action{"ENGINE.MENU_CLOSE", "CLOSE", [](UiContext& c) {
         c.app.engine_menu_open = false;
@@ -1056,7 +1066,8 @@ ActionRegistry::ActionRegistry() {
         c.app.last_action = "ENGINE CLOSED";
     }});
     add(Action{"ENGINE.MENU_CONFIRM", "APPLY", [](UiContext& c) {
-        auto eng = static_cast<EngineType>(std::clamp(c.app.engine_menu_sel, 0, static_cast<int>(EngineType::kCount) - 1));
+        const int n = static_cast<int>(kSelectableEngines.size());
+        auto eng = kSelectableEngines[std::clamp(c.app.engine_menu_sel, 0, n - 1)];
         if (c.app.engine_menu_is_add) {
             c.app.engine_menu_is_add = false;
             c.app.engine_menu_open = false;

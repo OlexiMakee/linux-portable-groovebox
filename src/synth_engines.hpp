@@ -27,15 +27,37 @@ inline constexpr EngineType kDrumSyn = EngineType::kSampleOneShot;
 
 inline constexpr const char* getEngineTypeName(EngineType type) {
     switch (type) {
-        case EngineType::kVaMono:        return "VA SAW+SUB";
+        case EngineType::kVaMono:        return "VIRTUAL ANALOG";
         case EngineType::kFm2Op:         return "2-OP FM";
-        case EngineType::kAcid303:       return "ACID 303";
+        case EngineType::kAcid303:       return "303 BASSLINE";
         case EngineType::kChordPad:      return "CHORD PAD";
         case EngineType::kSampleOneShot: return "SAMPLE PLAYER";
-        case EngineType::kSliceSampler:  return "LOOP SLICER";
+        case EngineType::kSliceSampler:  return "SAMPLE PLAYER";
         case EngineType::kDx7:           return "DX7 6-OP";
         case EngineType::kMidiOut:       return "MIDI OUT";
         default:                         return "UNKNOWN";
+    }
+}
+
+// Список рушіїв для створення/вибору нового треку (Add Track / Engine Selector)
+inline constexpr std::array<EngineType, 6> kSelectableEngines = {
+    EngineType::kSampleOneShot, // 1. sample player
+    EngineType::kAcid303,       // 2. 303 Bassline
+    EngineType::kDx7,           // 3. dx7
+    EngineType::kChordPad,      // 4. chord pad
+    EngineType::kVaMono,        // 5. Virtual Analog
+    EngineType::kMidiOut        // 6. midi out
+};
+
+inline constexpr const char* getEngineMenuLabel(EngineType type) {
+    switch (type) {
+        case EngineType::kSampleOneShot: return "SAMPLE PLAYER";
+        case EngineType::kAcid303:       return "303 BASSLINE";
+        case EngineType::kDx7:           return "DX7 6-OP";
+        case EngineType::kChordPad:      return "CHORD PAD";
+        case EngineType::kVaMono:        return "VIRTUAL ANALOG";
+        case EngineType::kMidiOut:       return "MIDI OUT";
+        default:                         return getEngineTypeName(type);
     }
 }
 

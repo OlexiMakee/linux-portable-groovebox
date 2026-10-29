@@ -140,55 +140,20 @@ void UiShell::renderTabBar(Canvas& cv, const UiContext& ctx) {
         else if (slot.key_label == "[R1]") is_held = ctx.in.r1;
         else if (slot.key_label == "[G]")  is_held = ctx.in.btn_fn;
 
-        // Формуємо підпис: наприклад "[L1]son<SEQ>rol" або "[L2]fx<SYN>mod"
-        std::string title = slot.key_label;
+        // Формуємо підпис: мінімалістичний таб-бар без [L1]/[R2] та дефісів
+        std::string title = "";
         ColorRGB slot_accent = palette::kAccentOrange;
         if (ctx.in.btn_select) {
-            if (slot.key_label == "[L1]") title += " INSP";
-            else if (slot.key_label == "[L2]") title += " ARP";
-            else if (slot.key_label == "[R2]") title += " SCOPE";
-            else if (slot.key_label == "[R1]") title += " PERF";
-            else if (slot.key_label == "[G]")  title += "SYS";
+            if (slot.key_label == "[L1]") title = "INSP";
+            else if (slot.key_label == "[L2]") title = "ARP";
+            else if (slot.key_label == "[R2]") title = "SCOPE";
+            else if (slot.key_label == "[R1]") title = "PERF";
+            else if (slot.key_label == "[G]")  title = "SYS";
             slot_accent = palette::kParamTrig;
-        } else if (slot.key_label == "[L1]") {
-            if (ctx.app.seq_submode == SeqSubmode::kPianoRoll) {
-                title += "seq<ROL>son";
-                slot_accent = palette::kParamTrig; // Жовтий
-            } else if (ctx.app.seq_submode == SeqSubmode::kSong) {
-                title += "rol<SON>seq";
-                slot_accent = palette::kLevelWarnClip; // Червоний
-            } else {
-                title += "son<SEQ>rol";
-                slot_accent = palette::kAccentOrange; // Помаранчевий
-            }
-        } else if (slot.key_label == "[L2]") {
-            if (ctx.app.synth_submode == SynthSubmode::kMod) {
-                title += "syn<MOD>fx";
-                slot_accent = palette::kAccentPurple; // Фіолетовий
-            } else if (ctx.app.synth_submode == SynthSubmode::kFx) {
-                title += "mod<FX>syn";
-                slot_accent = palette::kLevelOk; // Зелений
-            } else {
-                title += "fx<SYN>mod";
-                slot_accent = palette::kAccentCyan; // Неоново-блакитний
-            }
-        } else if (slot.key_label == "[R2]") {
-            if (ctx.app.mix_submode == MixSubmode::kSend) {
-                title += "mix<SND>mstr";
-                slot_accent = palette::kAccentPurple; // Бузковий
-            } else if (ctx.app.mix_submode == MixSubmode::kMaster) {
-                title += "snd<MSTR>mix";
-                slot_accent = palette::kAccentOrange; // Золотистий
-            } else {
-                title += "mstr<MIX>snd";
-                slot_accent = palette::kAccentCyan; // Ціан
-            }
         } else if (slot.key_label == "[R1]") {
-            title += "SAMPLE";
-            slot_accent = palette::kAccentCyan;
+            title = "SAMPLE";
         } else if (slot.key_label == "[G]") {
-            title += "SYS";
-            slot_accent = palette::kAccentOrange;
+            title = "SYS";
         }
 
         if (is_active) {
@@ -204,74 +169,71 @@ void UiShell::renderTabBar(Canvas& cv, const UiContext& ctx) {
             cv.rect(tx + 1, 1, tw - 2, kTabBarH - 3, palette::kGridDim);
         }
 
-        if (slot.key_label == "[L2]" && !ctx.in.btn_select) {
-            int cx = tx + 3;
-            cv.text(cx, 5, "[L2]", is_active ? palette::kTextMain : palette::kTextDim);
-            cx += 23;
-            if (ctx.app.synth_submode == SynthSubmode::kSynth) {
-                cv.text(cx, 5, "<SYN>", ColorRGB{60, 160, 255});
-                cx += 27;
-            } else {
-                cv.text(cx, 5, "syn-", palette::kTextDim);
-                cx += 19;
-            }
-            if (ctx.app.synth_submode == SynthSubmode::kMod) {
-                cv.text(cx, 5, "<MOD>", palette::kAccentPurple);
-                cx += 27;
-            } else {
-                cv.text(cx, 5, "mod-", palette::kTextDim);
-                cx += 19;
-            }
-            if (ctx.app.synth_submode == SynthSubmode::kFx) {
-                cv.text(cx, 5, "<FX>", palette::kLevelOk);
-            } else {
-                cv.text(cx, 5, "fx", palette::kTextDim);
-            }
-        } else if (slot.key_label == "[L1]" && !ctx.in.btn_select) {
-            int cx = tx + 3;
-            cv.text(cx, 5, "[L1]", is_active ? palette::kTextMain : palette::kTextDim);
-            cx += 23;
+        if (slot.key_label == "[L1]" && !ctx.in.btn_select) {
+            // Мінімалістичні підвкладки без [L1] та дефісів (довжина 52px, слот 72px)
+            int cx = tx + (tw - 52) / 2;
             if (ctx.app.seq_submode == SeqSubmode::kMatrix) {
                 cv.text(cx, 5, "<SEQ>", palette::kAccentOrange);
-                cx += 27;
+                cx += 23;
             } else {
-                cv.text(cx, 5, "seq-", palette::kTextDim);
-                cx += 19;
+                cv.text(cx, 5, "SEQ", palette::kTextDim);
+                cx += 15;
             }
             if (ctx.app.seq_submode == SeqSubmode::kPianoRoll) {
                 cv.text(cx, 5, "<ROL>", palette::kParamTrig);
-                cx += 27;
+                cx += 23;
             } else {
-                cv.text(cx, 5, "rol-", palette::kTextDim);
-                cx += 19;
+                cv.text(cx, 5, "ROL", palette::kTextDim);
+                cx += 15;
             }
             if (ctx.app.seq_submode == SeqSubmode::kSong) {
                 cv.text(cx, 5, "<SON>", palette::kLevelWarnClip);
             } else {
-                cv.text(cx, 5, "son", palette::kTextDim);
+                cv.text(cx, 5, "SON", palette::kTextDim);
+            }
+        } else if (slot.key_label == "[L2]" && !ctx.in.btn_select) {
+            // Мінімалістичні підвкладки без [L2] та дефісів (довжина 48px, слот 72px)
+            int cx = tx + (tw - 48) / 2;
+            if (ctx.app.synth_submode == SynthSubmode::kSynth) {
+                cv.text(cx, 5, "<SYN>", ColorRGB{60, 160, 255});
+                cx += 23;
+            } else {
+                cv.text(cx, 5, "SYN", palette::kTextDim);
+                cx += 15;
+            }
+            if (ctx.app.synth_submode == SynthSubmode::kMod) {
+                cv.text(cx, 5, "<MOD>", palette::kAccentPurple);
+                cx += 23;
+            } else {
+                cv.text(cx, 5, "MOD", palette::kTextDim);
+                cx += 15;
+            }
+            if (ctx.app.synth_submode == SynthSubmode::kFx) {
+                cv.text(cx, 5, "<FX>", palette::kLevelOk);
+            } else {
+                cv.text(cx, 5, "FX", palette::kTextDim);
             }
         } else if (slot.key_label == "[R2]" && !ctx.in.btn_select) {
-            int cx = tx + 3;
-            cv.text(cx, 5, "[R2]", is_active ? palette::kTextMain : palette::kTextDim);
-            cx += 23;
+            // Мінімалістичні підвкладки без [R2] та дефісів (довжина 52px, слот 72px)
+            int cx = tx + (tw - 52) / 2;
             if (ctx.app.mix_submode == MixSubmode::kMix) {
                 cv.text(cx, 5, "<MIX>", palette::kAccentCyan);
-                cx += 27;
+                cx += 23;
             } else {
-                cv.text(cx, 5, "mix-", palette::kTextDim);
-                cx += 19;
+                cv.text(cx, 5, "MIX", palette::kTextDim);
+                cx += 15;
             }
             if (ctx.app.mix_submode == MixSubmode::kSend) {
                 cv.text(cx, 5, "<SND>", palette::kAccentPurple);
-                cx += 27;
+                cx += 23;
             } else {
-                cv.text(cx, 5, "snd-", palette::kTextDim);
-                cx += 19;
+                cv.text(cx, 5, "SND", palette::kTextDim);
+                cx += 15;
             }
             if (ctx.app.mix_submode == MixSubmode::kMaster) {
                 cv.text(cx, 5, "<MST>", palette::kAccentOrange);
             } else {
-                cv.text(cx, 5, "mst", palette::kTextDim);
+                cv.text(cx, 5, "MST", palette::kTextDim);
             }
         } else {
             const int text_w = Canvas::textWidth(title);
@@ -436,26 +398,25 @@ void UiShell::render(
         }
     }
 
-    // Випадаюче модальне меню вибору рушія синтезу
+    // Випадаюче модальне меню вибору рушія синтезу (6 рушіїв у порядку користувача)
     if (app.engine_menu_open) {
+        const int num_eng = static_cast<int>(kSelectableEngines.size());
         const int mw = 180;
-        const int mh = static_cast<int>(EngineType::kCount) * 11 + 18;
+        const int mh = num_eng * 12 + 18;
         const int mx = (logical_w_ - mw) / 2;
         const int my = (logical_h_ - mh) / 2;
         cv.fill(mx, my, mw, mh, palette::kPanelBg);
         cv.rect(mx, my, mw, mh, palette::kAccentCyan);
         cv.fill(mx + 1, my + 1, mw - 2, 10, palette::kHeaderSel);
         cv.text(mx + 4, my + 3, app.engine_menu_is_add ? "ADD TRACK: SELECT ENGINE" : "EDIT TRACK: SELECT ENGINE", palette::kAccentCyan);
-        for (int e = 0; e < static_cast<int>(EngineType::kCount); ++e) {
-            const int ey = my + 14 + e * 11;
+        for (int e = 0; e < num_eng; ++e) {
+            const int ey = my + 14 + e * 12;
             const bool sel = (e == app.engine_menu_sel);
             if (sel) {
-                cv.fill(mx + 3, ey, mw - 6, 10, palette::kHeaderSel);
-                cv.rect(mx + 3, ey, mw - 6, 10, palette::kAccentCyan);
+                cv.fill(mx + 3, ey, mw - 6, 11, palette::kHeaderSel);
+                cv.rect(mx + 3, ey, mw - 6, 11, palette::kAccentCyan);
             }
-            std::string label = getEngineTypeName(static_cast<EngineType>(e));
-            if (static_cast<EngineType>(e) == EngineType::kSampleOneShot) label = "SAMPLER (ONE-SHOT)";
-            else if (static_cast<EngineType>(e) == EngineType::kSliceSampler) label = "LOOP SLICER";
+            std::string label = getEngineMenuLabel(kSelectableEngines[e]);
             cv.text(mx + 8, ey + 2, label, sel ? palette::kAccentCyan : palette::kTextMain);
         }
     }
