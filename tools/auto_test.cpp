@@ -46,10 +46,11 @@ static void testAudioDspEngines() {
     audio.start(-1, false, false);
 
     // 1. Початкові доріжки
-    TEST_ASSERT(audio.getActiveRowCount() == 3, "Default active track count must be 3 (Kick, 303, DX7)");
+    TEST_ASSERT(audio.getActiveRowCount() == 8, "Default active track count must be 8 (909 drums, 303, DX7, ChordPad)");
     TEST_ASSERT(audio.getTrackParams(0).engine == EngineType::kSampleOneShot, "Track 0 must be SampleOneShot Kick");
-    TEST_ASSERT(audio.getTrackParams(1).engine == EngineType::kAcid303, "Track 1 must be Acid 303");
-    TEST_ASSERT(audio.getTrackParams(2).engine == EngineType::kDx7, "Track 2 must be DX7 6-OP");
+    TEST_ASSERT(audio.getTrackParams(5).engine == EngineType::kAcid303, "Track 5 must be Acid 303");
+    TEST_ASSERT(audio.getTrackParams(6).engine == EngineType::kDx7, "Track 6 must be DX7 6-OP");
+    TEST_ASSERT(audio.getTrackParams(7).engine == EngineType::kChordPad, "Track 7 must be Chord Pad");
 
     // 2. Тестування рендерингу звуку для кожного з 9 движків
     for (int e = 0; e < static_cast<int>(EngineType::kCount); ++e) {
@@ -114,17 +115,18 @@ static void testAudioDspEngines() {
     TEST_ASSERT(max_amp <= 32767, "Master Limiter protects output from 16-bit integer overflow");
 
     // 4. Тестування єдиного 16-доріжкового масиву, динамічного додавання та іменування треків
-    TEST_ASSERT(audio.getActiveRowCount() == 3, "Initial active track count is exactly 3 (Kick, 303, DX7)");
-    TEST_ASSERT(audio.getTrackName(0) == "KICK 808", "Track 1 is KICK 808");
-    TEST_ASSERT(audio.getTrackName(1) == "303 BASS", "Track 2 is 303 BASS");
-    TEST_ASSERT(audio.getTrackName(2) == "DX7 KEYS", "Track 3 is DX7 KEYS");
+    TEST_ASSERT(audio.getActiveRowCount() == 8, "Initial active track count is exactly 8");
+    TEST_ASSERT(audio.getTrackName(0) == "909 KICK", "Track 1 is 909 KICK");
+    TEST_ASSERT(audio.getTrackName(5) == "303 BASS", "Track 6 is 303 BASS");
+    TEST_ASSERT(audio.getTrackName(6) == "DX7 KEYS", "Track 7 is DX7 KEYS");
+    TEST_ASSERT(audio.getTrackName(7) == "CHORD PAD", "Track 8 is CHORD PAD");
 
-    int t4 = audio.addTrack(EngineType::kChordPad, "PAD 04");
-    TEST_ASSERT(t4 == 3 && audio.getActiveRowCount() == 4, "addTrack dynamically creates Track 4");
-    TEST_ASSERT(audio.getTrackName(3) == "PAD 04", "Track 4 has custom name 'PAD 04'");
+    int t9 = audio.addTrack(EngineType::kVaMono, "LEAD 09");
+    TEST_ASSERT(t9 == 8 && audio.getActiveRowCount() == 9, "addTrack dynamically creates Track 9");
+    TEST_ASSERT(audio.getTrackName(8) == "LEAD 09", "Track 9 has custom name 'LEAD 09'");
 
-    audio.setTrackName(3, "WARM PAD");
-    TEST_ASSERT(audio.getTrackName(3) == "WARM PAD", "setTrackName updates track name to 'WARM PAD'");
+    audio.setTrackName(8, "WARM LEAD");
+    TEST_ASSERT(audio.getTrackName(8) == "WARM LEAD", "setTrackName updates track name to 'WARM LEAD'");
 
     // Розширюємо до 16 треків
     while (audio.getActiveRowCount() < 16) {
@@ -136,7 +138,7 @@ static void testAudioDspEngines() {
     // Перевірка телеметрії для мікшера: всі 16 рівнів та імен доступні
     auto tel = audio.getTelemetry();
     TEST_ASSERT(tel.active_tracks == 16, "Telemetry reports all 16 active tracks to Mixer");
-    TEST_ASSERT(tel.track_names[3] == "WARM PAD", "Telemetry propagates track names to Mixer UI");
+    TEST_ASSERT(tel.track_names[8] == "WARM LEAD", "Telemetry propagates track names to Mixer UI");
     TEST_ASSERT(tel.track_levels.size() == 16, "Telemetry track_levels array has size 16");
 
     audio.deleteTrack(15);
@@ -416,13 +418,13 @@ static void testSequencerOperations() {
 
     // 3. Додавання та безпечне видалення доріжок по 1
     const int initial_rows = audio.getActiveRowCount();
-    TEST_ASSERT(initial_rows == 3, "Initial active rows is 3");
+    TEST_ASSERT(initial_rows == 8, "Initial active rows is 8");
 
     audio.setActiveRowCount(initial_rows + 1);
-    TEST_ASSERT(audio.getActiveRowCount() == 4, "Adding single track increments active rows to 4");
+    TEST_ASSERT(audio.getActiveRowCount() == 9, "Adding single track increments active rows to 9");
 
-    audio.deleteRow(3);
-    TEST_ASSERT(audio.getActiveRowCount() == 3, "Deleting single track decrements active rows to 3");
+    audio.deleteRow(8);
+    TEST_ASSERT(audio.getActiveRowCount() == 8, "Deleting single track decrements active rows to 8");
 
     // 4. Поліфонія кроку (Чорди до 4 нот у Step Editor)
     audio.setStepChordNote(0, 0, 0, 48); // C3

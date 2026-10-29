@@ -177,51 +177,69 @@ void AudioEngine::initTrackFx(uint32_t sample_rate) {
 void AudioEngine::initDefaultPattern() {
     std::lock_guard<std::mutex> lock(state_mutex_);
 
-    // За замовчуванням 1 інструмент = 1 доріжка:
-    // T1: SAMPLE ONESHOT (Kick 808)
-    // T2: ACID 303 BASSLINE (Legato Slide, Accent)
-    // T3: YAMAHA DX7 6-OP (ROM1A E.PIANO 1 / BASS 1 / LEAD)
-    // T4: CHORD PAD (4-Voice Polyphonic Detuned Pad)
-    tracks_[0] = TrackParameters{};
-    std::snprintf(tracks_[0].name, sizeof(tracks_[0].name), "KICK 808");
-    tracks_[0].engine = EngineType::kSampleOneShot;
-    tracks_[0].p = {0.00f, 0.50f, 0.40f, 0.85f, 0.15f, 0.15f};
-    tracks_[0].attack = 0.002f; tracks_[0].decay = 2.00f; tracks_[0].sustain = 0.00f; tracks_[0].release = 0.10f;
-    tracks_[0].level = 0.90f; tracks_[0].pan = 0.00f; tracks_[0].delay_send = 0.0f; tracks_[0].reverb_send = 0.0f;
+    // За замовчуванням 8 доріжок:
+    // T0: 909 KICK (bd.wav)
+    // T1: 909 SNARE (sd.wav)
+    // T2: 909 OPEN HAT (oh.wav)
+    // T3: 909 CLOSED HAT (ch.wav)
+    // T4: 909 TOM (tom.wav)
+    // T5: ACID 303 BASSLINE
+    // T6: YAMAHA DX7
+    // T7: CHORD PAD
+    static const char* kDrumFiles[5] = {"bd.wav", "sd.wav", "oh.wav", "ch.wav", "tom.wav"};
+    static const char* kDrumNames[5] = {"909 KICK", "909 SNARE", "909 OPEN HAT", "909 CLOSED HAT", "909 TOM"};
+    static const float kDrumLevels[5] = {0.90f, 0.85f, 0.75f, 0.75f, 0.80f};
 
-    static const char* kDefaultKickCandidates[] = {
-        "/storage/roms/groovebox/samples/drums/01_tr808/bd.wav",
-        "/storage/dev/groovebox/res/samples/drums/01_tr808/bd.wav",
-        "res/samples/drums/01_tr808/bd.wav",
-        "../res/samples/drums/01_tr808/bd.wav"
-    };
-    for (const char* kp : kDefaultKickCandidates) {
-        if (sampler().loadWavFile(kp, sampler().trackSample(0))) {
-            break;
+    for (int i = 0; i < 5; ++i) {
+        tracks_[i] = TrackParameters{};
+        std::snprintf(tracks_[i].name, sizeof(tracks_[i].name), "%s", kDrumNames[i]);
+        tracks_[i].engine = EngineType::kSampleOneShot;
+        tracks_[i].p = {0.00f, 0.50f, 0.40f, 0.85f, 0.15f, 0.15f};
+        tracks_[i].attack = 0.002f; tracks_[i].decay = 2.00f; tracks_[i].sustain = 0.00f; tracks_[i].release = 0.10f;
+        tracks_[i].level = kDrumLevels[i]; tracks_[i].pan = 0.00f; tracks_[i].delay_send = 0.0f; tracks_[i].reverb_send = 0.0f;
+
+        static const char* kCandidates[] = {
+            "/storage/roms/groovebox/samples/drums/02_tr909/",
+            "/storage/dev/groovebox/res/samples/drums/02_tr909/",
+            "res/samples/drums/02_tr909/",
+            "../res/samples/drums/02_tr909/"
+        };
+        for (const char* prefix : kCandidates) {
+            std::string path = std::string(prefix) + kDrumFiles[i];
+            if (sampler().loadWavFile(path, sampler().trackSample(i))) {
+                break;
+            }
         }
     }
 
-    tracks_[1] = TrackParameters{};
-    std::snprintf(tracks_[1].name, sizeof(tracks_[1].name), "303 BASS");
-    tracks_[1].engine = EngineType::kAcid303;
-    tracks_[1].p = {0.62f, 0.55f, 0.60f, 0.22f, 0.70f, 0.00f};
-    tracks_[1].attack = 0.005f; tracks_[1].decay = 0.28f; tracks_[1].sustain = 0.00f; tracks_[1].release = 0.05f;
-    tracks_[1].level = 0.85f; tracks_[1].pan = -0.15f; tracks_[1].delay_send = 0.0f; tracks_[1].reverb_send = 0.0f;
+    tracks_[5] = TrackParameters{};
+    std::snprintf(tracks_[5].name, sizeof(tracks_[5].name), "303 BASS");
+    tracks_[5].engine = EngineType::kAcid303;
+    tracks_[5].p = {0.62f, 0.55f, 0.60f, 0.22f, 0.70f, 0.00f};
+    tracks_[5].attack = 0.005f; tracks_[5].decay = 0.28f; tracks_[5].sustain = 0.00f; tracks_[5].release = 0.05f;
+    tracks_[5].level = 0.85f; tracks_[5].pan = -0.15f; tracks_[5].delay_send = 0.0f; tracks_[5].reverb_send = 0.0f;
 
-    tracks_[2] = TrackParameters{};
-    std::snprintf(tracks_[2].name, sizeof(tracks_[2].name), "DX7 KEYS");
-    tracks_[2].engine = EngineType::kDx7;
-    tracks_[2].p = {0.32f, 0.75f, 0.60f, 0.40f, 0.00f, 0.30f};
-    tracks_[2].attack = 0.005f; tracks_[2].decay = 0.45f; tracks_[2].sustain = 0.00f; tracks_[2].release = 0.05f;
-    tracks_[2].level = 0.85f; tracks_[2].pan = 0.15f; tracks_[2].delay_send = 0.0f; tracks_[2].reverb_send = 0.0f;
+    tracks_[6] = TrackParameters{};
+    std::snprintf(tracks_[6].name, sizeof(tracks_[6].name), "DX7 KEYS");
+    tracks_[6].engine = EngineType::kDx7;
+    tracks_[6].p = {0.32f, 0.75f, 0.60f, 0.40f, 0.00f, 0.30f};
+    tracks_[6].attack = 0.005f; tracks_[6].decay = 0.45f; tracks_[6].sustain = 0.00f; tracks_[6].release = 0.05f;
+    tracks_[6].level = 0.85f; tracks_[6].pan = 0.15f; tracks_[6].delay_send = 0.0f; tracks_[6].reverb_send = 0.0f;
 
-    for (int i = 3; i < kMaxTracks; ++i) {
+    tracks_[7] = TrackParameters{};
+    std::snprintf(tracks_[7].name, sizeof(tracks_[7].name), "CHORD PAD");
+    tracks_[7].engine = EngineType::kChordPad;
+    tracks_[7].p = {0.30f, 0.40f, 0.60f, 0.30f, 0.00f, 0.20f};
+    tracks_[7].attack = 0.02f; tracks_[7].decay = 0.80f; tracks_[7].sustain = 0.40f; tracks_[7].release = 0.20f;
+    tracks_[7].level = 0.80f; tracks_[7].pan = 0.00f; tracks_[7].delay_send = 0.0f; tracks_[7].reverb_send = 0.0f;
+
+    for (int i = 8; i < kMaxTracks; ++i) {
         tracks_[i] = TrackParameters{};
         std::snprintf(tracks_[i].name, sizeof(tracks_[i].name), "TRACK %02d", i + 1);
     }
 
-    pattern_length_.store(64);
-    active_rows_count_ = 3; // Рівно 3 доріжки за замовчуванням: Kick, 303, DX7
+    pattern_length_.store(16);
+    active_rows_count_ = 8;
 
     // Мапінг 1:1 — кожен рядок відповідає своєму інструменту
     for (int i = 0; i < kMaxTracks; ++i) {
@@ -229,15 +247,11 @@ void AudioEngine::initDefaultPattern() {
         row_voice_[i] = 0;
     }
 
-    // Дефолтна довжина для всіх рядків: 16 кроків, усі кроки чисті та порожні
+    // Дефолтна довжина для всіх рядків: 16 кроків, усі кроки чисті та порожні (дефолт нота 48 C3)
     for (int r = 0; r < kMaxTracks; ++r) {
         row_lengths_[r].store(16, std::memory_order_relaxed);
         for (uint32_t s = 0; s < kMaxSteps; ++s) {
-            uint8_t def_note = 48;
-            if (r == 0) def_note = 48;      // Sampler Root C2
-            else if (r == 1) def_note = 36; // 303 C1
-            else if (r == 2) def_note = 60; // DX7 C3
-            else def_note = 48;
+            uint8_t def_note = 48; // C3
             pattern_[r][s] = {false, false, false, def_note, {def_note, 255, 255, 255}, 0.90f, 0.60f, 100, TrigCondition::kNone, false, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f};
         }
     }
