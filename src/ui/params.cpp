@@ -1,5 +1,6 @@
 #include "ui/params.hpp"
 #include "ui/actions.hpp"
+#include "preset_manager.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -308,6 +309,38 @@ ParamRegistry::ParamRegistry() {
         p.label = "ENGINE";
         p.value = [](const UiContext& c) { return std::string(getEngineTypeName(c.audio.getTrackParams(trk(c, -1)).engine)); };
         p.step = [](UiContext& c, int dir, bool) { c.audio.cycleTrackEngine(trk(c, -1), dir); };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "TRK.PRESET";
+        p.label = "PRESET";
+        p.value = [](const UiContext& c) {
+            const int t = trk(c, -1);
+            auto tp = c.audio.getTrackParams(t);
+            auto presets = PresetManager::instance().getFactoryPresets(tp.engine);
+            if (presets.empty()) return std::string("--- [INIT]");
+            int idx = std::clamp(tp.preset_idx, 0, static_cast<int>(presets.size()) - 1);
+            return std::string(presets[idx].name);
+        };
+        p.norm = [](const UiContext& c) {
+            const int t = trk(c, -1);
+            auto tp = c.audio.getTrackParams(t);
+            auto presets = PresetManager::instance().getFactoryPresets(tp.engine);
+            if (presets.size() <= 1) return 0.0f;
+            return static_cast<float>(tp.preset_idx) / static_cast<float>(presets.size() - 1);
+        };
+        p.step = [](UiContext& c, int dir, bool) {
+            const int t = trk(c, -1);
+            auto tp = c.audio.getTrackParams(t);
+            auto presets = PresetManager::instance().getFactoryPresets(tp.engine);
+            if (presets.empty()) return;
+            const int n = static_cast<int>(presets.size());
+            tp.preset_idx = (tp.preset_idx + dir + n) % n;
+            PresetManager::instance().applyPreset(tp, presets[tp.preset_idx]);
+            c.audio.setTrackParams(t, tp);
+            c.app.last_action = std::string("PRESET: ") + presets[tp.preset_idx].name;
+        };
         add(std::move(p));
     }
     {

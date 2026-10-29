@@ -639,6 +639,9 @@ struct TrackParameters {
 
     // Digitakt-style sample engine parameters
     SampleConfig sample{};
+
+    // Індекс обраного пресету тембру (Track Preset)
+    int preset_idx = 0;
 };
 
 inline constexpr const char* kParamNames[static_cast<int>(EngineType::kCount)][kParamsPerTrack] = {
