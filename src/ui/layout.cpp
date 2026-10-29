@@ -143,7 +143,7 @@ void setupAppLayout(UiShell& shell) {
             {"DLY", {"DLY.TIME", "DLY.FBK", "DLY.RET", "MST.BPM"}},
             {"REV", {"REV.DECAY", "REV.RET", "TRK.DLY", "TRK.REV"}},
             {"CHR", {"MST.CHR_MIX", "MST.CHR_RATE", "MST.CHR_DEP", "TRK.CHR"}},
-            {"DRV", {"FX.DRIVE", "FX.DRV_TONE", "MST.VOL", "MST.PEAK"}}
+            {"MST", {"MST.VOL", "MST.PEAK"}}
         };
         shell.registerView(std::make_unique<GridView>(std::move(fx_spec)));
     }
@@ -178,7 +178,7 @@ void setupAppLayout(UiShell& shell) {
                 return {
                     {"OUT",  {"MST.GAIN", "MST.VOL", "MST.PAN", "MST.BPM"}},
                     {"COMP", {"MST.SC_SRC", "MST.SC_THR", "MST.SC_RAT", "MST.SC_ATK", "MST.SC_REL"}},
-                    {"FILT", {"MST.HPF_CUT", "MST.HPF_SLP", "MST.LPF_CUT", "MST.LPF_SLP"}},
+                    {"FILT", {"MST.HPF_CUT", "MST.HPF_RES", "MST.HPF_SLP", "MST.LPF_CUT", "MST.LPF_RES", "MST.LPF_SLP"}},
                     {"EQ1",  {"MST.EQ1_FRQ", "MST.EQ1_GAIN", "MST.EQ1_Q"}},
                     {"EQ2",  {"MST.EQ2_FRQ", "MST.EQ2_GAIN", "MST.EQ2_Q"}},
                     {"EQ3",  {"MST.EQ3_FRQ", "MST.EQ3_GAIN", "MST.EQ3_Q"}}
@@ -194,7 +194,7 @@ void setupAppLayout(UiShell& shell) {
                 std::string pre = "T" + std::to_string(t + 1) + ".";
                 rows.push_back({title, {pre + "LVL", pre + "PAN", pre + "DLY", pre + "REV", pre + "CHR", pre + "MUTE"}});
             }
-            rows.push_back({"BUS", {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "FX.CHR_RATE"}});
+            rows.push_back({"BUS", {"FX.CHR_MIX", "FX.CHR_RATE"}});
             rows.push_back({"MST", {"MST.VOL", "DLY.FBK", "REV.RET", "MST.BPM"}});
             return rows;
         };
@@ -330,7 +330,7 @@ void setupAppLayout(UiShell& shell) {
         arp_spec.tab_title = [](const UiContext&) { return "ARP"; };
         arp_spec.header = [](const UiContext&) { return "DUAL ARPEGGIATOR & PROCEDURAL ENGINE"; };
         arp_spec.rows = {
-            {"SCALE", {"ARP.SCALE", "ARP.ROOT", "TRK.TRANSP", "TRK.GLIDE"}},
+            {"SCALE", {"ARP.SCALE", "ARP.ROOT", "TRK.TRANSP"}},
             {"ARP1",  {"ARP.DIV1", "ARP.CHORD", "ARP.PROG", "ARP.OCT"}},
             {"ARP2",  {"ARP.DIV2", "ARP.PAT", "ARP.GATE", "STEP.SLIDE"}},
             {"ALGO",  {"ARP.EUCLID", "ARP.MUTATE", "ARP.RND", "ARP.COMMIT"}}

@@ -489,6 +489,51 @@ void GridView::renderTable(Canvas& cv, const UiContext& c, Rect area) const {
                 prev_cy = cur_cy;
             }
 
+            // Маркери точок частоти фільтрів HPF / LPF та 3 смуг Bell EQ зеленими крапками на АЧХ
+            auto drawCurveMarker = [&](float freq_hz) {
+                if (freq_hz < 20.0f || freq_hz > 24000.0f) return;
+                float norm_log = std::log(freq_hz / 20.0f) / std::log(1200.0f);
+                int dot_dx = static_cast<int>(std::round(norm_log * static_cast<float>(eq_w)));
+                if (dot_dx < 0 || dot_dx >= eq_w) return;
+
+                float hpf_db = 0.0f;
+                if (f_hpf > 20.0f) {
+                    float r = freq_hz / f_hpf;
+                    hpf_db = -10.0f * std::log10(1.0f + std::pow(1.0f / std::max(0.001f, r), hpf_order));
+                }
+                float bell1_db = 0.0f;
+                if (std::fabs(mfx.bell_gain) > 0.05f) {
+                    float f_ratio = freq_hz / std::max(1.0f, f_bell1) - f_bell1 / std::max(1.0f, freq_hz);
+                    bell1_db = mfx.bell_gain / (1.0f + bell1_q * bell1_q * f_ratio * f_ratio);
+                }
+                float bell2_db = 0.0f;
+                if (std::fabs(mfx.bell2_gain) > 0.05f) {
+                    float f_ratio = freq_hz / std::max(1.0f, f_bell2) - f_bell2 / std::max(1.0f, freq_hz);
+                    bell2_db = mfx.bell2_gain / (1.0f + bell2_q * bell2_q * f_ratio * f_ratio);
+                }
+                float bell3_db = 0.0f;
+                if (std::fabs(mfx.bell3_gain) > 0.05f) {
+                    float f_ratio = freq_hz / std::max(1.0f, f_bell3) - f_bell3 / std::max(1.0f, freq_hz);
+                    bell3_db = mfx.bell3_gain / (1.0f + bell3_q * bell3_q * f_ratio * f_ratio);
+                }
+                float lpf_db = 0.0f;
+                if (f_lpf < 20000.0f) {
+                    float r = freq_hz / f_lpf;
+                    lpf_db = -10.0f * std::log10(1.0f + std::pow(r, lpf_order));
+                }
+                float tot_db = hpf_db + bell1_db + bell2_db + bell3_db + lpf_db;
+                int dot_cy = zero_y - static_cast<int>(std::clamp(tot_db * (16.0f / 18.0f), -16.0f, 16.0f));
+
+                // Зелена крапка 3x3 на кривій АЧХ
+                cv.fill(eq_x0 + dot_dx - 1, dot_cy - 1, 3, 3, palette::kLevelOk);
+            };
+
+            if (mfx.hpf_cutoff > 0.005f) drawCurveMarker(f_hpf);
+            drawCurveMarker(f_bell1);
+            drawCurveMarker(f_bell2);
+            drawCurveMarker(f_bell3);
+            if (mfx.lpf_cutoff < 0.995f) drawCurveMarker(f_lpf);
+
             cv.text(x_100 - 6, eq_y0 + 2, "100", palette::kTextDim);
             cv.text(x_1k  - 4, eq_y0 + 2, "1K",  palette::kTextDim);
             cv.text(x_10k - 6, eq_y0 + 2, "10K", palette::kTextDim);
