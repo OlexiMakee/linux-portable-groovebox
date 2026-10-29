@@ -212,6 +212,16 @@ void UiShell::renderTabBar(Canvas& cv, const UiContext& ctx) {
 
         tx += tw;
     }
+
+    if (ctx.audio.isRecording()) {
+        const bool blink = ((ctx.now_ms / 500) & 1);
+        char rec_str[24];
+        uint32_t sec = ctx.audio.getRecordedSeconds();
+        std::snprintf(rec_str, sizeof(rec_str), "[REC %02d:%02d]", sec / 60, sec % 60);
+        cv.fill(logical_w_ - 76, 2, 74, kTabBarH - 4, palette::kPanelBg);
+        cv.rect(logical_w_ - 76, 2, 74, kTabBarH - 4, blink ? palette::kLevelWarnClip : palette::kTextDim);
+        cv.text(logical_w_ - 72, 5, rec_str, blink ? palette::kLevelWarnClip : palette::kTextDim);
+    }
 }
 
 void UiShell::renderHud(Canvas& cv, const UiContext& ctx) {

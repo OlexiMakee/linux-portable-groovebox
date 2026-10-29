@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <vector>
 
 using namespace groovebox;
@@ -935,6 +936,38 @@ static void testInputRouterAndStepEditor() {
     TEST_ASSERT(std::abs(loaded_mfx.bell_gain - 4.5f) < 0.01f, "loadProject restores EQ bell_gain");
     TEST_ASSERT(std::abs(loaded_mfx.lpf_cutoff - 0.65f) < 0.01f, "loadProject restores lpf_cutoff");
     std::remove(test_proj_path.c_str());
+
+    // Тестування потокового запису майстер-сигналу у WAV (Master WAV Recording)
+    std::string test_rec_path = "/tmp/test_master_rec.wav";
+    std::remove(test_rec_path.c_str());
+
+    TEST_ASSERT(audio.isRecording() == false, "Initial recording state is false");
+    bool rec_started = audio.startRecording(test_rec_path);
+    TEST_ASSERT(rec_started == true, "audio.startRecording returns true");
+    TEST_ASSERT(audio.isRecording() == true, "audio.isRecording is true after start");
+
+    // Відрендеримо кілька блоків аудіо
+    std::vector<int16_t> dummy_out(256 * 2, 0);
+    for (int b = 0; b < 10; ++b) {
+        audio.renderBlock(dummy_out.data(), 256, 32000);
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(80));
+
+    audio.stopRecording();
+    TEST_ASSERT(audio.isRecording() == false, "audio.isRecording is false after stop");
+
+    // Перевіряємо що WAV файл створено і його заголовок валідний
+    std::ifstream wav_in(test_rec_path, std::ios::binary);
+    TEST_ASSERT(wav_in.is_open() == true, "Recorded WAV file exists on disk");
+    char riff[4]{};
+    wav_in.read(riff, 4);
+    TEST_ASSERT(std::memcmp(riff, "RIFF", 4) == 0, "Recorded file starts with RIFF header");
+    wav_in.seekg(8, std::ios::beg);
+    char wave[4]{};
+    wav_in.read(wave, 4);
+    TEST_ASSERT(std::memcmp(wave, "WAVE", 4) == 0, "Recorded file format is WAVE");
+    wav_in.close();
+    std::remove(test_rec_path.c_str());
 }
 
 static void testViewsRendering() {

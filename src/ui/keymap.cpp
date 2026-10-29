@@ -53,6 +53,9 @@ Keymap::Keymap() {
     bind(ALL, Layer::kSelect, Button::kFn,    Gesture::kPress, "PROJECT.TEMP_SAVE");
     bind(ALL, Layer::kSelect, Button::kStart, Gesture::kPress, "PROJECT.TEMP_RELOAD");
 
+    // Запис майстер-виходу у WAV (SELECT + R3)
+    bind(ALL, Layer::kSelect, Button::kR3,    Gesture::kPress, "REC.MASTER_TOGGLE");
+
     // =========================================================================
     // 2. СЕКВЕНСОР (ViewId::kSeq)
     // =========================================================================
