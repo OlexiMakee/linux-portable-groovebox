@@ -42,7 +42,6 @@ void setupAppLayout(UiShell& shell) {
                     {"LFO2",   {"LFO2.WAVE", "LFO2.RATE", "LFO2.MULT", "LFO2.DEPTH", "LFO2.DEST", "LFO2.MODE"}},
                     {"LFO3",   {"LFO3.WAVE", "LFO3.RATE", "LFO3.MULT", "LFO3.DEPTH", "LFO3.DEST", "LFO3.MODE"}},
                     {"LFO4",   {"LFO4.WAVE", "LFO4.RATE", "LFO4.MULT", "LFO4.DEPTH", "LFO4.DEST", "LFO4.MODE"}},
-                    {"ENV1",   {"ENV1.ATK", "ENV1.DEC", "ENV1.SUS", "ENV1.REL", "ENV1.AMT", "ENV1.DEST"}},
                     {"ENV2",   {"ENV2.ATK", "ENV2.DEC", "ENV2.SUS", "ENV2.REL", "ENV2.AMT", "ENV2.DEST"}},
                     {"L-STK1", {"STK.L1_X", "STK.L1_XAMT", "STK.L1_Y", "STK.L1_YAMT"}},
                     {"L-STK2", {"STK.L2_X", "STK.L2_XAMT", "STK.L2_Y", "STK.L2_YAMT"}},
@@ -70,72 +69,60 @@ void setupAppLayout(UiShell& shell) {
             switch (tp.engine) {
                 case EngineType::kDx7:
                     return {
-                        {"INST",   {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.P1", "TRK.RND"}},
-                        {"DX7",    {"TRK.P5", "TRK.P6", "TRK.P3", "TRK.P4"}},
-                        {"TIMBRE", {"TRK.P2", "TRK.GLIDE", "FX.CHR_MIX", "FX.DRIVE"}},
-                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
-                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV",    {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
+                        {"INST",   {"TRK.ENGINE", "TRK.P1"}},
+                        {"DX7",    {"TRK.P5", "TRK.P6", "TRK.P3", "TRK.P4", "TRK.P2"}},
+                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
+                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
+                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
                     };
                 case EngineType::kAcid303:
                     return {
-                        {"INST",   {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.P6", "TRK.RND"}},
-                        {"303",    {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4"}},
-                        {"ACID",   {"TRK.P5", "TRK.GLIDE", "FX.DRIVE", "FX.DRV_TONE"}},
-                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
-                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}}
+                        {"INST",   {"TRK.ENGINE", "TRK.P6"}},
+                        {"303",    {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5"}},
+                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
+                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
+                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
                     };
                 case EngineType::kFm2Op:
                     return {
-                        {"INST",   {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.GLIDE", "TRK.RND"}},
-                        {"2-OP",   {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P5"}},
-                        {"MOD",    {"TRK.P4", "TRK.P6", "FX.CHR_MIX", "FX.DRIVE"}},
-                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
-                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV",    {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
+                        {"INST",   {"TRK.ENGINE", "TRK.P1"}},
+                        {"2-OP",   {"TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5", "TRK.P6"}},
+                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
+                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
+                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
                     };
                 case EngineType::kChordPad:
                     return {
-                        {"INST",   {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.GLIDE", "TRK.RND"}},
-                        {"CHORD",  {"TRK.P3", "TRK.P5", "TRK.P1", "TRK.P2"}},
-                        {"COLOR",  {"FX.CHR_MIX", "FX.CHR_RATE", "FX.DRIVE", "TRK.P6"}},
-                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
-                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV",    {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
+                        {"INST",   {"TRK.ENGINE", "TRK.P1"}},
+                        {"CHORD",  {"TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5", "TRK.P6"}},
+                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
+                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
+                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
                     };
                 case EngineType::kSampleOneShot:
-                    return {
-                        {"INST",   {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.GAIN_OVER", "TRK.RND"}},
-                        {"PLAY",   {"SMP.LOOP", "SMP.START", "SMP.LOOP_PT", "SMP.END"}},
-                        {"TUNING", {"SMP.TUNE", "TRK.GLIDE", "FX.DRIVE", "FX.DRV_TONE"}},
-                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
-                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV",    {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
-                    };
                 case EngineType::kSliceSampler:
                     return {
-                        {"INST",   {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "TRK.GAIN_OVER", "TRK.RND"}},
-                        {"PLAY",   {"SMP.LOOP", "TRK.P2", "SMP.START", "SMP.END"}},
-                        {"TUNING", {"SMP.TUNE", "TRK.GLIDE", "FX.DRIVE", "FX.DRV_TONE"}},
-                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
-                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV",    {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
+                        {"INST",   {"TRK.ENGINE", "TRK.WAVE_SAMPLE", "SMP.PLAY_MODE"}},
+                        {"PLAY",   {"SMP.LOOP", "SMP.START", "SMP.LOOP_PT", "SMP.END"}},
+                        {"TUNING", {"SMP.TUNE", "SMP.SLICE"}},
+                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
+                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
+                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
                     };
                 case EngineType::kMidiOut:
                     return {
-                        {"INST",   {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.P1", "TRK.P6"}},
+                        {"INST",   {"TRK.ENGINE", "TRK.P1", "TRK.P6"}},
                         {"CC_A",   {"TRK.P2", "TRK.P3"}},
                         {"CC_B",   {"TRK.P4", "TRK.P5"}}
                     };
                 case EngineType::kVaMono:
                 default:
                     return {
-                        {"INST",   {"TRK.ENGINE", "TRK.GAIN_OVER", "TRK.GLIDE", "TRK.RND"}},
-                        {"OSC",    {"TRK.P5", "TRK.P6", "TRK.P1", "TRK.P2"}},
-                        {"COLOR",  {"FX.DRIVE", "FX.DRV_TONE", "FX.CHR_MIX", "TRK.P3"}},
-                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
-                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
-                        {"ENV",    {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
+                        {"INST",   {"TRK.ENGINE", "TRK.P1"}},
+                        {"OSC",    {"TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5", "TRK.P6"}},
+                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
+                        {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
+                        {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL"}}
                     };
             }
         };
@@ -155,7 +142,7 @@ void setupAppLayout(UiShell& shell) {
         fx_spec.rows = {
             {"DLY", {"DLY.TIME", "DLY.FBK", "DLY.RET", "MST.BPM"}},
             {"REV", {"REV.DECAY", "REV.RET", "TRK.DLY", "TRK.REV"}},
-            {"CHR", {"FX.CHR_MIX", "FX.CHR_RATE", "FX.CHR_DEP", "TRK.PAN"}},
+            {"CHR", {"MST.CHR_MIX", "MST.CHR_RATE", "MST.CHR_DEP", "TRK.CHR"}},
             {"DRV", {"FX.DRIVE", "FX.DRV_TONE", "MST.VOL", "MST.PEAK"}}
         };
         shell.registerView(std::make_unique<GridView>(std::move(fx_spec)));
@@ -192,7 +179,9 @@ void setupAppLayout(UiShell& shell) {
                     {"OUT",  {"MST.GAIN", "MST.VOL", "MST.PAN", "MST.BPM"}},
                     {"COMP", {"MST.SC_SRC", "MST.SC_THR", "MST.SC_RAT", "MST.SC_ATK", "MST.SC_REL"}},
                     {"FILT", {"MST.HPF_CUT", "MST.HPF_SLP", "MST.LPF_CUT", "MST.LPF_SLP"}},
-                    {"EQ",   {"MST.EQ_FRQ", "MST.EQ_GAIN", "MST.EQ_Q"}}
+                    {"EQ1",  {"MST.EQ1_FRQ", "MST.EQ1_GAIN", "MST.EQ1_Q"}},
+                    {"EQ2",  {"MST.EQ2_FRQ", "MST.EQ2_GAIN", "MST.EQ2_Q"}},
+                    {"EQ3",  {"MST.EQ3_FRQ", "MST.EQ3_GAIN", "MST.EQ3_Q"}}
                 };
             }
             std::vector<GridRow> rows;
@@ -249,38 +238,78 @@ void setupAppLayout(UiShell& shell) {
         ins_spec.accent = palette::kParamTrig;
         ins_spec.header = [](const UiContext& c) {
             char b[64];
-            const int t = c.audio.getRowTrack(c.app.cursor_row);
-            const int v = c.audio.getRowVoice(c.app.cursor_row);
-            std::snprintf(b, sizeof(b), "STEP EDITOR [T%d:V%d ST%03d]", t + 1, v + 1, c.app.cursor_step + 1);
+            switch (c.app.inspect_page) {
+                case AppModel::InspectPage::kSyn:
+                    std::snprintf(b, sizeof(b), "midi-<SYN>-mod-fx");
+                    break;
+                case AppModel::InspectPage::kMod:
+                    std::snprintf(b, sizeof(b), "midi-syn-<MOD>-fx");
+                    break;
+                case AppModel::InspectPage::kFx:
+                    std::snprintf(b, sizeof(b), "midi-syn-mod-<FX>");
+                    break;
+                case AppModel::InspectPage::kMidi:
+                default:
+                    std::snprintf(b, sizeof(b), "<MIDI>-syn-mod-fx");
+                    break;
+            }
             return std::string(b);
         };
-        ins_spec.rows = {
-            {"", {"STEP.TYPE"}},
-            {"", {"STEP.NOTE"}},
-            {"", {"STEP.CHORD1"}},
-            {"", {"STEP.CHORD2"}},
-            {"", {"STEP.CHORD3"}},
-            {"", {"STEP.VEL"}},
-            {"", {"STEP.GATE"}},
-            {"", {"STEP.SLIDE"}},
-            {"", {"STEP.PROB"}},
-            {"", {"STEP.COND"}},
-            {"", {"STEP.CUT"}},
-            {"", {"STEP.ATK"}},
-            {"", {"STEP.DEC"}},
-            {"", {"STEP.SUS"}},
-            {"", {"STEP.REL"}},
-            {"", {"STEP.P1"}},
-            {"", {"STEP.P2"}},
-            {"", {"STEP.P3"}},
-            {"", {"STEP.P4"}},
-            {"", {"STEP.P5"}},
-            {"", {"STEP.P6"}},
-            {"", {"STEP.SMP_START"}},
-            {"", {"STEP.SMP_LOOP"}},
-            {"", {"STEP.SMP_END"}},
-            {"", {"STEP.DLY_SEND"}},
-            {"", {"STEP.REV_SEND"}}
+        ins_spec.dynamic_rows = [](const UiContext& c) -> std::vector<GridRow> {
+            switch (c.app.inspect_page) {
+                case AppModel::InspectPage::kSyn:
+                    return {
+                        {"", {"STEP.CUT"}},
+                        {"", {"STEP.P1"}},
+                        {"", {"STEP.P2"}},
+                        {"", {"STEP.P3"}},
+                        {"", {"STEP.P4"}},
+                        {"", {"STEP.P5"}},
+                        {"", {"STEP.P6"}},
+                        {"", {"STEP.ATK"}},
+                        {"", {"STEP.DEC"}},
+                        {"", {"STEP.SUS"}},
+                        {"", {"STEP.REL"}},
+                        {"", {"STEP.SMP_START"}},
+                        {"", {"STEP.SMP_LOOP"}},
+                        {"", {"STEP.SMP_END"}}
+                    };
+                case AppModel::InspectPage::kMod:
+                    return {
+                        {"", {"LFO1.DEPTH"}},
+                        {"", {"LFO1.RATE"}},
+                        {"", {"LFO1.DEST"}},
+                        {"", {"LFO2.DEPTH"}},
+                        {"", {"LFO2.RATE"}},
+                        {"", {"LFO2.DEST"}},
+                        {"", {"ENV2.AMT"}},
+                        {"", {"ENV2.DEST"}},
+                        {"", {"ENV2.ATK"}},
+                        {"", {"ENV2.DEC"}}
+                    };
+                case AppModel::InspectPage::kFx:
+                    return {
+                        {"", {"STEP.DLY_SEND"}},
+                        {"", {"STEP.REV_SEND"}},
+                        {"", {"FX.BC_BITS"}},
+                        {"", {"FX.DST_DRV"}},
+                        {"", {"FX.CHR_MIX"}}
+                    };
+                case AppModel::InspectPage::kMidi:
+                default:
+                    return {
+                        {"", {"STEP.TYPE"}},
+                        {"", {"STEP.NOTE"}},
+                        {"", {"STEP.CHORD1"}},
+                        {"", {"STEP.CHORD2"}},
+                        {"", {"STEP.CHORD3"}},
+                        {"", {"STEP.VEL"}},
+                        {"", {"STEP.GATE"}},
+                        {"", {"STEP.SLIDE"}},
+                        {"", {"STEP.PROB"}},
+                        {"", {"STEP.COND"}}
+                    };
+            }
         };
         shell.registerView(std::make_unique<GridView>(std::move(ins_spec)));
     }

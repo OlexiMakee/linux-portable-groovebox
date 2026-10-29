@@ -1103,11 +1103,11 @@ static void testViewsRendering() {
     TEST_ASSERT(inspect_view != nullptr, "ViewId::kInspect registered in shell");
     if (inspect_view) {
         UiContext ctx{app, audio, nullptr, in, hw, tel, midi, 1000, &shell};
-        for (int r = 0; r < 25; ++r) {
+        for (int r = 0; r < 9; ++r) {
             inspect_view->navigate(ctx, 0, 1, false);
         }
-        TEST_ASSERT(app.grid_row[static_cast<int>(ViewId::kInspect)] == 25, "Step Inspector scrolls to bottom P-Lock row (REV_SEND)");
-        inspect_view->navigate(ctx, 0, -25, false);
+        TEST_ASSERT(app.grid_row[static_cast<int>(ViewId::kInspect)] == 9, "Step Inspector scrolls to bottom of MIDI page (COND)");
+        inspect_view->navigate(ctx, 0, -9, false);
         TEST_ASSERT(app.grid_row[static_cast<int>(ViewId::kInspect)] == 0, "Step Inspector returns to top row (TYPE)");
     }
     app.step_inspector_open = false;
