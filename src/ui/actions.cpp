@@ -597,6 +597,15 @@ ActionRegistry::ActionRegistry() {
             c.audio.panic();
         }
     }});
+    add(Action{"REC.MASTER_TOGGLE", "REC", [](UiContext& c) {
+        if (c.audio.isRecording()) {
+            c.audio.stopRecording();
+            c.app.last_action = "REC STOPPED";
+        } else {
+            bool ok = c.audio.startRecording();
+            c.app.last_action = ok ? "REC STARTED" : "ERR: REC FAIL";
+        }
+    }});
     add(Action{"STEP.PREVIEW", "PREV", [](UiContext& c) {
         if (c.app.cursor_row < c.audio.getActiveRowCount()) {
             c.audio.previewStep(c.app.cursor_row, c.app.cursor_step);

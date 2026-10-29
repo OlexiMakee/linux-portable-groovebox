@@ -7,6 +7,11 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
 
 #if defined(__linux__)
 #include <pthread.h>
@@ -77,7 +82,8 @@ AudioEngine::AudioEngine()
     : delay_buf_l_(16384, 0.0f),
       delay_buf_r_(16384, 0.0f),
       chorus_buf_l_(2048, 0.0f),
-      chorus_buf_r_(2048, 0.0f) {
+      chorus_buf_r_(2048, 0.0f),
+      rec_ring_buf_(kRecRingCapacity, 0) {
     for (auto& s : scope_ring_) s.store(0.0f, std::memory_order_relaxed);
     for (auto& t : track_vu_) t.store(0.0f, std::memory_order_relaxed);
     initReverb(32000);
@@ -87,6 +93,7 @@ AudioEngine::AudioEngine()
 }
 
 AudioEngine::~AudioEngine() {
+    stopRecording();
     stop();
     net_streamer_.stop();
 }
@@ -1821,6 +1828,10 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
 
     net_streamer_.pushAudioBlock(out_interleaved, frames);
 
+    if (is_recording_.load(std::memory_order_relaxed)) {
+        pushRecordingSamples(out_interleaved, frames);
+    }
+
     scope_write_idx_.store(sc_idx & 255u, std::memory_order_relaxed);
 
     float prev_l = vu_l_.load(std::memory_order_relaxed);
@@ -2050,6 +2061,158 @@ float AudioEngine::getLiveModOffset(int track, ModTarget target) const {
 
 float AudioEngine::getLiveModValue(int track, ModTarget target, float base_val) const {
     return std::clamp(base_val + getLiveModOffset(track, target), 0.0f, 1.0f);
+}
+
+namespace {
+
+void writeWavHeader(std::ostream& os, uint32_t sample_rate, uint32_t frames) {
+    uint32_t subchunk2_size = frames * 2 * sizeof(int16_t); // 2 channels, 16-bit
+    uint32_t chunk_size = 36 + subchunk2_size;
+    uint16_t audio_format = 1; // PCM
+    uint16_t num_channels = 2; // Stereo
+    uint32_t byte_rate = sample_rate * num_channels * sizeof(int16_t);
+    uint16_t block_align = num_channels * sizeof(int16_t);
+    uint16_t bits_per_sample = 16;
+
+    os.write("RIFF", 4);
+    os.write(reinterpret_cast<const char*>(&chunk_size), 4);
+    os.write("WAVE", 4);
+    os.write("fmt ", 4);
+    uint32_t subchunk1_size = 16;
+    os.write(reinterpret_cast<const char*>(&subchunk1_size), 4);
+    os.write(reinterpret_cast<const char*>(&audio_format), 2);
+    os.write(reinterpret_cast<const char*>(&num_channels), 2);
+    os.write(reinterpret_cast<const char*>(&sample_rate), 4);
+    os.write(reinterpret_cast<const char*>(&byte_rate), 4);
+    os.write(reinterpret_cast<const char*>(&block_align), 2);
+    os.write(reinterpret_cast<const char*>(&bits_per_sample), 2);
+    os.write("data", 4);
+    os.write(reinterpret_cast<const char*>(&subchunk2_size), 4);
+}
+
+} // namespace
+
+bool AudioEngine::startRecording(const std::string& custom_path) {
+    if (is_recording_.load(std::memory_order_relaxed)) return true;
+
+    std::string path = custom_path;
+    if (path.empty()) {
+        static const char* kCandidateDirs[] = {
+            "/storage/roms/groovebox/recordings",
+            "/storage/dev/groovebox/recordings",
+            "res/recordings",
+            "/tmp/recordings"
+        };
+        std::string chosen_dir = "/tmp/recordings";
+        std::error_code ec;
+        for (const char* dir : kCandidateDirs) {
+            std::filesystem::create_directories(dir, ec);
+            if (std::filesystem::exists(dir, ec)) {
+                chosen_dir = dir;
+                break;
+            }
+        }
+        std::time_t now = std::time(nullptr);
+        std::tm tm_now{};
+#if defined(_WIN32)
+        localtime_s(&tm_now, &now);
+#else
+        localtime_r(&now, &tm_now);
+#endif
+        char time_buf[32];
+        std::strftime(time_buf, sizeof(time_buf), "%Y%m%d_%H%M%S", &tm_now);
+        path = chosen_dir + "/rec_" + time_buf + ".wav";
+    }
+
+    rec_filepath_ = path;
+    rec_frames_total_.store(0, std::memory_order_relaxed);
+    rec_write_pos_.store(0, std::memory_order_relaxed);
+    rec_read_pos_.store(0, std::memory_order_relaxed);
+
+    if (rec_thread_.joinable()) rec_thread_.join();
+
+    is_recording_.store(true, std::memory_order_release);
+    rec_thread_ = std::thread(&AudioEngine::recThreadLoop, this);
+    return true;
+}
+
+void AudioEngine::stopRecording() {
+    if (!is_recording_.load(std::memory_order_relaxed)) return;
+    is_recording_.store(false, std::memory_order_release);
+    rec_cv_.notify_all();
+    if (rec_thread_.joinable()) {
+        rec_thread_.join();
+    }
+}
+
+uint32_t AudioEngine::getRecordedSeconds() const {
+    uint32_t frames = rec_frames_total_.load(std::memory_order_relaxed);
+    uint32_t sr = active_sample_rate_.load(std::memory_order_relaxed);
+    if (sr == 0) sr = 32000;
+    return frames / sr;
+}
+
+std::string AudioEngine::getRecordingPath() const {
+    return rec_filepath_;
+}
+
+void AudioEngine::pushRecordingSamples(const int16_t* interleaved_pcm, uint32_t frames) {
+    if (!interleaved_pcm || frames == 0) return;
+    const size_t total_samples = frames * 2;
+    size_t w = rec_write_pos_.load(std::memory_order_relaxed);
+    for (size_t i = 0; i < total_samples; ++i) {
+        rec_ring_buf_[w] = interleaved_pcm[i];
+        w = (w + 1) % rec_ring_buf_.size();
+    }
+    rec_write_pos_.store(w, std::memory_order_release);
+    rec_frames_total_.fetch_add(frames, std::memory_order_relaxed);
+    rec_cv_.notify_one();
+}
+
+void AudioEngine::recThreadLoop() {
+    std::ofstream os(rec_filepath_, std::ios::binary);
+    if (!os.is_open()) {
+        is_recording_.store(false, std::memory_order_release);
+        return;
+    }
+
+    uint32_t sr = active_sample_rate_.load(std::memory_order_relaxed);
+    if (sr == 0) sr = 32000;
+    writeWavHeader(os, sr, 0);
+
+    std::vector<int16_t> chunk;
+    chunk.reserve(4096);
+    uint32_t samples_written = 0;
+
+    while (is_recording_.load(std::memory_order_relaxed) ||
+           (rec_read_pos_.load(std::memory_order_acquire) != rec_write_pos_.load(std::memory_order_acquire))) {
+        {
+            std::unique_lock<std::mutex> lock(rec_mutex_);
+            rec_cv_.wait_for(lock, std::chrono::milliseconds(50), [&]() {
+                return !is_recording_.load(std::memory_order_relaxed) ||
+                       (rec_read_pos_.load(std::memory_order_acquire) != rec_write_pos_.load(std::memory_order_acquire));
+            });
+        }
+        size_t r = rec_read_pos_.load(std::memory_order_relaxed);
+        size_t w = rec_write_pos_.load(std::memory_order_acquire);
+        chunk.clear();
+        while (r != w) {
+            chunk.push_back(rec_ring_buf_[r]);
+            r = (r + 1) % rec_ring_buf_.size();
+        }
+        rec_read_pos_.store(r, std::memory_order_release);
+
+        if (!chunk.empty()) {
+            os.write(reinterpret_cast<const char*>(chunk.data()), chunk.size() * sizeof(int16_t));
+            samples_written += static_cast<uint32_t>(chunk.size());
+        }
+    }
+
+    if (os.is_open() && samples_written > 0) {
+        os.seekp(0, std::ios::beg);
+        writeWavHeader(os, sr, samples_written / 2);
+        os.flush();
+    }
 }
 
 } // namespace groovebox

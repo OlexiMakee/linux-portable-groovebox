@@ -7,6 +7,7 @@
 
 #include <array>
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -77,6 +78,13 @@ public:
         std::lock_guard<std::mutex> lock(state_mutex_);
         master_fx_ = mfx;
     }
+
+    // Запис майстер-виходу у WAV (Live Master WAV Recording)
+    bool startRecording(const std::string& custom_path = "");
+    void stopRecording();
+    bool isRecording() const { return is_recording_.load(std::memory_order_relaxed); }
+    uint32_t getRecordedSeconds() const;
+    std::string getRecordingPath() const;
 
     // Оверрайд аудіовиходу: Auto (USB за наявності) <-> Force Internal (RK817)
     void toggleOutputOverride();
@@ -383,6 +391,20 @@ private:
     float mst_lpf2_low_r_ = 0.0f, mst_lpf2_band_r_ = 0.0f;
 
     NetAudioStreamer net_streamer_;
+
+    // Підсистема потокового запису майстер-сигналу у WAV на диск
+    std::atomic<bool> is_recording_{false};
+    std::atomic<uint32_t> rec_frames_total_{0};
+    std::string rec_filepath_;
+    std::thread rec_thread_;
+    std::mutex rec_mutex_;
+    std::condition_variable rec_cv_;
+    static constexpr size_t kRecRingCapacity = 65536;
+    std::vector<int16_t> rec_ring_buf_;
+    std::atomic<size_t> rec_write_pos_{0};
+    std::atomic<size_t> rec_read_pos_{0};
+    void recThreadLoop();
+    void pushRecordingSamples(const int16_t* interleaved_pcm, uint32_t frames);
 
     std::atomic<bool> running_{false};
     std::atomic<int> current_card_{-1};
