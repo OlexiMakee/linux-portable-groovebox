@@ -390,6 +390,26 @@ static void testAudioDspEngines() {
     audio.toggleSoloTrack(1);
     TEST_ASSERT(!audio.isSoloed(1) && !audio.getTrackParams(0).muted, "Unsolo track 1 restores previous mute state");
 
+    // 16b. Slicer engine mode and monophonic choke testing
+    auto slc_tp = audio.getTrackParams(0);
+    slc_tp.engine = EngineType::kSampleOneShot;
+    slc_tp.sample.play_mode = SampleEngineMode::kSlicer;
+    slc_tp.sample.slice_grid_count = 16;
+    slc_tp.sample.slice_index = 0;
+    audio.setTrackParams(0, slc_tp);
+    TEST_ASSERT(audio.getTrackParams(0).sample.play_mode == SampleEngineMode::kSlicer, "Sample player switched to SLICER mode");
+    TEST_ASSERT(audio.getTrackParams(0).sample.slice_grid_count == 16, "Slicer default grid count is 16");
+
+    // Trigger slice 0 (note 48) then slice 1 (note 49)
+    audio.triggerNote(0, 48, 0.90f);
+    int16_t slc_buf1[256 * 2];
+    audio.renderBlock(slc_buf1, 256, 32000);
+    audio.triggerNote(0, 49, 0.90f);
+    int16_t slc_buf2[256 * 2];
+    audio.renderBlock(slc_buf2, 256, 32000);
+    TEST_ASSERT(audio.isVoicePlayingNote(0, 49), "Monophonic slicer chokes previous slice and plays new slice (note 49)");
+    TEST_ASSERT(!audio.isVoicePlayingNote(0, 48), "Previous slice (note 48) is choked/monophonic");
+
     audio.stop();
 }
 
@@ -809,6 +829,49 @@ static void testInputRouterAndStepEditor() {
     app.sample_browser_open = true;
     ActionRegistry::instance().run("SAMPLE_BROWSER.CLOSE", ctx);
     TEST_ASSERT(app.sample_browser_open == false, "Button B unconditionally closes sample browser modal");
+
+    // Тестування контекстного файлового браузера (OneShots, Loops, DX7)
+    app.selected_track = 0;
+    auto ctx_tp = audio.getTrackParams(0);
+    ctx_tp.engine = EngineType::kSampleOneShot;
+    ctx_tp.sample.play_mode = SampleEngineMode::kSlicer;
+    audio.setTrackParams(0, ctx_tp);
+    ActionRegistry::instance().run("SAMPLE_BROWSER.OPEN", ctx);
+    TEST_ASSERT(app.browser_context == AppModel::BrowserContext::kLoops, "SAMPLE_BROWSER.OPEN in Slicer mode sets context to kLoops");
+    ActionRegistry::instance().run("SAMPLE_BROWSER.CLOSE", ctx);
+
+    ctx_tp.sample.play_mode = SampleEngineMode::kOneShot;
+    audio.setTrackParams(0, ctx_tp);
+    ActionRegistry::instance().run("SAMPLE_BROWSER.OPEN", ctx);
+    TEST_ASSERT(app.browser_context == AppModel::BrowserContext::kOneShots, "SAMPLE_BROWSER.OPEN in OneShot mode sets context to kOneShots");
+    ActionRegistry::instance().run("SAMPLE_BROWSER.CLOSE", ctx);
+
+    ctx_tp.engine = EngineType::kDx7;
+    audio.setTrackParams(0, ctx_tp);
+    ActionRegistry::instance().run("SAMPLE_BROWSER.OPEN", ctx);
+    TEST_ASSERT(app.browser_context == AppModel::BrowserContext::kDx7, "SAMPLE_BROWSER.OPEN on DX7 sets context to kDx7");
+    ActionRegistry::instance().run("SAMPLE_BROWSER.CLOSE", ctx);
+
+    // Тестування SMP.GRID степінгу (8, 16, 32, 64, 128)
+    const Param* p_grid = ParamRegistry::instance().find("SMP.GRID");
+    TEST_ASSERT(p_grid != nullptr, "Param SMP.GRID is registered");
+    if (p_grid && p_grid->step) {
+        ctx_tp.engine = EngineType::kSampleOneShot;
+        ctx_tp.sample.play_mode = SampleEngineMode::kSlicer;
+        ctx_tp.sample.slice_grid_count = 16;
+        audio.setTrackParams(0, ctx_tp);
+        p_grid->step(ctx, 1, false);
+        TEST_ASSERT(audio.getTrackParams(0).sample.slice_grid_count == 32, "SMP.GRID steps from 16 to 32 slices");
+        p_grid->step(ctx, 1, false);
+        TEST_ASSERT(audio.getTrackParams(0).sample.slice_grid_count == 64, "SMP.GRID steps to 64 slices");
+        p_grid->step(ctx, 1, false);
+        TEST_ASSERT(audio.getTrackParams(0).sample.slice_grid_count == 128, "SMP.GRID steps to 128 slices");
+        p_grid->step(ctx, -1, false);
+        TEST_ASSERT(audio.getTrackParams(0).sample.slice_grid_count == 64, "SMP.GRID decrements back to 64 slices");
+    }
+
+    const Param* p_dx7_b = ParamRegistry::instance().find("DX7.BANK");
+    TEST_ASSERT(p_dx7_b != nullptr, "Param DX7.BANK is registered in param registry");
 
     // 9. Тестування автоматичного нарізання лупера та призначення на слоти
     app.sampler.sliceToDrumSlots(0.0f, 1.0f);
