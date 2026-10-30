@@ -1315,3 +1315,29 @@
   * Тестовий набір `auto_test` успішно адаптовано та пройдено: **287/287 PASSED [OK]**.
   * Бінарники скомпільовано під aarch64 через Zig toolchain та задеплоєно на консоль (`10.1.1.2`).
   * Сервіс `groovebox.service` перезапущено (PID `106090`), знято свіжий скріншот `docs/screenshots/xu10_live.png`.
+
+
+## [2026-10-30 20:09] Milestone 45: Global SOLID & Modularity Audit, Sampler/Player Separation, 16-Channel Bidirectional MIDI & Multi-Handheld Portability (Trimui Brick Pro / R36S / XU10)
+
+* **Розмежування об'єктної моделі `[R1] SAMPLE` (Recorder/Resampler) та `[L2] SAMPLE PLAYER` (Track Synth Engine):**
+  * Підключено живий стерео-ресемплінг майстер-виходу (`RecSource::kMasterResample`) безпосередньо в `AudioEngine::renderBlock` $\rightarrow$ `SamplerEngine::processAudioInput`.
+  * Додано `SamplerEngine::assignTrimmedToTrack(int track, float trim_st, float trim_end)` для прямого призначення записаного фрагмента на будь-яку з 16 доріжок (`1..16`) у `SamplerEngine::trackSample(t)`.
+  * Додано `SamplerEngine::saveTrimmedToWav(const std::string& path, float trim_st, float trim_end)` для збереження записаних фрагментів у `.wav` файли в директорії `oneshots/rec_XXX.wav` або `loops/loop_XXX.wav`.
+  * Розширено сітку параметрів `[R1] SAMPLE` (`SampleView`) до `2×5`: додано масштабування хвилі `SMP.ZOOM` (`1X / 2X / 4X / 8X`) та `SMP.SAVE` (`SAVE WAV`).
+
+* **Відновлення прихованих рушіїв та прибирання дублювань в UI:**
+  * Додано `EngineType::kFm2Op` (`2-OP FM`) до списку доступних рушіїв `kSelectableEngines` (тепер усі 7 звукових/MIDI рушіїв доступні в меню вибору).
+  * Реалізовано підрежим мікшера `MixSubmode::kSend` (`[R2] mix <SND> mst`) із виділеними шинами посилів (`DLY`, `REV`, `CHR`, `MST`).
+  * Очищено вкладку `SYS` від дубльованих параметрів семплера (`SYS.SAMPLER`, `SYS.SLICES`, `SYS.REC_SRC`, `SYS.REC_ARM`) та виведено раніше приховані можливості ядра: `SYS.FORCE_INT` (`DAC ROUTE`), `SYS.MIDI_PORT`, `SYS.NET_STREAM` (`HTTP WAV :8000`), `SYS.MASTER_REC`, `SYS.PROFILE`, `SYS.DISPLAY`.
+  * Виправлено навігацію `PerfView::navigate` для перемикання між усіма активними доріжками (`1..16`), а в нижньому HUD виведено реактивні підписи осей стіків (`L1R/L1D`, `CUT/RES`) для `Mode 1 / Mode 2`.
+
+* **Універсальний USB Audio / MIDI та двосторонній 16-канальний MIDI (`src/hw_monitor.cpp`, `src/midi_engine.cpp`, `src/main.cpp`):**
+  * Прибрано жорстку прив'язку до назви `"DIGITAKT II USB"` — тепер `HardwareMonitor` визначає та відображає реальне ім'я будь-якої підключеної Class-Compliant USB Audio карти та USB MIDI порту.
+  * Реалізовано повноцінний ALSA RawMIDI вихід (`O_RDWR`, `sendNote`, `sendControlChange`, `sendProgramChange`) та підключено колбек `AudioEngine::setMidiOutCallback` для доріжок `MIDI OUT`.
+  * Розширено вхідний MIDI-роутинг із 4 до всіх 16 MIDI-каналів (`channel < 16`), додано мапінг `CC 74` (Cutoff), `CC 71` (Resonance) та перемикання патернів по `Program Change`.
+
+* **Мульти-девайсна портативність (`Trimui Brick Pro`, `R36S`, `MagicX XU10`, `Desktop`):**
+  * Розширено `DeviceProfile` підтримкою секції `[display]` (`width`, `height`, `integer_scale`), `[storage]` (`data_dir`), прапорця `has_analog_sticks`, мульти-токенного пошуку через `|` у `device.match` та `input.*`, а також перевизначення через `$GROOVEBOX_PROFILE` та `$GROOVEBOX_DATA_DIR`.
+  * У `InputManager::pollEvdev` додано підтримку `ABS_HAT0X / ABS_HAT0Y` хрестовини (для контролерів Trimui Brick / Brick Pro, R36S та RG35XX).
+  * Створено профілі `profiles/trimui-brick-pro.ini` (`1024×768`, Allwinner A133P) та `profiles/r36s.ini` (`640×480`, Rockchip RK3326), а також `CMakePresets.json` (`desktop`, `rk3326`, `a133p`).
+  * Розширено тестовий пакет `auto_test` до **311 автоматизованих перевірок** (`311/311 PASSED [OK]`), перегенеровано всі 20 скріншотів у `docs/screenshots/` та оновлено документацію проєкту.
