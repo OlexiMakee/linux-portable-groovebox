@@ -202,7 +202,7 @@ const DeviceProfile& loadActiveProfile() {
             }
             auto it = ini.find("device.match");
             const std::string match = it != ini.end() ? lower(it->second) : "";
-            if (matchesAnyToken(model, match)) {
+            if (forced_prof.empty() && matchesAnyToken(model, match)) {
                 applyIni(ini, g_profile, path);
                 std::printf("[PROFILE] '%s' matched model '%s' (%s)\n", g_profile.name.c_str(), model.c_str(), path.c_str());
                 return g_profile;
