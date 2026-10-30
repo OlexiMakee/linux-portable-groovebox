@@ -1341,3 +1341,21 @@
   * У `InputManager::pollEvdev` додано підтримку `ABS_HAT0X / ABS_HAT0Y` хрестовини (для контролерів Trimui Brick / Brick Pro, R36S та RG35XX).
   * Створено профілі `profiles/trimui-brick-pro.ini` (`1024×768`, Allwinner A133P) та `profiles/r36s.ini` (`640×480`, Rockchip RK3326), а також `CMakePresets.json` (`desktop`, `rk3326`, `a133p`).
   * Розширено тестовий пакет `auto_test` до **311 автоматизованих перевірок** (`311/311 PASSED [OK]`), перегенеровано всі 20 скріншотів у `docs/screenshots/` та оновлено документацію проєкту.
+
+
+## [2026-10-30 20:38] Milestone 46: English/Ukrainian Documentation Split, Windows Host Build Compatibility & AUDIO-RECORDING Renaming
+
+* **Перейменування `[R1] SAMPLE` $\rightarrow$ `AUDIO-REC` / `AUDIO-RECORDING` (`src/ui/ui_context.hpp`, `src/ui/views.hpp`, `src/ui/views.cpp`, `src/ui/ui_shell.cpp`):**
+  * Вкладку `[R1]` перейменовано з `SAMPLE` на `AUDIO-REC`, а заголовок екрана — з `SAMPLING WORKSTATION` на `AUDIO-RECORDING`, щоб повністю виключити плутанину з інструментальним рушієм доріжки `SAMPLE PLAYER`.
+  * У візуальному турі (`tools/render_tour.cpp`) та документації основними прикладами виведено найстабільніші рушії (`One-Shot Sample Player`, `DX7 6-OP`, `Virtual Analog Supersaw`), а `AUDIO-RECORDING` та `303 Bassline` чітко позначені як експериментальні (Work-in-Progress).
+  * Виправлено підпис скріншота Piano Roll (`[L1] seq <ROL> son`) без помилкового формулювання "режим запису".
+
+* **Сумісність розробки та крос-компіляції з Windows (`CMakeLists.txt`, `CMakePresets.json`, `cmake/*`, `src/*`):**
+  * Замінено POSIX `opendir`/`readdir` у `src/device_profile.cpp` на кросплатформний C++20 `std::filesystem::directory_iterator`.
+  * Обгорнуто POSIX-сокети в `src/net_audio_streamer.cpp` у `#if !defined(_WIN32)` для безперешкодної компіляції на Windows.
+  * Додано `cmake/zig-cxx-aarch64.bat`, автоматичний вибір `.bat`/`.sh` через `CMAKE_HOST_WIN32`, підтримку CMake-таргету `SDL2::SDL2` (vcpkg/MSYS2) та пресети `windows-ninja`, `rk3326-ninja`, `a133p-ninja`.
+
+* **Англомовна основна документація та деталізація бенчмарків (`README.md`, `docs/PORTING_GUIDE.md`, `docs/README.uk.md`, `docs/PORTING_GUIDE.uk.md`):**
+  * Основні `README.md` та `docs/PORTING_GUIDE.md` переписані англійською мовою з позиціонуванням проєкту як відкритого модульного фреймворку (`Work-in-Progress Modular Groovebox Framework`) для портативних Linux-консолей (без згадок про десктопну DAW).
+  * Українські версії збережені у `docs/README.uk.md` та `docs/PORTING_GUIDE.uk.md` із перемикачем мови у верхній частині документів.
+  * У розділі бенчмарків зафіксовано повну специфікацію тестового стенду **MagicX XU10** (`Rockchip RK3326S, 4x Cortex-A35 @ 1.5 GHz, 1 GB DDR4, RK817 I2S DAC @ 32 kHz, ROCKNIX Linux 7.1.2 SMP PREEMPT, Direct KMSDRM, CPU Core 3 SCHED_FIFO 85`).
