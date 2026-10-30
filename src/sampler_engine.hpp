@@ -23,6 +23,11 @@ enum class RecMode : uint8_t {
     kSyncBar
 };
 
+enum class RecSource : uint8_t {
+    kMasterResample = 0, // Внутрішній ресемплінг вихідної мастер-шини
+    kLineIn         = 1  // Зовнішній вхід (USB Audio Capture / Line-In / Mic)
+};
+
 enum class RecState : uint8_t {
     kIdle = 0,
     kArmed,
@@ -55,6 +60,8 @@ public:
     // --- 1. Live Sampling & Looping ---
     void setRecordingMode(RecMode mode) { rec_mode_ = mode; }
     RecMode recordingMode() const { return rec_mode_; }
+    void setRecordingSource(RecSource src) { rec_source_.store(src, std::memory_order_relaxed); }
+    RecSource recordingSource() const { return rec_source_.load(std::memory_order_relaxed); }
     RecState recordingState() const { return rec_state_; }
 
     void armRecording();
@@ -98,13 +105,16 @@ public:
     SampleBuffer& trackSample(int track);
     void setTrackSample(int track, SampleBuffer buf);
 
-    // --- 4. Live Looper & Slice Assignment ---
+    // --- 4. Live Looper, Track Sample Assignment & WAV Export ---
+    void assignTrimmedToTrack(int track, float trim_st = 0.0f, float trim_end = 1.0f);
+    bool saveTrimmedToWav(const std::string& path, float trim_st = 0.0f, float trim_end = 1.0f) const;
     void assignTrimmedToSlot(int slot, float trim_st = 0.0f, float trim_end = 1.0f);
     void sliceToDrumSlots(float trim_st = 0.0f, float trim_end = 1.0f);
     void armSyncedRecording(uint32_t bars, float bpm, uint32_t sample_rate);
 
 private:
     RecMode rec_mode_ = RecMode::kManual;
+    std::atomic<RecSource> rec_source_{RecSource::kMasterResample};
     std::atomic<RecState> rec_state_{RecState::kIdle};
     std::atomic<uint32_t> rec_write_idx_{0};
     std::atomic<uint32_t> target_frames_{0}; // для темпо-синхронізованого запису

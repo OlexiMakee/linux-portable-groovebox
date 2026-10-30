@@ -51,6 +51,9 @@ void SamplerEngine::startOverdub() {
 }
 
 void SamplerEngine::stopRecording() {
+    if (rec_write_idx_.load(std::memory_order_relaxed) > 0) {
+        rec_buffer_.loaded = true;
+    }
     rec_state_.store(RecState::kFinished, std::memory_order_relaxed);
     sliceGrid(active_slices_);
 }
@@ -78,10 +81,11 @@ void SamplerEngine::processAudioInput(const float* in_l, const float* in_r, uint
 
         auto state = rec_state_.load(std::memory_order_relaxed);
 
-        // Пороговий автозапуск (Threshold Trig)
-        if (state == RecState::kArmed && rec_mode_ == RecMode::kThreshold) {
+        // Пороговий автозапуск (Threshold Trig / Sync Bar)
+        if (state == RecState::kArmed && (rec_mode_ == RecMode::kThreshold || rec_mode_ == RecMode::kSyncBar)) {
             if (peak_l > 0.035f || peak_r > 0.035f) {
                 state = RecState::kRecording;
+                rec_buffer_.loaded = true;
                 rec_state_.store(state, std::memory_order_relaxed);
             }
         }
@@ -323,8 +327,8 @@ void SamplerEngine::armSyncedRecording(uint32_t bars, float bpm, uint32_t sample
     armRecording();
 }
 
-void SamplerEngine::assignTrimmedToSlot(int slot, float trim_st, float trim_end) {
-    int s = std::clamp(slot, 0, kDrumSlots - 1);
+void SamplerEngine::assignTrimmedToTrack(int track, float trim_st, float trim_end) {
+    int t = std::clamp(track, 0, 15);
     uint32_t total = rec_write_idx_.load(std::memory_order_relaxed);
     if (total == 0) total = static_cast<uint32_t>(rec_buffer_.data_l.size());
     if (total == 0) return;
@@ -335,20 +339,19 @@ void SamplerEngine::assignTrimmedToSlot(int slot, float trim_st, float trim_end)
 
     uint32_t len = end_f - st_f;
     SampleBuffer buf;
-    buf.sample_rate = rec_buffer_.sample_rate;
-    buf.name = "SMPL " + std::to_string(s + 1);
+    buf.sample_rate = rec_buffer_.sample_rate > 0 ? rec_buffer_.sample_rate : 32000;
+    buf.name = "REC_T" + std::to_string(t + 1) + ".wav";
     buf.data_l.resize(len);
     buf.data_r.resize(len);
 
     float peak = 0.001f;
     for (uint32_t i = 0; i < len; ++i) {
-        float l = rec_buffer_.data_l[st_f + i];
-        float r = rec_buffer_.data_r[st_f + i];
+        float l = (st_f + i < rec_buffer_.data_l.size()) ? rec_buffer_.data_l[st_f + i] : 0.0f;
+        float r = (st_f + i < rec_buffer_.data_r.size()) ? rec_buffer_.data_r[st_f + i] : 0.0f;
         buf.data_l[i] = l;
         buf.data_r[i] = r;
         peak = std::max(peak, std::max(std::fabs(l), std::fabs(r)));
     }
-    // Автонормалізація до 0.95
     if (peak > 0.001f) {
         float gain = 0.95f / peak;
         for (uint32_t i = 0; i < len; ++i) {
@@ -357,7 +360,70 @@ void SamplerEngine::assignTrimmedToSlot(int slot, float trim_st, float trim_end)
         }
     }
     buf.loaded = true;
-    drum_slots_[s] = std::move(buf);
+    track_samples_[t] = std::move(buf);
+}
+
+bool SamplerEngine::saveTrimmedToWav(const std::string& path, float trim_st, float trim_end) const {
+    uint32_t total = rec_write_idx_.load(std::memory_order_relaxed);
+    if (total == 0) total = static_cast<uint32_t>(rec_buffer_.data_l.size());
+    if (total == 0) return false;
+
+    uint32_t st_f = static_cast<uint32_t>(std::clamp(trim_st, 0.0f, 0.99f) * total);
+    uint32_t end_f = static_cast<uint32_t>(std::clamp(trim_end, trim_st + 0.01f, 1.0f) * total);
+    if (end_f <= st_f) end_f = std::min(total, st_f + 64);
+
+    uint32_t frames = end_f - st_f;
+    uint32_t sr = rec_buffer_.sample_rate > 0 ? rec_buffer_.sample_rate : 32000;
+
+    std::ofstream os(path, std::ios::binary);
+    if (!os.is_open()) return false;
+
+    uint32_t subchunk2_size = frames * 2 * sizeof(int16_t);
+    uint32_t chunk_size = 36 + subchunk2_size;
+    uint16_t audio_format = 1; // PCM
+    uint16_t num_channels = 2; // Stereo
+    uint32_t byte_rate = sr * num_channels * sizeof(int16_t);
+    uint16_t block_align = num_channels * sizeof(int16_t);
+    uint16_t bits_per_sample = 16;
+    uint32_t subchunk1_size = 16;
+
+    os.write("RIFF", 4);
+    os.write(reinterpret_cast<const char*>(&chunk_size), 4);
+    os.write("WAVE", 4);
+    os.write("fmt ", 4);
+    os.write(reinterpret_cast<const char*>(&subchunk1_size), 4);
+    os.write(reinterpret_cast<const char*>(&audio_format), 2);
+    os.write(reinterpret_cast<const char*>(&num_channels), 2);
+    os.write(reinterpret_cast<const char*>(&sr), 4);
+    os.write(reinterpret_cast<const char*>(&byte_rate), 4);
+    os.write(reinterpret_cast<const char*>(&block_align), 2);
+    os.write(reinterpret_cast<const char*>(&bits_per_sample), 2);
+    os.write("data", 4);
+    os.write(reinterpret_cast<const char*>(&subchunk2_size), 4);
+
+    float peak = 0.001f;
+    for (uint32_t i = 0; i < frames; ++i) {
+        float l = (st_f + i < rec_buffer_.data_l.size()) ? rec_buffer_.data_l[st_f + i] : 0.0f;
+        float r = (st_f + i < rec_buffer_.data_r.size()) ? rec_buffer_.data_r[st_f + i] : 0.0f;
+        peak = std::max(peak, std::max(std::fabs(l), std::fabs(r)));
+    }
+    float gain = (peak > 0.001f) ? (0.95f / peak) : 1.0f;
+
+    std::vector<int16_t> pcm(frames * 2);
+    for (uint32_t i = 0; i < frames; ++i) {
+        float l = (st_f + i < rec_buffer_.data_l.size()) ? rec_buffer_.data_l[st_f + i] * gain : 0.0f;
+        float r = (st_f + i < rec_buffer_.data_r.size()) ? rec_buffer_.data_r[st_f + i] * gain : 0.0f;
+        pcm[i * 2]     = static_cast<int16_t>(std::clamp(l, -1.0f, 1.0f) * 32767.0f);
+        pcm[i * 2 + 1] = static_cast<int16_t>(std::clamp(r, -1.0f, 1.0f) * 32767.0f);
+    }
+    os.write(reinterpret_cast<const char*>(pcm.data()), pcm.size() * sizeof(int16_t));
+    return os.good();
+}
+
+void SamplerEngine::assignTrimmedToSlot(int slot, float trim_st, float trim_end) {
+    assignTrimmedToTrack(slot, trim_st, trim_end);
+    int s = std::clamp(slot, 0, kDrumSlots - 1);
+    drum_slots_[s] = track_samples_[std::clamp(slot, 0, 15)];
 }
 
 void SamplerEngine::sliceToDrumSlots(float trim_st, float trim_end) {

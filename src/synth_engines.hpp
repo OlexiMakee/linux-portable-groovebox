@@ -40,13 +40,14 @@ inline constexpr const char* getEngineTypeName(EngineType type) {
 }
 
 // Список рушіїв для створення/вибору нового треку (Add Track / Engine Selector)
-inline constexpr std::array<EngineType, 6> kSelectableEngines = {
-    EngineType::kSampleOneShot, // 1. sample player
-    EngineType::kAcid303,       // 2. 303 Bassline
-    EngineType::kDx7,           // 3. dx7
-    EngineType::kChordPad,      // 4. chord pad
-    EngineType::kVaMono,        // 5. Virtual Analog
-    EngineType::kMidiOut        // 6. midi out
+inline constexpr std::array<EngineType, 7> kSelectableEngines = {
+    EngineType::kSampleOneShot, // 1. SAMPLE PLAYER (OneShot / Slicer)
+    EngineType::kAcid303,       // 2. 303 BASSLINE
+    EngineType::kDx7,           // 3. DX7 6-OP
+    EngineType::kChordPad,      // 4. CHORD PAD
+    EngineType::kVaMono,        // 5. VIRTUAL ANALOG
+    EngineType::kFm2Op,         // 6. 2-OP FM
+    EngineType::kMidiOut        // 7. MIDI OUT
 };
 
 inline constexpr const char* getEngineMenuLabel(EngineType type) {
@@ -56,6 +57,7 @@ inline constexpr const char* getEngineMenuLabel(EngineType type) {
         case EngineType::kDx7:           return "DX7 6-OP";
         case EngineType::kChordPad:      return "CHORD PAD";
         case EngineType::kVaMono:        return "VIRTUAL ANALOG";
+        case EngineType::kFm2Op:         return "2-OP FM";
         case EngineType::kMidiOut:       return "MIDI OUT";
         default:                         return getEngineTypeName(type);
     }
