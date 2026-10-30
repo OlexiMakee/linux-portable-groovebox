@@ -157,26 +157,23 @@ void HardwareMonitor::pollOnce() {
     }
 
     if (mock_digitakt_.load()) {
-        next.audio_cards.push_back({1, "DigitaktII", "Elektron Digitakt II (Mock)", true, true});
+        next.audio_cards.push_back({1, "USBAudio2", "USB Audio Class 2.0 (Mock)", true, true});
     }
 
     // Визначаємо пріоритетний аудіовихід:
-    // 1. Elektron Digitakt II (якщо підключений)
-    // 2. Будь-який інший Class-Compliant USB Audio інтерфейс (48 000 Hz)
-    // 3. Вбудований ЦАП (audio.internal_card / internal_rate з профілю)
+    // 1. Будь-який підключений Class-Compliant USB Audio інтерфейс (48 000 Hz)
+    // 2. Вбудований ЦАП (audio.internal_card / internal_rate з профілю пристрою)
     next.active_audio_card = activeProfile().internal_card;
-    next.active_audio_name = "INTERNAL DAC (hw:" + std::to_string(activeProfile().internal_card) + ")";
+    next.active_audio_name = activeProfile().name + " DAC (hw:" + std::to_string(activeProfile().internal_card) + ")";
     for (const auto& c : next.audio_cards) {
-        if (c.is_digitakt) {
+        if (c.is_usb || c.is_digitakt) {
             next.active_audio_card = c.index;
-            next.active_audio_name = "DIGITAKT II USB (48k)";
+            next.active_audio_name = c.id + " USB (48k)";
+            next.usb_audio_connected = true;
+            next.usb_midi_connected = true;
             next.digitakt_connected = true;
             next.midi_digitakt_connected = true;
             break;
-        } else if (c.is_usb) {
-            next.active_audio_card = c.index;
-            next.active_audio_name = c.id + " USB (48k)";
-            next.digitakt_connected = true;
         }
     }
 

@@ -20,9 +20,11 @@ struct AudioCardInfo {
 struct HardwareSnapshot {
     std::vector<AudioCardInfo> audio_cards;
     int active_audio_card = 0;
-    std::string active_audio_name = "RK817 DAC (hw:0)";
-    bool digitakt_connected = false;
-    bool midi_digitakt_connected = false;
+    std::string active_audio_name = "INTERNAL DAC (hw:0)";
+    bool usb_audio_connected = false;
+    bool usb_midi_connected = false;
+    bool digitakt_connected = false;      // Сумісність: true при підключенні будь-якого USB Audio Class 2.0
+    bool midi_digitakt_connected = false; // Сумісність: true при підключенні USB MIDI інтерфейсу
 
     std::string usb_role = "device";     // "device" або "host"
     std::string udc_state = "configured"; // "configured", "not attached", тощо

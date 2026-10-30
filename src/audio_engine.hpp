@@ -182,6 +182,7 @@ public:
     const SynthParams& params() const { return params_; }
 
     NetAudioStreamer& netStreamer() { return net_streamer_; }
+    const NetAudioStreamer& netStreamer() const { return net_streamer_; }
 
     void setSampler(SamplerEngine* s) { sampler_ptr_ = s; }
     SamplerEngine& sampler() { return sampler_ptr_ ? *sampler_ptr_ : local_sampler_; }
