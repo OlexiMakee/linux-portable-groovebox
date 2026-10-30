@@ -1,5 +1,6 @@
 #include "ui/ui_shell.hpp"
 #include "ui/widgets.hpp"
+#include "device_profile.hpp"
 
 #include <SDL.h>
 #include <algorithm>
@@ -30,12 +31,17 @@ bool UiShell::init() {
     win_flags |= SDL_WINDOW_FULLSCREEN;
 #endif
 
+    const auto& prof = activeProfile();
+    const int phys_w = (prof.display_width > 0) ? prof.display_width : kPhysicalWidth;
+    const int phys_h = (prof.display_height > 0) ? prof.display_height : kPhysicalHeight;
+    const std::string win_title = prof.name + " — Groovebox [Portable Linux DAW]";
+
     window_ = SDL_CreateWindow(
-        "XU10 Groovebox [SOLID Modular Architecture]",
+        win_title.c_str(),
         SDL_WINDOWPOS_CENTERED,
         SDL_WINDOWPOS_CENTERED,
-        kPhysicalWidth,
-        kPhysicalHeight,
+        phys_w,
+        phys_h,
         win_flags
     );
     if (!window_) {
@@ -74,6 +80,7 @@ void UiShell::applyLogicalResolution(bool high_res) {
     logical_h_ = high_res ? kHighResHeight : kLowResHeight;
     if (renderer_) {
         SDL_RenderSetLogicalSize(renderer_, logical_w_, logical_h_);
+        SDL_RenderSetIntegerScale(renderer_, activeProfile().integer_scale ? SDL_TRUE : SDL_FALSE);
     }
 }
 

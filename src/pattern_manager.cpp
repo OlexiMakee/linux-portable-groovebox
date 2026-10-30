@@ -1,7 +1,9 @@
 #include "pattern_manager.hpp"
 #include "audio_engine.hpp"
+#include "device_profile.hpp"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -152,8 +154,25 @@ void PatternManager::applyCurrent(AudioEngine& engine, float& bpm) {
 }
 
 std::string PatternManager::projectsDirectory() {
+    if (const char* env_dir = std::getenv("GROOVEBOX_DATA_DIR"); env_dir && env_dir[0] != '\0') {
+        return std::string(env_dir) + "/projects";
+    }
 #if defined(__linux__)
-    return "/storage/dev/groovebox/projects";
+    std::error_code ec;
+    if (std::filesystem::exists("/storage/dev/groovebox/projects", ec)) {
+        return "/storage/dev/groovebox/projects";
+    }
+    const std::string& prof_dir = activeProfile().data_dir;
+    if (!prof_dir.empty()) {
+        auto parent = std::filesystem::path(prof_dir).parent_path();
+        if (parent.empty() || std::filesystem::exists(parent, ec)) {
+            return prof_dir + "/projects";
+        }
+    }
+    if (std::filesystem::exists("/storage/dev", ec)) {
+        return "/storage/dev/groovebox/projects";
+    }
+    return "projects";
 #else
     return "projects";
 #endif

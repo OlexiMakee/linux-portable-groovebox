@@ -2,6 +2,7 @@
 #include "ui/params.hpp"
 #include "ui/views.hpp"
 #include "ui/ui_shell.hpp"
+#include "device_profile.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -1244,9 +1245,17 @@ ActionRegistry::ActionRegistry() {
 
     // ---------------- Семпл-браузер (пул семплів, лупів та DX7 банків) ----------------
     auto getBrowserRootPath = [](AppModel::BrowserContext ctx) -> std::string {
+        const std::string prof_base = activeProfile().data_dir;
+        std::error_code ec;
         if (ctx == AppModel::BrowserContext::kLoops) {
+            if (!prof_base.empty()) {
+                std::string p = prof_base + "/loops";
+                if (fs::exists(p, ec) && fs::is_directory(p, ec)) return p;
+            }
             static const char* kLoopCandidates[] = {
                 "/storage/roms/groovebox/loops",
+                "/roms/groovebox/loops",
+                "/mnt/SDCARD/Roms/groovebox/loops",
                 "/storage/dev/groovebox/res/loops",
                 "res/loops",
                 "../res/loops",
@@ -1254,25 +1263,35 @@ ActionRegistry::ActionRegistry() {
                 "res/samples"
             };
             for (const char* p : kLoopCandidates) {
-                std::error_code ec;
                 if (fs::exists(p, ec) && fs::is_directory(p, ec)) return std::string(p);
             }
             return "res/loops";
         } else if (ctx == AppModel::BrowserContext::kDx7) {
+            if (!prof_base.empty()) {
+                std::string p = prof_base + "/dx7";
+                if (fs::exists(p, ec) && fs::is_directory(p, ec)) return p;
+            }
             static const char* kDx7Candidates[] = {
                 "/storage/roms/groovebox/dx7",
+                "/roms/groovebox/dx7",
+                "/mnt/SDCARD/Roms/groovebox/dx7",
                 "/storage/dev/groovebox/res/dx7",
                 "res/dx7",
                 "../res/dx7"
             };
             for (const char* p : kDx7Candidates) {
-                std::error_code ec;
                 if (fs::exists(p, ec) && fs::is_directory(p, ec)) return std::string(p);
             }
             return "res/dx7";
         } else {
+            if (!prof_base.empty()) {
+                std::string p = prof_base + "/oneshots";
+                if (fs::exists(p, ec) && fs::is_directory(p, ec)) return p;
+            }
             static const char* kOneShotCandidates[] = {
                 "/storage/roms/groovebox/oneshots",
+                "/roms/groovebox/oneshots",
+                "/mnt/SDCARD/Roms/groovebox/oneshots",
                 "/storage/roms/groovebox/samples/drums",
                 "/storage/roms/groovebox/samples",
                 "/storage/dev/groovebox/res/oneshots",
@@ -1285,7 +1304,6 @@ ActionRegistry::ActionRegistry() {
                 "../res/samples/drums"
             };
             for (const char* p : kOneShotCandidates) {
-                std::error_code ec;
                 if (fs::exists(p, ec) && fs::is_directory(p, ec)) return std::string(p);
             }
             return "res/samples";
