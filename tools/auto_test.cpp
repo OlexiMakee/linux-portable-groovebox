@@ -123,6 +123,52 @@ static void testAudioDspEngines() {
     TEST_ASSERT(max_amp > 100, "Master Send FX & Overdrive chain generates audible output");
     TEST_ASSERT(max_amp <= 32767, "Master Limiter protects output from 16-bit integer overflow");
 
+    // 3b. Тестування стабільності 303 Bassline (Diode TPT SVF, Accent, Decay, Legato Slide та повторних тригерів)
+    audio.panic();
+    audio.params().reverb_mix = 0.0f;
+    audio.params().delay_mix = 0.0f;
+    audio.params().drive_amount = 0.0f;
+    audio.params().chorus_mix = 0.0f;
+
+    auto acid_tp = audio.getTrackParams(0);
+    acid_tp.engine = EngineType::kAcid303;
+    acid_tp.p = {0.05f, 0.20f, 0.0f, 0.35f, 0.0f, 0.0f}; // Низький CUTOFF (~54 Гц), без ENV MOD
+    audio.setTrackParams(0, acid_tp);
+    audio.triggerNote(0, 60, 0.75f, -1.0f, false, 1.0f); // C4 (261.6 Гц — вище частоти зрізу 24 dB/oct)
+    int16_t acid_low_buf[1024]{};
+    audio.renderBlock(acid_low_buf, 512, 32000);
+    int64_t acid_energy_low = 0;
+    for (int i = 0; i < 1024; ++i) acid_energy_low += std::abs(static_cast<int>(acid_low_buf[i]));
+
+    audio.panic();
+    acid_tp.p = {0.90f, 0.75f, 0.85f, 0.35f, 0.90f, 0.0f}; // Високий CUTOFF + ENV MOD + ACCENT
+    audio.setTrackParams(0, acid_tp);
+    audio.triggerNote(0, 60, 0.98f, -1.0f, false, 1.0f);
+    int16_t acid_hi_buf[1024]{};
+    audio.renderBlock(acid_hi_buf, 512, 32000);
+    int64_t acid_energy_hi = 0;
+    for (int i = 0; i < 1024; ++i) acid_energy_hi += std::abs(static_cast<int>(acid_hi_buf[i]));
+    TEST_ASSERT(acid_energy_hi > acid_energy_low * 3,
+                "303 Bassline internal p[0..4] (CUTOFF/ENV MOD/ACCENT) directly controls 4-pole acid filter energy");
+
+    // Перевірка послідовних кроків без слайду (відсутність помилкового глушіння нот після 1-го кроку) та з легато-слайдом
+    acid_tp.p = {0.65f, 0.96f, 0.95f, 0.40f, 1.0f, 0.5f}; // Екстремальний резонанс та акцент
+    audio.setTrackParams(0, acid_tp);
+    bool all_steps_audible = true;
+    for (int step_i = 0; step_i < 4; ++step_i) {
+        bool is_sl = (step_i == 2); // Крок 2 зі слайдом, інші — звичайний ретригер
+        audio.triggerNote(0, 36 + step_i * 3, (step_i % 2 == 0) ? 0.95f : 0.75f, -1.0f, is_sl, 0.8f);
+        int16_t step_buf[1024]{};
+        for (int b = 0; b < 8; ++b) { // ~128 мс (1 крок при 120 BPM)
+            audio.renderBlock(step_buf, 512, 32000);
+        }
+        int step_peak = 0;
+        for (int i = 0; i < 1024; ++i) step_peak = std::max(step_peak, std::abs(static_cast<int>(step_buf[i])));
+        if (step_peak < 150 || step_peak > 32767) all_steps_audible = false;
+    }
+    TEST_ASSERT(all_steps_audible,
+                "303 Bassline sustains clean retriggering and legato slides across consecutive steps at extreme resonance");
+
     // 4. Тестування єдиного 16-доріжкового масиву, динамічного додавання та іменування треків
     TEST_ASSERT(audio.getActiveRowCount() == 8, "Initial active track count is exactly 8");
     TEST_ASSERT(audio.getTrackName(0) == "TRACK 01", "Track 1 is TRACK 01");

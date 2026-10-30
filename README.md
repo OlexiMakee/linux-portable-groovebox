@@ -2,7 +2,7 @@
 
 **[🇬🇧 English](README.md)** | **[🇺🇦 Українська](docs/README.uk.md)**
 
-[![Test Suite](https://img.shields.io/badge/tests-314%20passed-brightgreen.svg)](#)
+[![Test Suite](https://img.shields.io/badge/tests-316%20passed-brightgreen.svg)](#)
 [![Status](https://img.shields.io/badge/status-WIP%20Modular%20Framework-blue.svg)](#)
 [![Targets](https://img.shields.io/badge/handhelds-MagicX%20XU10%20%7C%20Trimui%20Brick%20Pro%20%7C%20R36S-orange.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)](#)
@@ -71,7 +71,7 @@ Each of the **16 tracks** can dynamically load any of the 7 engines from `kSelec
 * **Chord Pad (`CHORD PAD`):** 4-voice polyphonic chord generator (`m7`, `Maj7`, `Sus4`, `Power`, `m9`) with inversion, detune, and chorus spread.
 * **2-OP FM (`2-OP FM`):** Percussive and metallic 2-operator FM synth with `Ratio`, `FM Index`, `Feedback`, `Mod Decay`, and `Wavefold/Drive`.
 * **MIDI Out (`MIDI OUT`):** Dedicated hardware MIDI track for sequencing external gear over USB/ALSA RawMIDI (`Channel 1..16`, `Program Change`, `Bank MSB/LSB`, `4× CC Macros`).
-* **303 Bassline (`303 BASSLINE` — *Experimental / Unstable*):** Monophonic acid bassline model with legato slide and accent; filter and envelope behavior are currently undergoing tuning and refactoring.
+* **303 Bassline (`303 BASSLINE`):** Monophonic acid bassline synth with a dedicated 4-pole diode-saturated TPT filter (`CUTOFF`, `RESO`, exponential `ENV MOD`), `180..2400 ms` `DECAY` with automatic accent decay shortening, `ACCENT` VCA/filter boost, and phase-continuous `60 ms` RC legato slide.
 
 ---
 

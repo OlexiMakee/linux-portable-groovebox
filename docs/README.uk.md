@@ -2,7 +2,7 @@
 
 **[🇬🇧 English](../README.md)** | **[🇺🇦 Українська](README.uk.md)**
 
-[![Test Suite](https://img.shields.io/badge/tests-314%20passed-brightgreen.svg)](#)
+[![Test Suite](https://img.shields.io/badge/tests-316%20passed-brightgreen.svg)](#)
 [![Status](https://img.shields.io/badge/status-WIP%20Modular%20Framework-blue.svg)](#)
 [![Targets](https://img.shields.io/badge/handhelds-MagicX%20XU10%20%7C%20Trimui%20Brick%20Pro%20%7C%20R36S-orange.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)](#)
@@ -47,7 +47,7 @@
 * **Chord Pad (`CHORD PAD`):** 4-голосний поліфонічний генератор акордів (`m7`, `Maj7`, `Sus4`, `Power`, `m9`) з інверсією, детюном та хорус-спредом.
 * **2-OP FM (`2-OP FM`):** Перкусійний та металічний 2-операторний FM-синтезатор (`Ratio`, `FM Index`, `Feedback`, `Mod Decay`, `Wavefold/Drive`).
 * **MIDI Out (`MIDI OUT`):** Апаратна MIDI-доріжка для секвенування зовнішніх синтезаторів через USB/ALSA RawMIDI (`Channel 1..16`, `Program Change`, `Bank MSB/LSB`, `4× CC Macros`).
-* **303 Bassline (`303 BASSLINE` — *Експериментальний / Нестабільний*):** Монофонічний кислотний синтезатор із легато-слайдом та акцентом; наразі перебуває на стадії налагодження фільтра та огинаючих.
+* **303 Bassline (`303 BASSLINE`):** Монофонічний кислотний синтезатор із виділеним 4-полюсним діодно-сатурованим TPT-фільтром (`CUTOFF`, `RESO`, експоненційний `ENV MOD`), спадом `180..2400 мс` (`DECAY`) з автоматичним скороченням спаду на акцентованих кроках (`ACCENT`) та безрозривним 60-мс RC легато-слайдом.
 
 ---
 
