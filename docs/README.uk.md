@@ -2,7 +2,7 @@
 
 **[🇬🇧 English](../README.md)** | **[🇺🇦 Українська](README.uk.md)**
 
-[![Test Suite](https://img.shields.io/badge/tests-316%20passed-brightgreen.svg)](#)
+[![Test Suite](https://img.shields.io/badge/tests-328%20passed-brightgreen.svg)](#)
 [![Status](https://img.shields.io/badge/status-WIP%20Modular%20Framework-blue.svg)](#)
 [![Targets](https://img.shields.io/badge/handhelds-MagicX%20XU10%20%7C%20Trimui%20Brick%20Pro%20%7C%20R36S-orange.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)](#)
@@ -56,9 +56,9 @@
 Щоб уникнути плутанини між відтворенням семплів на доріжці та записом звуку, ці підсистеми чітко розділені в коді й інтерфейсі:
 1. **`SAMPLE PLAYER` (Інструментальний рушій доріжки у вкладці `[L2] SYNTH`):**
    * Відтворює завантажений `.wav` семпл на конкретній доріжці секвенсора через її фільтри, модуляції та ефекти.
-2. **`AUDIO-RECORDING` (Глобальна вкладка `[R1] AUDIO-REC` — *Експериментальна / Незавершена*):**
+2. **`AUDIO-RECORDING` (Глобальна вкладка `[R1] AUDIO-REC`):**
    * Призначена для живого запису звуку (`LINE-IN / USB`), ресемплінгу майстер-шини (`RESAMPLE`), лупінгу та нарізки транзієнтів (`SamplerEngine`).
-   * *Примітка:* функціонал вкладки `[R1] AUDIO-RECORDING` та режим луп-слайсера `SLICER` **ще не завершені та не протестовані в повному обсязі**.
+   * Підтримує синхронізований запис (`SMP.ARM`), миттєве прослуховування обрізаного буфера кнопкою `[Y] AUDIT` (`SAMPLE.AUDITION`) із живим курсором плейхеда на хвилі, призначення на доріжку (`SMP.ASSIGN` у режимах One-Shot або `SELECT` + Slicer) та експорт у `.wav` (`SMP.SAVE` в `oneshots/` або `loops/`).
 
 ---
 

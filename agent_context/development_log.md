@@ -1386,3 +1386,13 @@
   * Підключено всі 6 параметрів `kAcid303` (`p[0]` `CUTOFF`, `p[1]` `RESO`, `p[2]` `ENV MOD`, `p[3]` `DECAY` `180..2400 ms`, `p[4]` `ACCENT`, `p[5]` `WAVEFRM` `SAW/SQUARE`) безпосередньо до 4-полюсного TPT-каскаду з експоненційною октавною модуляцією (`std::exp2`) та м'якою нелінійною сатурацією зворотного зв'язку (`fast_tanh`).
   * На акцентованих кроках (`velocity >= 0.82`) реалізовано класичне скорочення спаду фільтра до `~180 мс` та підсилення VCA/резонансу.
   * З таблиці `[L2] SYNTH` для `kAcid303` прибрано дубльований рядок `LPF`, що конфліктував із рядком `303`. Додано DSP-тести стабільності в `tools/auto_test.cpp` (`316/316 PASSED [OK]`).
+
+
+## [2026-10-30 21:22] Milestone 50 (Roadmap A1): `AUDIO-RECORDING` (`[R1] AUDIO-REC`) & `SLICER` End-to-End Unification & Verification
+
+* **Уніфікація конвеєра запису між `AudioEngine::sampler()` та `AppModel::sampler` (`src/ui/params.cpp`, `src/ui/actions.cpp`, `src/ui/views.cpp`, `src/ui/keymap.cpp`):**
+  * Виправлено розсинхронізацію екземплярів `SamplerEngine`: параметри `SMP.SRC`, `SMP.ARM`, `SMP.MODE`, `SMP.THRS`, `SMP.DUB_FBK`, `SMP.ASSIGN` та `SMP.SAVE` тепер синхронно керують живим ресемплером `c.audio.sampler()` (який отримує майстер-вихід у `AudioEngine::renderBlock`) та UI-моделлю `c.app.sampler`.
+  * Виправлено перевірку заповненості буфера запису через `recordedFrames() > 64` (замість преалокованого `recordedSample().lengthFrames()`), завдяки чому у стані `STANDBY` (`0.00s`) вікно хвилі коректно відображає живий осцилограф вхідного сигналу, а під час/після запису — реальну записану хвилю та точну тривалість у секундах.
+  * Додано дію `SAMPLE.AUDITION` на кнопку `Y` (`[Y] AUDIT` у вкладці `[R1] AUDIO-REC`), яка миттєво призначає обрізаний (`TRIM ST..END`) буфер на цільову доріжку та запускає прослуховування з відображенням білого курсора плейхеда (`trackPlayhead`) поверх хвилеформи.
+  * Розширено `SMP.ASSIGN`: звичайний крок призначає буфер у режим `SampleEngineMode::kOneShot`, а coarse-крок (`SELECT + R/L`) автоматично переводить цільову доріжку в режим `SampleEngineMode::kSlicer`.
+  * Додано end-to-end тести повного циклу (`SMP.ARM` $\rightarrow$ `renderBlock` ресемплінг $\rightarrow$ `SAMPLE.AUDITION` $\rightarrow$ `SMP.ASSIGN` One-Shot та Slicer) у `tools/auto_test.cpp` (`328/328 PASSED [OK]`).
