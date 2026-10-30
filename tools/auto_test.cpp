@@ -1217,6 +1217,74 @@ static void testInputRouterAndStepEditor() {
     TEST_ASSERT(audio.getTargetPeriodFrames() == b1, "AudioEngine steps buffer size backward via list");
 
     dt_hw_mon.stop();
+
+    // 17. Тестування 7 рушіїв у kSelectableEngines (включно з 2-OP FM)
+    TEST_ASSERT(kSelectableEngines.size() == 7, "kSelectableEngines exposes all 7 synth/sample engines");
+    bool has_fm2op = false;
+    for (auto eng : kSelectableEngines) {
+        if (eng == EngineType::kFm2Op) has_fm2op = true;
+    }
+    TEST_ASSERT(has_fm2op == true, "EngineType::kFm2Op (2-OP FM) is selectable in Engine Menu");
+    TEST_ASSERT(std::string(getEngineMenuLabel(EngineType::kFm2Op)).find("2-OP FM") != std::string::npos, "getEngineMenuLabel formats 2-OP FM label");
+
+    // 18. Тестування SamplerEngine::assignTrimmedToTrack (на всі 16 доріжок) та saveTrimmedToWav
+    test_sampler.setRecordingSource(RecSource::kMasterResample);
+    TEST_ASSERT(test_sampler.recordingSource() == RecSource::kMasterResample, "SamplerEngine switches source to kMasterResample");
+    test_sampler.assignTrimmedToTrack(7, 0.1f, 0.5f);
+    const auto& assigned_slot = test_sampler.trackSample(7);
+    TEST_ASSERT(assigned_slot.loaded == true, "assignTrimmedToTrack assigns trimmed region to Track 8 (index 7)");
+    TEST_ASSERT(assigned_slot.lengthFrames() > 1000, "Assigned track sample slot has trimmed frame length");
+
+    std::string test_trim_wav = "/tmp/test_trimmed_export.wav";
+    std::remove(test_trim_wav.c_str());
+    bool wav_exp_ok = test_sampler.saveTrimmedToWav(test_trim_wav, 0.1f, 0.5f);
+    TEST_ASSERT(wav_exp_ok == true, "saveTrimmedToWav exports trimmed stereo sample to WAV file");
+    SampleBuffer reload_slot;
+    TEST_ASSERT(test_sampler.loadWavFile(test_trim_wav, reload_slot) == true, "Exported WAV reloads cleanly into SampleBuffer");
+    std::remove(test_trim_wav.c_str());
+
+    // 19. Тестування навігації PerfView по всіх активних доріжках (1..8)
+    IView* perf_view = shell.findView(ViewId::kPerf);
+    TEST_ASSERT(perf_view != nullptr, "ViewId::kPerf registered in shell");
+    if (perf_view) {
+        app.selected_track = 0;
+        perf_view->navigate(ctx, 1, 0, false);
+        TEST_ASSERT(app.selected_track == 1, "PerfView navigates forward to Track 2");
+        perf_view->navigate(ctx, -1, 0, false);
+        TEST_ASSERT(app.selected_track == 0, "PerfView navigates backward to Track 1");
+        perf_view->navigate(ctx, -1, 0, false);
+        TEST_ASSERT(app.selected_track == audio.getActiveRowCount() - 1, "PerfView wraps around to last active track");
+    }
+
+    // 20. Тестування MixSubmode::kSend (<SND>) та нових системних параметрів (SYS.NET_STREAM, SYS.PROFILE, SYS.FORCE_INT)
+    IView* mix_view = shell.findView(ViewId::kMix);
+    if (mix_view) {
+        app.mix_submode = MixSubmode::kSend;
+        app.grid_row[static_cast<int>(ViewId::kMix)] = 0;
+        app.grid_col[static_cast<int>(ViewId::kMix)] = 0;
+        TEST_ASSERT(mix_view->focusId(ctx) == "DLY.TIME", "MixSubmode::kSend (<SND>) focuses DLY.TIME on Row 0 Col 0");
+        app.mix_submode = MixSubmode::kMix;
+    }
+    TEST_ASSERT(ParamRegistry::instance().find("SYS.FORCE_INT") != nullptr, "SYS.FORCE_INT registered in ParamRegistry");
+    TEST_ASSERT(ParamRegistry::instance().find("SYS.NET_STREAM") != nullptr, "SYS.NET_STREAM registered in ParamRegistry");
+    TEST_ASSERT(ParamRegistry::instance().find("SYS.PROFILE") != nullptr, "SYS.PROFILE registered in ParamRegistry");
+    TEST_ASSERT(ParamRegistry::instance().find("SMP.ZOOM") != nullptr, "SMP.ZOOM registered in ParamRegistry");
+    TEST_ASSERT(ParamRegistry::instance().find("SMP.SAVE") != nullptr, "SMP.SAVE registered in ParamRegistry");
+
+    // 21. Тестування профілів портативних консолей Trimui Brick Pro (1024x768) та R36S (640x480)
+    setenv("GROOVEBOX_PROFILE", "trimui-brick-pro", 1);
+    loadActiveProfile();
+    TEST_ASSERT(activeProfile().name == "Trimui Brick Pro", "GROOVEBOX_PROFILE=trimui-brick-pro loads Trimui Brick Pro profile");
+    TEST_ASSERT(activeProfile().display_width == 1024 && activeProfile().display_height == 768, "Trimui Brick Pro profile configures 1024x768 display");
+    TEST_ASSERT(activeProfile().has_analog_sticks == true, "Trimui Brick Pro profile sets has_analog_sticks=true (dual Hall-effect sticks)");
+
+    setenv("GROOVEBOX_PROFILE", "r36s", 1);
+    loadActiveProfile();
+    TEST_ASSERT(activeProfile().name == "R36S Handheld", "GROOVEBOX_PROFILE=r36s loads R36S Handheld profile");
+    TEST_ASSERT(activeProfile().display_width == 640 && activeProfile().display_height == 480, "R36S profile configures 640x480 display");
+    TEST_ASSERT(activeProfile().has_analog_sticks == true, "R36S profile sets has_analog_sticks=true");
+    unsetenv("GROOVEBOX_PROFILE");
+    loadActiveProfile();
 }
 
 static void testViewsRendering() {

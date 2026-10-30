@@ -1,5 +1,6 @@
 #include "audio_engine.hpp"
 #include "config.hpp"
+#include "device_profile.hpp"
 #include "hw_monitor.hpp"
 #include "input_manager.hpp"
 #include "midi_engine.hpp"
@@ -8,11 +9,15 @@
 
 #include <SDL.h>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 
 using namespace groovebox;
 
 int main() {
+    setenv("GROOVEBOX_PROFILE", "magicx-xu10", 1);
+    loadActiveProfile();
+
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
         std::fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 1;
@@ -87,7 +92,7 @@ int main() {
     capture("/tmp/xu10_tour/tour_01_rec_sampler.bmp");
 
     // 1c. SEQ Tab (REC Mode: Melodic Synth Piano Roll)
-    app.selected_track = 1; // 303
+    app.selected_track = 5; // T6 303 Bass
     app.rec_cursor_lane = 8; // D#
     app.rec_octave = 3;
     app.cursor_step = 2;
@@ -104,12 +109,12 @@ int main() {
 
     // 2. SYNTH Tab (Cyan tab)
     app.active_view = ViewId::kSynth;
-    app.selected_track = 0; // Sampler Kick 808
+    app.selected_track = 0; // Sample Player Kick
     input = InputState{};
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_02_sampler.bmp");
 
-    app.selected_track = 1; // 303
+    app.selected_track = 5; // T6 303 Bass
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_02_synth.bmp");
 
@@ -186,16 +191,16 @@ int main() {
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_11_arp.bmp");
 
-    // 12. DX7 FM Engine View (Track 3)
+    // 12. DX7 FM Engine View (Track 7)
     app.active_view = ViewId::kSynth;
-    app.selected_track = 2; // T3 DX7
+    app.selected_track = 6; // T7 DX7
     input = InputState{};
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_12_dx7.bmp");
 
-    // 13. Engine Selection Modal Dropdown
+    // 13. Engine Selection Modal Dropdown (7 Engines including 2-OP FM)
     app.engine_menu_open = true;
-    app.engine_menu_sel = 6; // SAMPLER
+    app.engine_menu_sel = 4; // 2-OP FM
     input = InputState{};
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_13_engine_menu.bmp");

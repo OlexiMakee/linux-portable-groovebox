@@ -1,0 +1,61 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "desktop",
+      "displayName": "Desktop Host (macOS / Linux x86_64 / ARM64)",
+      "description": "Native desktop build with SDL2, auto_test, and render_tour tools",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "rk3326",
+      "displayName": "Rockchip RK3326 AArch64 (MagicX XU10 / R36S / RG351)",
+      "description": "Cross-compile for Cortex-A35 handhelds running ROCKNIX / ArkOS / JELOS",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build-xu10",
+      "toolchainFile": "${sourceDir}/cmake/aarch64-rocknix-zig.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_FLAGS": "-O3 -mcpu=cortex_a35"
+      }
+    },
+    {
+      "name": "a133p",
+      "displayName": "Allwinner A133P AArch64 (Trimui Brick / Trimui Brick Pro)",
+      "description": "Cross-compile for Cortex-A53 handhelds running TrimUI OS / CrossMix / Knulli (1024x768)",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build-a133p",
+      "toolchainFile": "${sourceDir}/cmake/aarch64-rocknix-zig.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_FLAGS": "-O3 -mcpu=cortex_a53"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "desktop",
+      "configurePreset": "desktop",
+      "jobs": 4
+    },
+    {
+      "name": "rk3326",
+      "configurePreset": "rk3326",
+      "jobs": 4
+    },
+    {
+      "name": "a133p",
+      "configurePreset": "a133p",
+      "jobs": 4
+    }
+  ]
+}
