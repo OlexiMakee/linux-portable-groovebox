@@ -1355,18 +1355,27 @@ std::string SampleView::focusId(const UiContext& c) const {
 }
 
 void SampleView::render(Canvas& cv, const UiContext& c, Rect area) const {
+    const SamplerEngine& active_smp =
+        (c.audio.sampler().recordedFrames() > 64 || c.audio.sampler().recordingState() != RecState::kIdle)
+        ? c.audio.sampler()
+        : c.app.sampler;
+
     // 1. Заголовок
-    char hdr[64];
-    auto st = c.app.sampler.recordingState();
+    char hdr[96];
+    auto st = active_smp.recordingState();
     const char* st_name = (st == RecState::kRecording) ? "RECORDING..."
-                        : (st == RecState::kOverdub)   ? "OVERDUB (SOUND-ON-SOUND)..."
+                        : (st == RecState::kOverdub)   ? "OVERDUB..."
                         : (st == RecState::kArmed)     ? "ARMED (WAITING)"
-                        : (st == RecState::kFinished)  ? "LOOP READY (8 SLICES)"
+                        : (st == RecState::kFinished)  ? "LOOP READY"
                         : "STANDBY";
     ColorRGB hdr_col = (st == RecState::kRecording) ? palette::kLevelWarnClip
                      : (st == RecState::kOverdub)   ? palette::kParamTrig
                      : palette::kAccentCyan;
-    std::snprintf(hdr, sizeof(hdr), "AUDIO-RECORDING [%s]", st_name);
+    const auto& sbuf = active_smp.recordedSample();
+    const uint32_t total_frames = active_smp.recordedFrames();
+    const uint32_t eff_sr = (c.tel.sample_rate > 0) ? c.tel.sample_rate : std::max(1u, sbuf.sample_rate);
+    const float dur_sec = (total_frames > 0) ? (static_cast<float>(total_frames) / static_cast<float>(eff_sr)) : 0.0f;
+    std::snprintf(hdr, sizeof(hdr), "AUDIO-RECORDING [%s] | %.2fs | [Y] AUDIT", st_name, dur_sec);
     cv.text(area.x + 4, area.y + 3, hdr, hdr_col);
 
     // 2. Велике вікно візуалізації хвилеформи (Elektron Digitakt style)
@@ -1385,14 +1394,12 @@ void SampleView::render(Canvas& cv, const UiContext& c, Rect area) const {
 
     // Слайси: вертикальні пунктирні розділювачі та підсвітка активного слайсу
     const int span_px = end_px - st_px;
-    const int active_slc = c.app.sampler.activePlaybackSlice();
-    const auto& sbuf = c.app.sampler.recordedSample();
-    const uint32_t total_frames = sbuf.lengthFrames();
-    const int num_slc = c.app.sampler.sliceCount();
+    const int active_slc = active_smp.activePlaybackSlice();
+    const int num_slc = active_smp.sliceCount();
 
     if (total_frames > 64 && num_slc > 0) {
         for (int i = 0; i < num_slc && i < 16; ++i) {
-            auto pt = c.app.sampler.getSlice(i);
+            auto pt = active_smp.getSlice(i);
             int s_x = wf_x + static_cast<int>((static_cast<float>(pt.start_frame) / total_frames) * (wf_w - 4));
             int s_next_x = wf_x + static_cast<int>((static_cast<float>(pt.start_frame + pt.length_frames) / total_frames) * (wf_w - 4));
             if (i > 0) {
@@ -1454,6 +1461,13 @@ void SampleView::render(Canvas& cv, const UiContext& c, Rect area) const {
 
     cv.line(end_px, wf_y + 1, end_px, wf_y + wf_h - 2, palette::kAccentCyan);
     cv.text(std::max(wf_x + 2, end_px - 18), wf_y + 3, "END", palette::kAccentCyan);
+
+    // Живий плейхед під час прослуховування (AUDITION) або відтворення цільового треку
+    float ph = c.audio.trackPlayhead(std::clamp(c.app.sample_target_track, 0, kMaxTracks - 1));
+    if (ph > 0.0f && ph <= 1.0f && span_px > 2) {
+        int px_head = st_px + static_cast<int>(ph * span_px);
+        cv.fill(px_head, wf_y + 2, 2, wf_h - 4, palette::kCursorWhite);
+    }
 
     // 3. Таблиця параметрів під хвилеформою (2 рядки по 5 параметрів)
     const int table_y = wf_y + wf_h + 4;

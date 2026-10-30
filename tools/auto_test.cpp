@@ -1359,6 +1359,61 @@ static void testInputRouterAndStepEditor() {
     TEST_ASSERT(activeProfile().has_analog_sticks == true, "R36S profile sets has_analog_sticks=true");
     setEnvCrossPlatform("GROOVEBOX_PROFILE", nullptr);
     loadActiveProfile();
+
+    // 22. End-to-End тестування [R1] AUDIO-REC (SMP.ARM, Master Resampling, SAMPLE.AUDITION, SMP.ASSIGN One-Shot & Slicer)
+    {
+        const Param* smp_arm = ParamRegistry::instance().find("SMP.ARM");
+        const Param* smp_assign = ParamRegistry::instance().find("SMP.ASSIGN");
+        TEST_ASSERT(smp_arm != nullptr && smp_assign != nullptr, "SMP.ARM and SMP.ASSIGN descriptors present");
+        if (smp_arm && smp_assign) {
+            app.sampler.setRecordingSource(RecSource::kMasterResample);
+            audio.sampler().setRecordingSource(RecSource::kMasterResample);
+            app.sample_target_track = 6;
+            app.sample_trim_start = 0.0f;
+            app.sample_trim_end = 1.0f;
+            audio.sampler().clearRecordedSample();
+            app.sampler.clearRecordedSample();
+
+            // Step 1: Arm -> Recording
+            smp_arm->step(ctx, 1, false);
+            TEST_ASSERT(audio.sampler().recordingState() == RecState::kArmed, "SMP.ARM step 1 arms audio.sampler()");
+            smp_arm->step(ctx, 1, false);
+            TEST_ASSERT(audio.sampler().recordingState() == RecState::kRecording, "SMP.ARM step 2 starts recording on audio.sampler()");
+
+            // Render synthetic master audio while recording
+            auto tp0 = audio.getTrackParams(0);
+            tp0.engine = EngineType::kAcid303;
+            audio.setTrackParams(0, tp0);
+            audio.triggerNote(0, 60, 120, false, false, 16);
+            std::vector<int16_t> rec_buf(512 * 2, 0);
+            for (int b = 0; b < 8; ++b) {
+                audio.renderBlock(rec_buf.data(), 512, 32000);
+            }
+
+            // Stop recording via SMP.ARM (dir = -1)
+            smp_arm->step(ctx, -1, false);
+            TEST_ASSERT(audio.sampler().recordingState() == RecState::kFinished, "SMP.ARM step -1 finishes recording");
+            TEST_ASSERT(audio.sampler().recordedFrames() >= 4096, "Master resampling captured frames into audio.sampler()");
+
+            // Test SAMPLE.AUDITION action ([Y] AUDIT)
+            bool aud_ok = ActionRegistry::instance().run("SAMPLE.AUDITION", ctx);
+            TEST_ASSERT(aud_ok == true, "SAMPLE.AUDITION action executes successfully");
+            TEST_ASSERT(app.last_action.find("AUDITION -> TRK 7") != std::string::npos, "SAMPLE.AUDITION auditions recorded buffer on target track");
+            TEST_ASSERT(audio.sampler().trackSample(6).loaded == true, "SAMPLE.AUDITION loads trimmed buffer into target track slot");
+
+            // Test SMP.ASSIGN One-Shot mode (coarse = false, steps sample_target_track 4 -> 5)
+            app.sample_target_track = 4;
+            smp_assign->step(ctx, 1, false);
+            TEST_ASSERT(audio.getTrackParams(5).engine == EngineType::kSampleOneShot, "SMP.ASSIGN (fine) switches target track to SampleOneShot");
+            TEST_ASSERT(audio.sampler().trackSample(5).loaded == true, "SMP.ASSIGN (fine) assigns recorded sample to target track");
+
+            // Test SMP.ASSIGN Slicer mode (coarse = true -> [SELECT]+[R], steps sample_target_track 6 -> 7)
+            app.sample_target_track = 6;
+            smp_assign->step(ctx, 1, true);
+            TEST_ASSERT(audio.getTrackParams(7).engine == EngineType::kSampleOneShot && audio.getTrackParams(7).sample.play_mode == SampleEngineMode::kSlicer, "SMP.ASSIGN (coarse) switches target track to SampleSlicer mode");
+            TEST_ASSERT(audio.sampler().trackSample(7).loaded == true, "SMP.ASSIGN (coarse) assigns sliced buffer to target track");
+        }
+    }
 }
 
 static void testViewsRendering() {
