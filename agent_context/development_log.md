@@ -1359,3 +1359,11 @@
   * Основні `README.md` та `docs/PORTING_GUIDE.md` переписані англійською мовою з позиціонуванням проєкту як відкритого модульного фреймворку (`Work-in-Progress Modular Groovebox Framework`) для портативних Linux-консолей (без згадок про десктопну DAW).
   * Українські версії збережені у `docs/README.uk.md` та `docs/PORTING_GUIDE.uk.md` із перемикачем мови у верхній частині документів.
   * У розділі бенчмарків зафіксовано повну специфікацію тестового стенду **MagicX XU10** (`Rockchip RK3326S, 4x Cortex-A35 @ 1.5 GHz, 1 GB DDR4, RK817 I2S DAC @ 32 kHz, ROCKNIX Linux 7.1.2 SMP PREEMPT, Direct KMSDRM, CPU Core 3 SCHED_FIFO 85`).
+
+
+## [2026-10-30 21:00] Milestone 47 (Roadmap A3): Project Persistence v3 — Portable `.wav` Sample & `.syx` DX7 Bank Serialization
+
+* **Розширення `TrackParameters` та `PatternManager` до версії формату `v3` (`src/synth_engines.hpp`, `src/pattern_manager.cpp`, `src/ui/actions.cpp`):**
+  * Додано фіксовані поля `sample_path[128]` та `dx7_bank_path[128]` у `TrackParameters`, які автоматично заповнюються при виборі `.wav` семплу (`oneshots/`, `loops/`) або `.syx` DX7-картриджа у `SAMPLE_BROWSER.CONFIRM`.
+  * Оновлено `kProjectVersion = 3u` у `src/pattern_manager.cpp`. При завантаженні проєкту (`loadProject` / `applyCurrent`) реалізовано крос-девайсний резолвер `resolvePortableAssetPath()`, який автоматично знаходить семпли та `.syx`-банки навіть при перенесенні файлу `.xgproj` між SD-картами різних ОС (`/storage/roms/groovebox`, `/mnt/SDCARD/Roms/PORTS/groovebox`, `/roms/ports/groovebox`, `res/`).
+  * Додано автоматизовані юніт-тести для серіалізації та автоматичного перезавантаження `.wav` буферів і `.syx` шляхів у `tools/auto_test.cpp` (`314/314 PASSED [OK]`).
