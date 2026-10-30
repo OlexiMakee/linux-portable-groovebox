@@ -267,10 +267,12 @@ void UiShell::renderHud(Canvas& cv, const UiContext& ctx) {
     widgets::dpad(cv, 12, hud_y + 19, ctx.in);
     cv.text(4, hud_y + 2, "DPAD", palette::kTextDim);
 
-    // 2. L-Stick Box з динамічною мішенню
+    // 2. L-Stick Box з динамічною мішенню (реактивно до Mode 1 / Mode 2)
     const auto tp = ctx.audio.getTrackParams(ctx.app.selected_track);
-    std::string l_dest = std::string(getStickDestShortName(tp.stick_left_x)) + "/" + getStickDestShortName(tp.stick_left_y);
-    std::string r_dest = std::string(getStickDestShortName(tp.stick_right_x)) + "/" + getStickDestShortName(tp.stick_right_y);
+    const auto& sl = ctx.in.l3 ? tp.stick_l_m2 : tp.stick_l_m1;
+    const auto& sr = ctx.in.r3 ? tp.stick_r_m2 : tp.stick_r_m1;
+    std::string l_dest = std::string(getStickDestShortName(sl.dest_x)) + "/" + getStickDestShortName(sl.dest_y);
+    std::string r_dest = std::string(getStickDestShortName(sr.dest_x)) + "/" + getStickDestShortName(sr.dest_y);
 
     cv.text(26, hud_y + 2, l_dest, palette::kAccentCyan);
     widgets::stickBox(cv, 28, hud_y + 12, ctx.in.lx, ctx.in.ly, ctx.in.l3, palette::kAccentCyan);

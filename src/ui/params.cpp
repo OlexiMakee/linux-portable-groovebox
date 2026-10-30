@@ -1,5 +1,6 @@
 #include "ui/params.hpp"
 #include "ui/actions.hpp"
+#include "device_profile.hpp"
 #include "preset_manager.hpp"
 
 #include <algorithm>
@@ -1416,77 +1417,65 @@ ParamRegistry::ParamRegistry() {
     }
     {
         Param p;
-        p.id = "SYS.SAMPLER";
-        p.label = "SAMPLER REC";
+        p.id = "SYS.FORCE_INT";
+        p.label = "DAC ROUTE";
         p.value = [](const UiContext& c) {
-            switch (c.app.sampler.recordingState()) {
-                case RecState::kArmed: return std::string("ARMED (THRESHOLD)");
-                case RecState::kRecording: return std::string("RECORDING...");
-                case RecState::kFinished: return std::string("SAMPLE READY");
-                default: return std::string("IDLE (A: ARM)");
-            }
+            return c.audio.isOutputForcedInternal() ? std::string("FORCE INT") : std::string("AUTO (USB)");
         };
         p.step = [](UiContext& c, int, bool) {
-            if (c.app.sampler.recordingState() == RecState::kIdle) {
-                c.app.sampler.armRecording();
-                c.app.last_action = "REC ARMED";
-            } else if (c.app.sampler.recordingState() == RecState::kRecording) {
-                c.app.sampler.stopRecording();
-                c.app.last_action = "REC STOPPED";
+            c.audio.toggleOutputOverride();
+            c.app.last_action = c.audio.isOutputForcedInternal() ? "DAC: FORCE INTERNAL" : "DAC: AUTO USB PRIORITY";
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SYS.MIDI_PORT";
+        p.label = "MIDI CLK";
+        p.value = [](const UiContext& c) { return c.midi.port_name; };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SYS.NET_STREAM";
+        p.label = "NET STREAM";
+        p.value = [](const UiContext& c) {
+            if (!c.audio.netStreamer().isRunning()) return std::string("OFF");
+            return "ON :8000 (" + std::to_string(c.audio.netStreamer().activeClientsCount()) + ")";
+        };
+        p.step = [](UiContext& c, int, bool) {
+            if (c.audio.netStreamer().isRunning()) {
+                c.audio.netStreamer().stop();
+                c.app.last_action = "NET AUDIO STREAM: OFF";
             } else {
-                c.app.sampler.armRecording();
+                c.audio.netStreamer().start(8000, c.tel.sample_rate);
+                c.app.last_action = "NET AUDIO STREAM: ON :8000";
             }
         };
         add(std::move(p));
     }
     {
         Param p;
-        p.id = "SYS.SLICES";
-        p.label = "SLICER GRID";
-        p.value = [](const UiContext& c) { return std::to_string(c.app.sampler.sliceCount()) + " SLICES"; };
-        p.step = [](UiContext& c, int dir, bool) {
-            int cnt = c.app.sampler.sliceCount();
-            cnt = dir > 0 ? (cnt < 16 ? 16 : 32) : (cnt > 16 ? 16 : 8);
-            c.app.sampler.sliceGrid(cnt);
-        };
-        add(std::move(p));
-    }
-    {
-        Param p;
-        p.id = "SYS.REC_SRC";
-        p.label = "INPUT";
+        p.id = "SYS.MASTER_REC";
+        p.label = "MASTER WAV";
         p.value = [](const UiContext& c) {
-            return c.in.headphones_plugged ? "LINE-IN" : "INT MIC";
+            if (!c.audio.isRecording()) return std::string("STANDBY [A]");
+            uint32_t sec = c.audio.getRecordedSeconds();
+            char b[24];
+            std::snprintf(b, sizeof(b), "REC %02u:%02u", sec / 60, sec % 60);
+            return std::string(b);
         };
         p.step = [](UiContext& c, int, bool) {
-            c.app.last_action = "INPUT TOGGLED";
+            ActionRegistry::instance().run("MASTER.RECORD_TOGGLE", c);
         };
         add(std::move(p));
     }
-    {
-        Param p;
-        p.id = "SYS.REC_ARM";
-        p.label = "REC ARM";
-        p.value = [](const UiContext& c) {
-            auto st = c.app.sampler.recordingState();
-            switch (st) {
-                case RecState::kArmed: return "ARMED";
-                case RecState::kRecording: return "RECORD";
-                case RecState::kFinished: return "DONE";
-                default: return "STANDBY";
-            }
-        };
-        p.step = [](UiContext& c, int, bool) {
-            if (c.app.sampler.recordingState() == RecState::kIdle) {
-                c.app.sampler.armRecording();
-                c.app.last_action = "SAMPLER ARMED";
-            } else {
-                c.app.sampler.stopRecording();
-                c.app.last_action = "SAMPLER STOPPED";
-            }
-        };
-        add(std::move(p));
-    }
+    add(info("SYS.PROFILE", "PROFILE", [](const UiContext&) {
+        return activeProfile().name;
+    }));
+    add(info("SYS.DISPLAY", "DISPLAY", [](const UiContext&) {
+        return std::string("320x240 4:3");
+    }));
 
     // =========================================================================
     // SAMPLING WORKSTATION (SMP.*)

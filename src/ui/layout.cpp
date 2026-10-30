@@ -187,6 +187,14 @@ void setupAppLayout(UiShell& shell) {
                     {"EQ3",  {"MST.EQ3_FRQ", "MST.EQ3_GAIN", "MST.EQ3_Q"}}
                 };
             }
+            if (c.app.mix_submode == MixSubmode::kSend) {
+                return {
+                    {"DLY", {"DLY.TIME", "DLY.FBK", "DLY.RET", "MST.BPM"}},
+                    {"REV", {"REV.DECAY", "REV.RET", "TRK.DLY", "TRK.REV"}},
+                    {"CHR", {"FX.CHR_MIX", "FX.CHR_RATE", "TRK.CHR"}},
+                    {"MST", {"MST.VOL", "MST.GAIN", "MST.PEAK"}}
+                };
+            }
             std::vector<GridRow> rows;
             const int count = c.audio.getActiveRowCount();
             for (int t = 0; t < count; ++t) {
@@ -225,8 +233,10 @@ void setupAppLayout(UiShell& shell) {
             return std::string(b);
         };
         sys_spec.rows = {
-            {"PROJ", {"SYS.BANK", "SYS.PAT", "SYS.SAVE", "SYS.LOAD"}},
-            {"AUD",  {"SYS.SR", "SYS.BUF", "SYS.OUT", "SYS.PANIC"}}
+            {"PROJ", {"SYS.BANK", "SYS.PAT", "SYS.SAVE", "SYS.SAVE_AS", "SYS.LOAD"}},
+            {"AUD",  {"SYS.SR", "SYS.BUF", "SYS.OUT", "SYS.FORCE_INT", "SYS.PANIC"}},
+            {"IO",   {"SYS.USB", "SYS.MIDI_PORT", "SYS.NET_STREAM", "SYS.MASTER_REC", "SYS.PROFILE"}},
+            {"DIAG", {"SYS.CPU", "SYS.RAM", "SYS.XRUN", "SYS.DISPLAY"}}
         };
         shell.registerView(std::make_unique<GridView>(std::move(sys_spec)));
     }
