@@ -72,7 +72,7 @@
 | **Anbernic RG351P / MP / V** | Rockchip RK3326 (4× Cortex-A35) | `640×480` / `480×320` | [`anbernic-rg351.ini`](profiles/anbernic-rg351.ini) | AmberELEC / ArkOS / ROCKNIX |
 | **Desktop / Generic Handheld** | x86_64 / ARM64 | `640×480` (віконний / KMSDRM) | [`generic.ini`](profiles/generic.ini) | macOS / Ubuntu / Debian / Arch |
 
-### Як додати або протестувати новий пристрій (Porting Guide для розробників)
+### Як додати або протестувати новий пристрій ([Детальний Porting Guide](docs/PORTING_GUIDE.md))
 1. **Через змінну середовища (без перекомпіляції):**
    ```bash
    # Примусовий запуск із профілем Trimui Brick Pro (1024x768) та кастомною папкою семплів:

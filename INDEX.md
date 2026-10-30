@@ -4,6 +4,7 @@
 
 ## Навігація проєкту
 * [README.md](README.md) — Архітектура універсального портативного Linux DAW, візуальний тур, опис 7 звукових рушіїв, розділення `SAMPLE` vs `SAMPLE PLAYER`, пресети збірки (`CMakePresets.json`) та інструкція портування на нові портативні консолі (`Trimui Brick Pro`, `R36S`, `MagicX XU10`).
+* [docs/PORTING_GUIDE.md](docs/PORTING_GUIDE.md) — Покроковий посібник із калібрування `evdev`, `ALSA` та дисплея для розробників під `Trimui Brick Pro`, `R36S` та інші Linux-консолі.
 * [CONTEXT.md](agent_context/CONTEXT.md) — Поточний архітектурний стан, мульти-девайсна система профілів (`profiles/*.ini`), універсальна підтримка USB Class-Compliant Audio/MIDI та двосторонній 16-канальний MIDI-роутинг.
 * [development_log.md](agent_context/development_log.md) — Хронологічний журнал змін, рефакторингу та апаратних патчів.
 * [profiles/](profiles/) — Декларативні `.ini` профілі апаратних платформ (`magicx-xu10.ini`, `trimui-brick-pro.ini`, `r36s.ini`, `anbernic-rg35xx.ini`, `anbernic-rg351.ini`, `generic.ini`).
