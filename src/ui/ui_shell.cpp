@@ -275,14 +275,32 @@ void UiShell::renderHud(Canvas& cv, const UiContext& ctx) {
     cv.text(4, hud_y + 2, "DPAD", palette::kTextDim);
 
     // 2. L-Stick Box з динамічною мішенню (реактивно до Mode 1 / Mode 2)
+    auto stickToken3 = [](ModTarget t) -> std::string {
+        switch (t) {
+            case ModTarget::kLfo1Rate:  return "L1R";
+            case ModTarget::kLfo1Depth: return "L1D";
+            case ModTarget::kLfo2Rate:  return "L2R";
+            case ModTarget::kLfo2Depth: return "L2D";
+            case ModTarget::kLfo3Rate:  return "L3R";
+            case ModTarget::kLfo3Depth: return "L3D";
+            case ModTarget::kLfo4Rate:  return "L4R";
+            case ModTarget::kLfo4Depth: return "L4D";
+            default: {
+                std::string s(getStickDestShortName(t));
+                return s.length() > 3 ? s.substr(0, 3) : s;
+            }
+        }
+    };
     const auto tp = ctx.audio.getTrackParams(ctx.app.selected_track);
     const auto& sl = ctx.in.l3 ? tp.stick_l_m2 : tp.stick_l_m1;
     const auto& sr = ctx.in.r3 ? tp.stick_r_m2 : tp.stick_r_m1;
-    std::string l_dest = std::string(getStickDestShortName(sl.dest_x)) + "/" + getStickDestShortName(sl.dest_y);
-    std::string r_dest = std::string(getStickDestShortName(sr.dest_x)) + "/" + getStickDestShortName(sr.dest_y);
+    std::string l_dest = stickToken3(sl.dest_x) + "/" + stickToken3(sl.dest_y);
+    std::string r_dest = stickToken3(sr.dest_x) + "/" + stickToken3(sr.dest_y);
 
-    cv.text(26, hud_y + 2, l_dest, palette::kAccentCyan);
-    widgets::stickBox(cv, 28, hud_y + 12, ctx.in.lx, ctx.in.ly, ctx.in.l3, palette::kAccentCyan);
+    if (activeProfile().has_analog_sticks) {
+        cv.text(26, hud_y + 2, l_dest, palette::kAccentCyan);
+        widgets::stickBox(cv, 28, hud_y + 12, ctx.in.lx, ctx.in.ly, ctx.in.l3, palette::kAccentCyan);
+    }
 
     // 3. Центральна панель статусу (x = 56..202)
     cv.line(56, hud_y + 2, 56, logical_h_ - 2, palette::kGridDim);
@@ -347,8 +365,10 @@ void UiShell::renderHud(Canvas& cv, const UiContext& ctx) {
     }
 
     // 4. R-Stick Box з динамічною мішенню
-    cv.text(206, hud_y + 2, r_dest, palette::kAccentOrange);
-    widgets::stickBox(cv, 212, hud_y + 12, ctx.in.rx, ctx.in.ry, ctx.in.r3, palette::kAccentOrange);
+    if (activeProfile().has_analog_sticks) {
+        cv.text(206, hud_y + 2, r_dest, palette::kAccentOrange);
+        widgets::stickBox(cv, 212, hud_y + 12, ctx.in.rx, ctx.in.ry, ctx.in.r3, palette::kAccentOrange);
+    }
 
     // 5. ABXY Diamond Графіка
     widgets::abxy(cv, 244, hud_y + 18, ctx.in);
