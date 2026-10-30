@@ -1496,10 +1496,16 @@ ParamRegistry::ParamRegistry() {
         p.id = "SMP.SRC";
         p.label = "SRC";
         p.value = [](const UiContext& c) {
-            return c.in.headphones_plugged ? "LINE-IN" : "MASTER";
+            return (c.app.sampler.recordingSource() == RecSource::kMasterResample)
+                   ? "RESAMPLE"
+                   : (c.in.headphones_plugged ? "LINE-IN" : "USB/MIC");
         };
         p.step = [](UiContext& c, int, bool) {
-            c.app.last_action = "REC SRC TOGGLED";
+            auto cur = c.app.sampler.recordingSource();
+            auto next = (cur == RecSource::kMasterResample) ? RecSource::kLineIn : RecSource::kMasterResample;
+            c.app.sampler.setRecordingSource(next);
+            c.audio.sampler().setRecordingSource(next);
+            c.app.last_action = (next == RecSource::kMasterResample) ? "SRC: MASTER RESAMPLE" : "SRC: LINE/USB IN";
         };
         add(std::move(p));
     }
@@ -1646,18 +1652,58 @@ ParamRegistry::ParamRegistry() {
     {
         Param p;
         p.id = "SMP.ASSIGN";
-        p.label = "ASSIGN";
+        p.label = "TO TRACK";
         p.value = [](const UiContext& c) {
             return "TRK " + std::to_string(c.app.sample_target_track + 1);
         };
         p.step = [](UiContext& c, int dir, bool coarse) {
+            const int max_t = std::max(1, c.audio.getActiveRowCount());
+            c.app.sample_target_track = (c.app.sample_target_track + dir + max_t) % max_t;
+            c.app.sampler.assignTrimmedToTrack(c.app.sample_target_track, c.app.sample_trim_start, c.app.sample_trim_end);
+            c.audio.sampler().setTrackSample(c.app.sample_target_track, c.app.sampler.trackSample(c.app.sample_target_track));
+            auto tp = c.audio.getTrackParams(c.app.sample_target_track);
+            tp.engine = EngineType::kSampleOneShot;
             if (coarse) {
-                c.app.sampler.sliceToDrumSlots(c.app.sample_trim_start, c.app.sample_trim_end);
-                c.app.last_action = "SLICED -> DRUM SLOTS 1-8";
+                tp.sample.play_mode = SampleEngineMode::kSlicer;
+            }
+            c.audio.setTrackParams(c.app.sample_target_track, tp);
+            c.app.last_action = "ASSIGNED -> TRK " + std::to_string(c.app.sample_target_track + 1);
+        };
+        add(std::move(p));
+    }
+    {
+        Param p;
+        p.id = "SMP.SAVE";
+        p.label = "SAVE WAV";
+        p.value = [](const UiContext& c) {
+            return (c.app.sampler.recordingMode() == RecMode::kSyncBar) ? "-> LOOPS" : "-> ONESHOT";
+        };
+        p.step = [](UiContext& c, int, bool coarse) {
+            const bool is_loop = coarse || (c.app.sampler.recordingMode() == RecMode::kSyncBar);
+            const char* subdir = is_loop ? "loops" : "oneshots";
+            static const char* kBaseRoots[] = {
+                "/storage/roms/groovebox",
+                "/roms/groovebox",
+                "/mnt/SDCARD/Roms/groovebox",
+                "res"
+            };
+            std::string target_dir = std::string("res/") + subdir;
+            std::error_code ec;
+            for (const char* root : kBaseRoots) {
+                if (std::filesystem::exists(root, ec)) {
+                    target_dir = std::string(root) + "/" + subdir;
+                    std::filesystem::create_directories(target_dir, ec);
+                    break;
+                }
+            }
+            static int s_save_counter = 1;
+            char fname[64];
+            std::snprintf(fname, sizeof(fname), "%s_%03d.wav", is_loop ? "loop" : "rec", s_save_counter++);
+            std::string full_path = target_dir + "/" + fname;
+            if (c.app.sampler.saveTrimmedToWav(full_path, c.app.sample_trim_start, c.app.sample_trim_end)) {
+                c.app.last_action = std::string("SAVED: ") + fname;
             } else {
-                c.app.sample_target_track = (c.app.sample_target_track + dir + 4) % 4;
-                c.app.sampler.assignTrimmedToSlot(c.app.sample_target_track, c.app.sample_trim_start, c.app.sample_trim_end);
-                c.app.last_action = "ASSIGNED -> TRK " + std::to_string(c.app.sample_target_track + 1);
+                c.app.last_action = "SAVE ERR (EMPTY)";
             }
         };
         add(std::move(p));

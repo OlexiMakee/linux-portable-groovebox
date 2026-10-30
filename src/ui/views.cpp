@@ -1325,11 +1325,11 @@ void SeqView::render(Canvas& cv, const UiContext& c, Rect area) const {
 }
 
 // =====================================================================================
-// SampleView — станція семплювання та лупера
+// SampleView — станція семплювання, ресемплінгу та збереження WAV
 // =====================================================================================
-static const char* kSampleParams[2][4] = {
-    {"SMP.SRC", "SMP.ARM", "SMP.MODE", "SMP.THRS"},
-    {"SMP.TRIM_ST", "SMP.TRIM_END", "SMP.DUB_FBK", "SMP.ASSIGN"}
+static const char* kSampleParams[2][5] = {
+    {"SMP.SRC", "SMP.ARM", "SMP.MODE", "SMP.THRS", "SMP.ZOOM"},
+    {"SMP.TRIM_ST", "SMP.TRIM_END", "SMP.DUB_FBK", "SMP.ASSIGN", "SMP.SAVE"}
 };
 
 void SampleView::navigate(UiContext& c, int dx, int dy, bool) {
@@ -1337,7 +1337,7 @@ void SampleView::navigate(UiContext& c, int dx, int dy, bool) {
         cursor_row_ = (cursor_row_ + dy + 2) % 2;
     }
     if (dx != 0) {
-        cursor_col_ = (cursor_col_ + dx + 4) % 4;
+        cursor_col_ = (cursor_col_ + dx + 5) % 5;
     }
     c.app.grid_row[static_cast<int>(ViewId::kSample)] = cursor_row_;
     c.app.grid_col[static_cast<int>(ViewId::kSample)] = cursor_col_;
@@ -1345,7 +1345,7 @@ void SampleView::navigate(UiContext& c, int dx, int dy, bool) {
 
 const Param* SampleView::focusedParam(const UiContext&) const {
     int r = std::clamp(cursor_row_, 0, 1);
-    int col = std::clamp(cursor_col_, 0, 3);
+    int col = std::clamp(cursor_col_, 0, 4);
     return ParamRegistry::instance().find(kSampleParams[r][col]);
 }
 
@@ -1430,10 +1430,14 @@ void SampleView::render(Canvas& cv, const UiContext& c, Rect area) const {
     cv.line(wf_x + 1, mid_y, wf_x + wf_w - 2, mid_y, ColorRGB{32, 40, 52});
 
     if (total_frames > 64) {
-        // Відмальовуємо піки хвилі з буфера
-        const float step_frames = static_cast<float>(total_frames) / static_cast<float>(wf_w - 4);
+        // Відмальовуємо піки хвилі з буфера з урахуванням SMP.ZOOM (1X..8X)
+        const int zoom = std::clamp(c.app.sample_zoom, 1, 8);
+        const uint32_t vis_frames = std::max(64u, total_frames / static_cast<uint32_t>(zoom));
+        const uint32_t zoom_start = std::min(total_frames - vis_frames,
+                                             static_cast<uint32_t>(c.app.sample_trim_start * total_frames));
+        const float step_frames = static_cast<float>(vis_frames) / static_cast<float>(wf_w - 4);
         for (int px = 0; px < wf_w - 4; ++px) {
-            uint32_t f_idx = static_cast<uint32_t>(px * step_frames);
+            uint32_t f_idx = zoom_start + static_cast<uint32_t>(px * step_frames);
             if (f_idx >= total_frames) break;
             float amp = std::abs(sbuf.data_l[f_idx]);
             int bar_h = std::clamp(static_cast<int>(amp * (wf_h / 2 - 2)), 1, wf_h / 2 - 2);
@@ -1451,13 +1455,13 @@ void SampleView::render(Canvas& cv, const UiContext& c, Rect area) const {
     cv.line(end_px, wf_y + 1, end_px, wf_y + wf_h - 2, palette::kAccentCyan);
     cv.text(std::max(wf_x + 2, end_px - 18), wf_y + 3, "END", palette::kAccentCyan);
 
-    // 3. Таблиця параметрів під хвилеформою (2 рядки по 4 параметри)
+    // 3. Таблиця параметрів під хвилеформою (2 рядки по 5 параметрів)
     const int table_y = wf_y + wf_h + 4;
-    const int cell_w = (wf_w - 20) / 4;
+    const int cell_w = (wf_w - 22) / 5;
     const int cell_h = 24;
 
     for (int r = 0; r < 2; ++r) {
-        for (int col = 0; col < 4; ++col) {
+        for (int col = 0; col < 5; ++col) {
             const Param* p = ParamRegistry::instance().find(kSampleParams[r][col]);
             if (!p) continue;
             const int cx = wf_x + col * (cell_w + 2);
@@ -1468,8 +1472,11 @@ void SampleView::render(Canvas& cv, const UiContext& c, Rect area) const {
     }
 
     // 4. Вертикальний VU-метр входу праворуч
-    const int meter_x = wf_x + 4 * (cell_w + 2) + 2;
-    widgets::verticalMeter(cv, Rect{meter_x, table_y, 8, cell_h * 2 + 2}, c.app.sampler.inputLevelL());
+    const int meter_x = wf_x + 5 * (cell_w + 2) + 2;
+    float in_vu = (c.app.sampler.recordingSource() == RecSource::kMasterResample)
+                  ? std::max(c.tel.vu_left, c.tel.vu_right)
+                  : c.app.sampler.inputLevelL();
+    widgets::verticalMeter(cv, Rect{meter_x, table_y, 8, cell_h * 2 + 2}, in_vu);
 }
 
 // =====================================================================================
@@ -1477,7 +1484,7 @@ void SampleView::render(Canvas& cv, const UiContext& c, Rect area) const {
 // =====================================================================================
 void PerfView::navigate(UiContext& c, int dx, int dy, bool) {
     if (dx != 0) {
-        const int n = std::max(1, (c.audio.getActiveRowCount() + kVoicesPerTrack - 1) / kVoicesPerTrack);
+        const int n = std::max(1, c.audio.getActiveRowCount());
         c.app.selected_track = (c.app.selected_track + dx + n) % n;
     }
     if (dy != 0) {

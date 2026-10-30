@@ -2209,6 +2209,20 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
         pushRecordingSamples(out_interleaved, frames);
     }
 
+    // Ресемплінг мастер-шини у робочу станцію семплювання [R1] SAMPLE
+    if (sampler().recordingSource() == RecSource::kMasterResample) {
+        auto r_st = sampler().recordingState();
+        if (r_st == RecState::kArmed || r_st == RecState::kRecording || r_st == RecState::kOverdub) {
+            std::vector<float> res_l(frames);
+            std::vector<float> res_r(frames);
+            for (uint32_t i = 0; i < frames; ++i) {
+                res_l[i] = static_cast<float>(out_interleaved[i * 2]) / 32000.0f;
+                res_r[i] = static_cast<float>(out_interleaved[i * 2 + 1]) / 32000.0f;
+            }
+            sampler().processAudioInput(res_l.data(), res_r.data(), frames);
+        }
+    }
+
     scope_write_idx_.store(sc_idx & 255u, std::memory_order_relaxed);
 
     float prev_l = vu_l_.load(std::memory_order_relaxed);
