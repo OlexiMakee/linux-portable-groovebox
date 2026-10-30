@@ -24,6 +24,15 @@
 
 using namespace groovebox;
 
+static void setEnvCrossPlatform(const char* name, const char* value) {
+#if defined(_WIN32)
+    _putenv_s(name, value ? value : "");
+#else
+    if (value) setenv(name, value, 1);
+    else unsetenv(name);
+#endif
+}
+
 static int g_tests_run = 0;
 static int g_tests_passed = 0;
 static int g_tests_failed = 0;
@@ -1272,18 +1281,18 @@ static void testInputRouterAndStepEditor() {
     TEST_ASSERT(ParamRegistry::instance().find("SMP.SAVE") != nullptr, "SMP.SAVE registered in ParamRegistry");
 
     // 21. Тестування профілів портативних консолей Trimui Brick Pro (1024x768) та R36S (640x480)
-    setenv("GROOVEBOX_PROFILE", "trimui-brick-pro", 1);
+    setEnvCrossPlatform("GROOVEBOX_PROFILE", "trimui-brick-pro");
     loadActiveProfile();
     TEST_ASSERT(activeProfile().name == "Trimui Brick Pro", "GROOVEBOX_PROFILE=trimui-brick-pro loads Trimui Brick Pro profile");
     TEST_ASSERT(activeProfile().display_width == 1024 && activeProfile().display_height == 768, "Trimui Brick Pro profile configures 1024x768 display");
     TEST_ASSERT(activeProfile().has_analog_sticks == true, "Trimui Brick Pro profile sets has_analog_sticks=true (dual Hall-effect sticks)");
 
-    setenv("GROOVEBOX_PROFILE", "r36s", 1);
+    setEnvCrossPlatform("GROOVEBOX_PROFILE", "r36s");
     loadActiveProfile();
     TEST_ASSERT(activeProfile().name == "R36S Handheld", "GROOVEBOX_PROFILE=r36s loads R36S Handheld profile");
     TEST_ASSERT(activeProfile().display_width == 640 && activeProfile().display_height == 480, "R36S profile configures 640x480 display");
     TEST_ASSERT(activeProfile().has_analog_sticks == true, "R36S profile sets has_analog_sticks=true");
-    unsetenv("GROOVEBOX_PROFILE");
+    setEnvCrossPlatform("GROOVEBOX_PROFILE", nullptr);
     loadActiveProfile();
 }
 

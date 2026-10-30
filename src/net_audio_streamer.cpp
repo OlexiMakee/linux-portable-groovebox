@@ -1,11 +1,13 @@
 #include "net_audio_streamer.hpp"
 
+#if !defined(_WIN32)
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#endif
 
 #include <chrono>
 #include <cstring>
@@ -99,6 +101,7 @@ void NetAudioStreamer::start(uint16_t port, uint32_t sample_rate) {
     sample_rate_ = sample_rate;
     running_.store(true);
 
+#if !defined(_WIN32)
     server_sock_ = socket(AF_INET, SOCK_STREAM, 0);
     if (server_sock_ >= 0) {
         int opt = 1;
@@ -116,12 +119,14 @@ void NetAudioStreamer::start(uint16_t port, uint32_t sample_rate) {
     udp_sock_ = socket(AF_INET, SOCK_DGRAM, 0);
 
     server_thread_ = std::thread(&NetAudioStreamer::serverThreadLoop, this);
+#endif
 }
 
 void NetAudioStreamer::stop() {
     if (!running_.load(std::memory_order_relaxed)) return;
     running_.store(false);
 
+#if !defined(_WIN32)
     if (server_sock_ >= 0) {
         shutdown(server_sock_, SHUT_RDWR);
         close(server_sock_);
@@ -146,11 +151,13 @@ void NetAudioStreamer::stop() {
     if (server_thread_.joinable()) {
         server_thread_.join();
     }
+#endif
 }
 
 void NetAudioStreamer::pushAudioBlock(const int16_t* interleaved_pcm, uint32_t frames) {
     if (!running_.load(std::memory_order_relaxed)) return;
 
+#if !defined(_WIN32)
     size_t byte_count = frames * 2 * sizeof(int16_t);
 
     // 1. Broadcast to UDP client (10.1.1.1:8001 for DAW / sox / BlackHole)
@@ -178,9 +185,14 @@ void NetAudioStreamer::pushAudioBlock(const int16_t* interleaved_pcm, uint32_t f
         }
     }
     client_count_.store(static_cast<int>(client_fds_.size()), std::memory_order_relaxed);
+#else
+    (void)interleaved_pcm;
+    (void)frames;
+#endif
 }
 
 void NetAudioStreamer::serverThreadLoop() {
+#if !defined(_WIN32)
     while (running_.load(std::memory_order_relaxed)) {
         if (server_sock_ < 0) break;
 
@@ -233,6 +245,7 @@ void NetAudioStreamer::serverThreadLoop() {
             close(client_fd);
         }
     }
+#endif
 }
 
 } // namespace groovebox

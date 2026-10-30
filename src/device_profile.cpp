@@ -4,13 +4,13 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <map>
 #include <string>
 #include <vector>
 
 #if defined(__linux__) || defined(__APPLE__)
-#include <dirent.h>
 #include <unistd.h>
 #endif
 
@@ -142,17 +142,17 @@ std::vector<std::string> profileDirs() {
 
 std::vector<std::string> listIni(const std::string& dir) {
     std::vector<std::string> files;
-#if defined(__linux__) || defined(__APPLE__)
-    if (DIR* d = ::opendir(dir.c_str())) {
-        while (dirent* e = ::readdir(d)) {
-            std::string n = e->d_name;
-            if (n.size() > 4 && n[0] != '.' && n.compare(n.size() - 4, 4, ".ini") == 0) {
-                files.push_back(dir + "/" + n);
-            }
-        }
-        ::closedir(d);
+    std::error_code ec;
+    if (!std::filesystem::exists(dir, ec) || !std::filesystem::is_directory(dir, ec)) {
+        return files;
     }
-#endif
+    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
+        if (!entry.is_regular_file(ec)) continue;
+        std::string n = entry.path().filename().string();
+        if (n.size() > 4 && n[0] != '.' && n.compare(n.size() - 4, 4, ".ini") == 0) {
+            files.push_back(dir + "/" + n);
+        }
+    }
     std::sort(files.begin(), files.end());
     return files;
 }
