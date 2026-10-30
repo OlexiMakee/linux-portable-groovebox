@@ -8,10 +8,20 @@
   "configurePresets": [
     {
       "name": "desktop",
-      "displayName": "Desktop Host (macOS / Linux x86_64 / ARM64)",
-      "description": "Native desktop build with SDL2, auto_test, and render_tour tools",
+      "displayName": "Host Dev & Test Runner (macOS / Linux / WSL2)",
+      "description": "Host build for running auto_test, render_tour, and UI/DSP development",
       "generator": "Unix Makefiles",
       "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "windows-ninja",
+      "displayName": "Windows Host Dev & Test Runner (Ninja)",
+      "description": "Native Windows build using Ninja for auto_test and UI/DSP development",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-win",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
@@ -39,12 +49,41 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_CXX_FLAGS": "-O3 -mcpu=cortex_a53"
       }
+    },
+    {
+      "name": "rk3326-ninja",
+      "displayName": "Rockchip RK3326 AArch64 via Ninja (Windows / macOS / Linux)",
+      "description": "Cross-compile for RK3326 handhelds using Ninja + Zig C++ from any host OS (including Windows)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-xu10-ninja",
+      "toolchainFile": "${sourceDir}/cmake/aarch64-rocknix-zig.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_FLAGS": "-O3 -mcpu=cortex_a35"
+      }
+    },
+    {
+      "name": "a133p-ninja",
+      "displayName": "Allwinner A133P AArch64 via Ninja (Windows / macOS / Linux)",
+      "description": "Cross-compile for Trimui Brick / Brick Pro using Ninja + Zig C++ from any host OS (including Windows)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-a133p-ninja",
+      "toolchainFile": "${sourceDir}/cmake/aarch64-rocknix-zig.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_FLAGS": "-O3 -mcpu=cortex_a53"
+      }
     }
   ],
   "buildPresets": [
     {
       "name": "desktop",
       "configurePreset": "desktop",
+      "jobs": 4
+    },
+    {
+      "name": "windows-ninja",
+      "configurePreset": "windows-ninja",
       "jobs": 4
     },
     {
@@ -55,6 +94,16 @@
     {
       "name": "a133p",
       "configurePreset": "a133p",
+      "jobs": 4
+    },
+    {
+      "name": "rk3326-ninja",
+      "configurePreset": "rk3326-ninja",
+      "jobs": 4
+    },
+    {
+      "name": "a133p-ninja",
+      "configurePreset": "a133p-ninja",
       "jobs": 4
     }
   ]
