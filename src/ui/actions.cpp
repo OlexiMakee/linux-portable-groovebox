@@ -1327,13 +1327,15 @@ ActionRegistry::ActionRegistry() {
         const std::string target_ext = (c.app.browser_context == AppModel::BrowserContext::kDx7) ? ".syx" : ".wav";
 
         for (const auto& entry : fs::directory_iterator(c.app.sample_browser_dir, ec)) {
+            std::string fname = entry.path().filename().string();
+            if (fname.empty() || fname[0] == '.') continue;
             if (entry.is_directory(ec)) {
-                dirs.push_back("[DIR] " + entry.path().filename().string());
+                dirs.push_back("[DIR] " + fname);
             } else if (entry.is_regular_file(ec)) {
                 std::string ext = entry.path().extension().string();
                 std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
                 if (ext == target_ext) {
-                    files.push_back(entry.path().filename().string());
+                    files.push_back(fname);
                 }
             }
         }

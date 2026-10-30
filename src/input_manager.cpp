@@ -212,7 +212,6 @@ void InputManager::processSdlEvent(const SDL_Event& ev, bool& quit_requested) {
 void InputManager::pollEvdev(bool& quit_requested) {
 #if defined(__linux__)
     struct input_event ev {};
-    bool dummy_edge = false;
 
     const auto& prof = activeProfile();
 

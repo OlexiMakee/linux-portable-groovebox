@@ -146,7 +146,9 @@ std::vector<std::string> listIni(const std::string& dir) {
     if (DIR* d = ::opendir(dir.c_str())) {
         while (dirent* e = ::readdir(d)) {
             std::string n = e->d_name;
-            if (n.size() > 4 && n.compare(n.size() - 4, 4, ".ini") == 0) files.push_back(dir + "/" + n);
+            if (n.size() > 4 && n[0] != '.' && n.compare(n.size() - 4, 4, ".ini") == 0) {
+                files.push_back(dir + "/" + n);
+            }
         }
         ::closedir(d);
     }
