@@ -1351,7 +1351,7 @@ const Param* SampleView::focusedParam(const UiContext&) const {
 
 std::string SampleView::focusId(const UiContext& c) const {
     const Param* p = focusedParam(c);
-    return p ? p->id : "SAMPLE";
+    return p ? p->id : "AUDIO-REC";
 }
 
 void SampleView::render(Canvas& cv, const UiContext& c, Rect area) const {
@@ -1366,7 +1366,7 @@ void SampleView::render(Canvas& cv, const UiContext& c, Rect area) const {
     ColorRGB hdr_col = (st == RecState::kRecording) ? palette::kLevelWarnClip
                      : (st == RecState::kOverdub)   ? palette::kParamTrig
                      : palette::kAccentCyan;
-    std::snprintf(hdr, sizeof(hdr), "SAMPLING WORKSTATION [%s]", st_name);
+    std::snprintf(hdr, sizeof(hdr), "AUDIO-RECORDING [%s]", st_name);
     cv.text(area.x + 4, area.y + 3, hdr, hdr_col);
 
     // 2. Велике вікно візуалізації хвилеформи (Elektron Digitakt style)

@@ -91,8 +91,8 @@ int main() {
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_01_rec_sampler.bmp");
 
-    // 1c. SEQ Tab (REC Mode: Melodic Synth Piano Roll)
-    app.selected_track = 5; // T6 303 Bass
+    // 1c. SEQ Tab (Piano Roll: DX7 6-OP Melodic Track)
+    app.selected_track = 6; // T7 DX7 6-OP
     app.rec_cursor_lane = 8; // D#
     app.rec_octave = 3;
     app.cursor_step = 2;
@@ -107,14 +107,18 @@ int main() {
     capture("/tmp/xu10_tour/tour_01_song.bmp");
     app.seq_submode = SeqSubmode::kMatrix;
 
-    // 2. SYNTH Tab (Cyan tab)
+    // 2. SYNTH Tab (Cyan tab: One-Shot Sample Player & Virtual Analog Supersaw)
     app.active_view = ViewId::kSynth;
-    app.selected_track = 0; // Sample Player Kick
+    app.selected_track = 0; // T1 Sample Player (One-Shot)
     input = InputState{};
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_02_sampler.bmp");
 
-    app.selected_track = 5; // T6 303 Bass
+    app.selected_track = 5;
+    auto tp_va = audio_engine.getTrackParams(5);
+    tp_va.engine = EngineType::kVaMono;
+    tp_va.p[0] = 1.0f; // Supersaw
+    audio_engine.setTrackParams(5, tp_va);
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_02_synth.bmp");
 

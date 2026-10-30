@@ -23,7 +23,7 @@ enum class ViewId : uint8_t {
     kPerf,          // PERF    — жива гра (педи, октави, макроси)
     kFx,            // FX      — send-ефекти та вихідна шина
     kMix,           // MIX     — мікшер треків + MASTER
-    kSample,        // SAMPLE  — станція семплювання, візуалізація хвилі та лупер
+    kSample,        // AUDIO-REC — станція аудіо-запису, ресемплінгу та лупер
     kSys,           // SYS     — системні налаштування
     kArp,           // ARP     — параметри подвійного арпеджиратора
     kInspect,       // INSPECT — інспектор кроку
@@ -39,7 +39,7 @@ inline constexpr ViewId kScope = ViewId::kSample;
 inline constexpr int kViewCount = static_cast<int>(ViewId::kCount);
 
 inline constexpr const char* kViewNames[kViewCount] = {
-    "SEQ", "SYNTH", "PERF", "FX", "MIX", "SAMPLE", "SYS", "ARP", "INSPECT", "PROJECT", "BROWSER", "ENGINE", "MOD_TGT"
+    "SEQ", "SYNTH", "PERF", "FX", "MIX", "AUDIO-REC", "SYS", "ARP", "INSPECT", "PROJECT", "BROWSER", "ENGINE", "MOD_TGT"
 };
 
 enum class SeqSubmode : uint8_t {
