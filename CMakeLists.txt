@@ -41,6 +41,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_options(xu10_groovebox PRIVATE
         "-Wl,--allow-shlib-undefined"
         "-Wl,-rpath,/usr/lib"
+        "-Wl,-s"
     )
     target_link_libraries(xu10_groovebox PRIVATE
         SDL2
