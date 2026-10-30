@@ -2,7 +2,7 @@
 
 **[🇬🇧 English](../README.md)** | **[🇺🇦 Українська](README.uk.md)**
 
-[![Test Suite](https://img.shields.io/badge/tests-311%20passed-brightgreen.svg)](#)
+[![Test Suite](https://img.shields.io/badge/tests-314%20passed-brightgreen.svg)](#)
 [![Status](https://img.shields.io/badge/status-WIP%20Modular%20Framework-blue.svg)](#)
 [![Targets](https://img.shields.io/badge/handhelds-MagicX%20XU10%20%7C%20Trimui%20Brick%20Pro%20%7C%20R36S-orange.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)](#)

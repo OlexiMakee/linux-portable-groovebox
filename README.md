@@ -2,7 +2,7 @@
 
 **[🇬🇧 English](README.md)** | **[🇺🇦 Українська](docs/README.uk.md)**
 
-[![Test Suite](https://img.shields.io/badge/tests-311%20passed-brightgreen.svg)](#)
+[![Test Suite](https://img.shields.io/badge/tests-314%20passed-brightgreen.svg)](#)
 [![Status](https://img.shields.io/badge/status-WIP%20Modular%20Framework-blue.svg)](#)
 [![Targets](https://img.shields.io/badge/handhelds-MagicX%20XU10%20%7C%20Trimui%20Brick%20Pro%20%7C%20R36S-orange.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)](#)
@@ -94,6 +94,7 @@ To prevent object-model confusion, sample playback and live audio recording are 
 * **4-Page Step Editor (`X` Button on any step):**
   * Cycles across `Step Editor: [MIDI] SYN MOD FX` to lock per-step notes, velocity, gate length, micro-timing, conditional triggers (`1:2`, `FILL`, `%` probability), and parameter locks (P-Locks) for any synth, filter, LFO, or FX parameter.
 * **Song Mode (`[L1] seq rol <SON>`):** Chain patterns `A01..H16` with per-row repeat counts and track mute masks.
+* **Project Persistence v3 (`.xgproj`):** Saves and restores all 16 patterns, Song Mode chains, Master FX, BPM, and portable per-track `.wav` sample / `.syx` DX7 cartridge paths (`resolvePortableAssetPath` automatically remaps SD card roots across different handheld OS mounts).
 
 ---
 

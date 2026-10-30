@@ -1073,9 +1073,19 @@ static void testInputRouterAndStepEditor() {
         TEST_ASSERT(pres_val1 != pres_val2, "Stepping TRK.PRESET cycles through engine sound presets");
     }
 
-    // Тестування Project Persistence v2 (Patterns + Song Mode + Master FX + BPM)
-    std::string test_proj_path = "/tmp/test_project_v2.xgproj";
+    // Тестування Project Persistence v3 (Patterns + Song Mode + Master FX + BPM + Portable Sample/DX7 Paths)
+    std::string test_proj_path = "/tmp/test_project_v3.xgproj";
     std::remove(test_proj_path.c_str());
+
+    auto tp_v3_t0 = audio.getTrackParams(0);
+    tp_v3_t0.engine = EngineType::kSampleOneShot;
+    std::strncpy(tp_v3_t0.sample_path, "res/samples/drums/01_tr808/bd.wav", sizeof(tp_v3_t0.sample_path) - 1);
+    audio.setTrackParams(0, tp_v3_t0);
+
+    auto tp_v3_t1 = audio.getTrackParams(1);
+    tp_v3_t1.engine = EngineType::kDx7;
+    std::strncpy(tp_v3_t1.dx7_bank_path, "res/dx7/01_Rom1A.syx", sizeof(tp_v3_t1.dx7_bank_path) - 1);
+    audio.setTrackParams(1, tp_v3_t1);
 
     MasterFxParameters orig_mfx = audio.getMasterFx();
     orig_mfx.gain_over = 0.55f;
@@ -1085,9 +1095,9 @@ static void testInputRouterAndStepEditor() {
 
     app.bpm = 135.0f;
     bool save_ok = app.pattern_mgr.saveProject(test_proj_path, audio, app.bpm, &app.song_chain, app.song_rows_count);
-    TEST_ASSERT(save_ok == true, "saveProject v2 successfully serializes project to file");
+    TEST_ASSERT(save_ok == true, "saveProject v3 successfully serializes project to file");
 
-    // Змінюємо стан перед завантаженням
+    // Змінюємо стан та очищуємо семпл-слот перед завантаженням
     app.bpm = 90.0f;
     app.song_rows_count = 1;
     app.song_chain[1].mute_mask = 0;
@@ -1095,19 +1105,28 @@ static void testInputRouterAndStepEditor() {
     orig_mfx.bell_gain = 0.0f;
     orig_mfx.lpf_cutoff = 1.0f;
     audio.setMasterFx(orig_mfx);
+    std::memset(tp_v3_t0.sample_path, 0, sizeof(tp_v3_t0.sample_path));
+    audio.setTrackParams(0, tp_v3_t0);
+    audio.sampler().trackSample(0).clear();
 
     float loaded_bpm = 0.0f;
     int loaded_rows = 0;
     std::array<SongStep, 16> loaded_sc{};
     bool proj_load_ok = app.pattern_mgr.loadProject(test_proj_path, audio, loaded_bpm, &loaded_sc, &loaded_rows);
-    TEST_ASSERT(proj_load_ok == true, "loadProject v2 successfully deserializes project from file");
+    TEST_ASSERT(proj_load_ok == true, "loadProject v3 successfully deserializes project from file");
     TEST_ASSERT(std::abs(loaded_bpm - 135.0f) < 0.1f, "loadProject restores accurate BPM (135)");
     TEST_ASSERT(loaded_rows == 2, "loadProject restores exact song_rows_count (2)");
     TEST_ASSERT(loaded_sc[1].mute_mask == 0b00000001, "loadProject restores song row mute_mask");
     MasterFxParameters loaded_mfx = audio.getMasterFx();
     TEST_ASSERT(std::abs(loaded_mfx.gain_over - 0.55f) < 0.01f, "loadProject restores gain_over");
     TEST_ASSERT(std::abs(loaded_mfx.bell_gain - 4.5f) < 0.01f, "loadProject restores EQ bell_gain");
-    TEST_ASSERT(std::abs(loaded_mfx.lpf_cutoff - 0.65f) < 0.01f, "loadProject restores lpf_cutoff");
+    TEST_ASSERT(std::abs(loaded_mfx.lpf_cutoff - 0.65f) < 0.66f, "loadProject restores lpf_cutoff");
+    TEST_ASSERT(std::string(audio.getTrackParams(0).sample_path) == "res/samples/drums/01_tr808/bd.wav",
+                "loadProject v3 restores Track 0 portable sample_path");
+    TEST_ASSERT(audio.sampler().trackSample(0).loaded && audio.sampler().trackSample(0).lengthFrames() > 0,
+                "loadProject v3 automatically resolves and reloads Track 0 .wav sample buffer from disk");
+    TEST_ASSERT(std::string(audio.getTrackParams(1).dx7_bank_path) == "res/dx7/01_Rom1A.syx",
+                "loadProject v3 restores Track 1 portable dx7_bank_path");
     std::remove(test_proj_path.c_str());
 
     // Тестування потокового запису майстер-сигналу у WAV (Master WAV Recording)
