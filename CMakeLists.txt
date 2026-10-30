@@ -51,13 +51,17 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     )
 else()
     find_package(SDL2 REQUIRED)
-    target_include_directories(xu10_groovebox SYSTEM PRIVATE
-        ${SDL2_INCLUDE_DIRS}
-        "/opt/homebrew/include"
-        "/opt/homebrew/include/SDL2"
-    )
-    target_link_directories(xu10_groovebox PRIVATE "/opt/homebrew/lib")
-    target_link_libraries(xu10_groovebox PRIVATE SDL2)
+    if(TARGET SDL2::SDL2)
+        set(HOST_SDL2_LIBS SDL2::SDL2)
+    else()
+        set(HOST_SDL2_LIBS ${SDL2_LIBRARIES} SDL2)
+    endif()
+    target_include_directories(xu10_groovebox SYSTEM PRIVATE ${SDL2_INCLUDE_DIRS})
+    if(EXISTS "/opt/homebrew/include")
+        target_include_directories(xu10_groovebox SYSTEM PRIVATE "/opt/homebrew/include" "/opt/homebrew/include/SDL2")
+        target_link_directories(xu10_groovebox PRIVATE "/opt/homebrew/lib")
+    endif()
+    target_link_libraries(xu10_groovebox PRIVATE ${HOST_SDL2_LIBS})
 
     add_executable(render_tour
         tools/render_tour.cpp
@@ -81,13 +85,12 @@ else()
         src/ui/ui_shell.cpp
     )
     target_include_directories(render_tour PRIVATE src)
-    target_include_directories(render_tour SYSTEM PRIVATE
-        ${SDL2_INCLUDE_DIRS}
-        "/opt/homebrew/include"
-        "/opt/homebrew/include/SDL2"
-    )
-    target_link_directories(render_tour PRIVATE "/opt/homebrew/lib")
-    target_link_libraries(render_tour PRIVATE SDL2)
+    target_include_directories(render_tour SYSTEM PRIVATE ${SDL2_INCLUDE_DIRS})
+    if(EXISTS "/opt/homebrew/include")
+        target_include_directories(render_tour SYSTEM PRIVATE "/opt/homebrew/include" "/opt/homebrew/include/SDL2")
+        target_link_directories(render_tour PRIVATE "/opt/homebrew/lib")
+    endif()
+    target_link_libraries(render_tour PRIVATE ${HOST_SDL2_LIBS})
 endif()
 
 add_executable(auto_test
@@ -133,13 +136,12 @@ if(CMAKE_CROSSCOMPILING)
         dl
     )
 else()
-    target_include_directories(auto_test SYSTEM PRIVATE
-        ${SDL2_INCLUDE_DIRS}
-        "/opt/homebrew/include"
-        "/opt/homebrew/include/SDL2"
-    )
-    target_link_directories(auto_test PRIVATE "/opt/homebrew/lib")
-    target_link_libraries(auto_test PRIVATE SDL2)
+    target_include_directories(auto_test SYSTEM PRIVATE ${SDL2_INCLUDE_DIRS})
+    if(EXISTS "/opt/homebrew/include")
+        target_include_directories(auto_test SYSTEM PRIVATE "/opt/homebrew/include" "/opt/homebrew/include/SDL2")
+        target_link_directories(auto_test PRIVATE "/opt/homebrew/lib")
+    endif()
+    target_link_libraries(auto_test PRIVATE ${HOST_SDL2_LIBS})
 endif()
 
 add_executable(stress_benchmark
@@ -185,17 +187,16 @@ if(CMAKE_CROSSCOMPILING)
         dl
     )
 else()
-    target_include_directories(stress_benchmark SYSTEM PRIVATE
-        ${SDL2_INCLUDE_DIRS}
-        "/opt/homebrew/include"
-        "/opt/homebrew/include/SDL2"
-    )
-    target_link_directories(stress_benchmark PRIVATE "/opt/homebrew/lib")
-    target_link_libraries(stress_benchmark PRIVATE SDL2)
+    target_include_directories(stress_benchmark SYSTEM PRIVATE ${SDL2_INCLUDE_DIRS})
+    if(EXISTS "/opt/homebrew/include")
+        target_include_directories(stress_benchmark SYSTEM PRIVATE "/opt/homebrew/include" "/opt/homebrew/include/SDL2")
+        target_link_directories(stress_benchmark PRIVATE "/opt/homebrew/lib")
+    endif()
+    target_link_libraries(stress_benchmark PRIVATE ${HOST_SDL2_LIBS})
 endif()
 
-target_compile_options(xu10_groovebox PRIVATE
-    -O2
-    -Wall
-    -Wextra
-)
+if(MSVC)
+    target_compile_options(xu10_groovebox PRIVATE /O2 /W3)
+else()
+    target_compile_options(xu10_groovebox PRIVATE -O2 -Wall -Wextra)
+endif()
