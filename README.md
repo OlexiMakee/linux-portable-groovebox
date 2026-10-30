@@ -1,122 +1,136 @@
-# Linux Portable Groovebox (MagicX XU10)
+# Portable Linux Groovebox DAW
 
-[![Test Suite](https://img.shields.io/badge/tests-243%20passed-brightgreen.svg)](#)
-[![Status](https://img.shields.io/badge/status-Confident%20Alpha-blue.svg)](#)
-[![Target](https://img.shields.io/badge/target-MagicX%20XU10%20(RK3326S)-orange.svg)](#)
+[![Test Suite](https://img.shields.io/badge/tests-311%20passed-brightgreen.svg)](#)
+[![Status](https://img.shields.io/badge/status-Modular%20Multi--Device-blue.svg)](#)
+[![Targets](https://img.shields.io/badge/targets-MagicX%20XU10%20%7C%20Trimui%20Brick%20Pro%20%7C%20R36S%20%7C%20Desktop-orange.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)](#)
 
-Повноцінна, високопродуктивна автономна грувбокс-станція для недорогих портативних ретро-консолей на базі Linux (Rockchip RK3326 / RK3566 / Allwinner H700 під керуванням ROCKNIX, ArkOS, Knulli).
+Повноцінна, високопродуктивна модульна грувбокс-станція та автономний DAW для портативних Linux-консолей (**MagicX XU10**, **Trimui Brick / Brick Pro**, **R36S / R36H**, **Anbernic RG35XX / RG351**) та десктопних систем (**Linux / macOS**).
 
-Еталонний апаратний пристрій: **MagicX XU10** (Rockchip RK3326S ARM64, 1 GB RAM, IPS 640×480 @ 320×240 pixel-perfect).
+Побудована за принципами **SOLID** та **UNIX Philosophy**: декларативні апаратні профілі (`profiles/*.ini`), автоматичне масштабування логічного полотна `320×240` (`4:3`) під будь-яку фізичну роздільну здатність (`640×480`, `1024×768`), універсальна підтримка будь-яких **Class-Compliant USB Audio / MIDI** інтерфейсів і двосторонній 16-канальний MIDI-стек.
 
 ---
 
 ## 📸 Візуальний тур (Interface Tour)
 
-| Секвенсор (16 треків) | Режим запису (Piano Roll) |
+| Секвенсор (16 треків) | Режим запису (14-Row Piano Roll) |
 |:---:|:---:|
 | ![Sequencer](docs/screenshots/tour_01_seq.png) | ![Piano Roll](docs/screenshots/tour_01_rec_piano.png) |
-| **Синтезатор (SYNTH / VA Supersaw)** | **Матриця модуляції (MOD MATRIX)** |
-| ![Synth](docs/screenshots/tour_02_synth.png) | ![Modulation](docs/screenshots/tour_05_scope.png) |
+| **Синтезатор (SYNTH / 303 Bassline)** | **Семпл-плеєр доріжки (SAMPLE PLAYER)** |
+| ![Synth](docs/screenshots/tour_02_synth.png) | ![Sample Player](docs/screenshots/tour_02_sampler.png) |
 | **Ефекти треку (TRACK FX)** | **Майстеринг та АЧХ / RTA (MASTER BUS)** |
 | ![Track FX](docs/screenshots/tour_03_fx.png) | ![Master Bus](docs/screenshots/tour_04_master.png) |
-| **4-сторінковий Step Inspector** | **Меню додавання рушіїв (ADD TRACK)** |
+| **4-сторінковий Step Editor** | **Меню вибору 7 рушіїв (SELECT ENGINE)** |
 | ![Step Inspector](docs/screenshots/tour_07_inspector.png) | ![Engine Menu](docs/screenshots/tour_13_engine_menu.png) |
-| **Семплер та Loop Slicer** | **Пул семплів (Sample Browser)** |
-| ![Sampler View](docs/screenshots/tour_05_sample.png) | ![Sample Browser](docs/screenshots/tour_14_sample_browser.png) |
+| **Робоча станція семплювання (SAMPLE)** | **Системні налаштування та профілі (SYS)** |
+| ![Sampler View](docs/screenshots/tour_05_sample.png) | ![System View](docs/screenshots/tour_06_sys.png) |
 
 ---
 
 ## ✨ Ключові можливості
 
-### 1. Звукові рушії (6 Synthesis & Sampling Engines)
-* **Sample Player:** Універсальний 16-голосний семплер з двома режимами:
-  * `ONESHOT` — звичайний запуск семплів з налаштуванням Pitch, Decay, Start, Loop Point, End.
-  * `SLICER` — 16-кроковий луп-слайсер з автоматичною детекцією транзієнтів та підтримкою блокування слайсів на кроках (P-Lock Slices).
-* **303 Bassline:** Строго монофонічний кислотний басовий синтезатор у стилі Roland TB-303. Нашарування нот на кроці сприймається як легато-слайд з постійно-часовою RC-кривою ковзання ($\tau = 60$ мс) без скидання фази та перезапуску огинаючих, з акцентом та діодним фільтром.
-* **DX7 6-OP FM:** Повна емуляція легендарного Yamaha DX7 з 32 класичними матричними алгоритмами маршрутизації фазової модуляції, 4-стадійними огинаючими та банком ROM1A (32 класичні заводські тембри).
-* **Chord Pad:** 4-голосний поліфонічний генератор акордів (m7, Maj7, Sus4, Power) з детюном та фільтром.
-* **Virtual Analog:** Багатохвильовий аналоговий синтезатор з 6 типами хвиль (`Saw`, `Pulse` з регульованим PWM, `Triangle`, `Sine`, `Noise`, а також 7-осциляторний Roland JP-8000 **Supersaw**), суб-осцилятором на октаву нижче та гнучким мікшером.
-* **MIDI Out:** Секвенування зовнішніх синтезаторів та звукових модулів (Channel, Program Change, CC A/B/C/D).
+### 1. Сім звукових та MIDI-рушіїв (`kSelectableEngines`)
+Кожна з 16 доріжок секвенсора може незалежно запускати будь-який із 7 рушіїв:
+1. **Sample Player (`SAMPLE PLAYER`):** Інструментальний семпл-плеєр доріжки з двома режимами:
+   * `ONESHOT` — поліфонічний/ударний запуск `.wav` ваншотів з керуванням `Tune`, `Gain`, `Start`, `Loop Point`, `End`.
+   * `SLICER` — строго монофонічний луп-слайсер (з автоматичним глушінням попереднього слайсу `Monophonic Choke`) та пропорційною сіткою нарізки `8 / 16 / 32 / 64 / 128` слайсів.
+2. **303 Bassline (`303 BASSLINE`):** Строго монофонічний кислотний синтезатор із легато-слайдом ($\tau = 60$ мс) без скидання фази, акцентом, суб-осцилятором та діодним резонансним фільтром.
+3. **DX7 6-OP FM (`DX7 6-OP`):** Повна 6-операторна FM-архітектура Yamaha DX7 з 32 класичними алгоритмами, підтримкою імпорту оригінальних `.syx` картриджів та вбудованим банком ROM1A.
+4. **Chord Pad (`CHORD PAD`):** 4-голосний поліфонічний синтезатор акордів (`m7`, `Maj7`, `Sus4`, `Power`, `m9`) з регулюванням інверсії, детюну та хорус-спреду.
+5. **Virtual Analog (`VIRTUAL ANALOG`):** Субтрактивний синтезатор з 6 формами хвилі (`Saw`, `Pulse` з PWM, `Triangle`, `Sine`, `Noise`, 7-осциляторний **Supersaw**) та суб-осцилятором.
+6. **2-OP FM (`2-OP FM`):** Перкусійний та металічний 2-операторний FM-синтезатор із миттєвим керуванням `Ratio`, `FM Index`, `Feedback`, `Mod Decay` та `Fold/Drive`.
+7. **MIDI Out (`MIDI OUT`):** Повноцінна апаратна MIDI-доріжка для секвенування зовнішніх залізних синтезаторів, драм-машин та модулярів через USB/ALSA RawMIDI (`Channel 1..16`, `Program Change`, `Bank MSB/LSB`, `4x CC Macros` із підтримкою P-Locks на кожному кроці).
 
-### 2. Секвенсор та Elektron-стиль редагування
-* **16 поліфонічних доріжок** до 64 кроків кожна.
-* **Поліметрія:** Індивідуальна довжина патерну для кожного треку (наприклад, 16 кроків на бочці, 14 на басу, 11 на перкусії).
-* **Step Inspector на 4 сторінки:**
-  * Циклічне перемикання по фізичній кнопці `X`: `<MIDI>-syn-mod-fx` $\rightarrow$ `midi-<SYN>-mod-fx` $\rightarrow$ `midi-syn-<MOD>-fx` $\rightarrow$ `midi-syn-mod-<FX>`.
-  * Закриття інспектора по кнопці `B`.
-  * Колірна диференціація шрифтів: жовтий (MIDI), синій (SYN), фіолетовий (MOD), зелений (FX).
-* **Elektron Parameter Locks (P-Locks):** Індивідуальна фіксація будь-якого параметра синтезу, семплу, фільтра чи ефекту на окремому кроці.
-* **Плавний Piano Roll:**
-  * Автоматичне фокусування на висоті найнижчої ноти треку.
-  * Плавний вертикальний піксельний скрол по півтонах.
-  * Інтерактивна фортепіанна клавіатура знизу з підсвіткою активного курсору та зіграних нот кроку.
-  * Підсвітка колонок кроків з параметричними тригерами (P-Locks).
-* **Універсальний рандомайзер (`SELECT + R3`):**
-  * У сітці треку секвенсора — розставляє випадкові тригери.
-  * У Piano Roll — розумно генерує гармонійні ноти в межах октави виділеної висоти.
-  * В екранах `SYN`, `MOD`, `FX` — рандомізує числові параметри тільки поточного активного екрана.
+### 2. Чітке розмежування: `[R1] SAMPLE` vs `[L2] SAMPLE PLAYER`
+* **`[R1] SAMPLE` (Sampling Workstation / Audio Recorder & Resampler):**
+  * Глобальна станція живого запису, ресемплінгу та нарізки (`SamplerEngine`).
+  * Підтримує запис із **Master Resample** (внутрішній стерео-вихід мікшера з усіма ефектами) або **Line-In / USB Audio Capture** (вхідний потік зовнішньої звукової карти).
+  * Режими запису: `MANUAL`, темпо-синхронізований `1 BAR / 2 BARS / 4 BARS`, а також `OVERDUB` (живий лупер з контролем зворотного зв'язку `DUB FBK`).
+  * Масштабування хвилі `ZOOM 1X..8X`, маркери `TRIM ST / TRIM END`, автодетекція транзієнтів (`TRANSIENT`), миттєве призначення записаного фрагмента на будь-яку доріжку `1..16` (`TO TRACK`) або збереження готового `.wav` файлу на SD-картку в `oneshots/` чи `loops/` (`SAVE WAV`).
+* **`[L2] SAMPLE PLAYER` (Track Synth Engine):**
+  * Індивідуальний звуковий рушій доріжки, який відтворює завантажений або призначений семпл через повний тракт синтезатора (подвійні фільтри HPF/LPF, ADSR, 4x LFO, P-Locks, Track FX).
 
-### 3. Фільтри та Майстеринг (Cytomic SVF DSP)
-* **Безвідмовно стабільні фільтри Cytomic SVF:** Переведені на трапецеїдальний інтегратор Завалішина (0..Nyquist без цифрових спотворень) з Linkwitz-Riley демпфуванням у 24 dB режимі для усунення паразитних шумів.
-* **Подвійні фільтри на трек:** Незалежні HPF та LPF (12 dB / 24 dB на вибір) з біполярними огинаючими спаду (-100%..+100%).
-* **Індивідуальні трекові ефекти:** Bitcrusher, Distortion, власний персональний Chorus на кожному треку, Sidechain Compressor, Ping-Pong Delay, Diffusion Reverb.
-* **Mastering Bus:**
-  * GAIN / Overdrive сатурація.
-  * Майстер-компресор шини.
-  * Рядок фільтрів з 6 параметрами: `Hp cut, hp res, hp slp, lp cut, lp res, lp slp`.
-  * 3-смуговий параметричний Bell EQ (Low-Mid, Mid, High-Mid).
-  * 36px аналізатор АЧХ/RTA до 24 кГц+ із зеленими точками маркерів частоти на кривій.
+### 3. Універсальний USB Audio / MIDI та мережевий стек
+* **Жодних захардкоджених вендорів:** автоматичне виявлення будь-якого Class-Compliant USB Audio інтерфейсу (`hw:1+`) та USB/ALSA RawMIDI порту з безшовним перемиканням частоти дискретизації (`48 000 Hz` для USB Audio / нативна частота вбудованого ЦАП при відключенні) та ручним оверрайдом `DAC ROUTE: FORCE INT` у вкладці `SYS`.
+* **Двосторонній 16-канальний MIDI (`MidiEngine`):**
+  * Вхід: 16 MIDI-каналів нот (`Note On/Off` $\rightarrow$ треки `1..16`), `MIDI Clock 24 PPQN` із програмним PLL-фільтром, транспорт `Start/Stop/Continue`, `Program Change` (перемикання патернів), `CC 74` (Cutoff) та `CC 71` (Resonance).
+  * Вихід: низьколатентна передача `Note On/Off`, `Control Change` та `Program Change` з доріжок `MIDI OUT`.
+* **HTTP WAV Live Stream (`SYS.NET_STREAM`):** вбудований безблокуючий HTTP-сервер (`:8000/stream.wav`), який транслює живий майстер-мікс по Wi-Fi або USB-мережі у будь-який браузер, VLC чи DAW.
 
 ---
 
-## 🎮 Керування (Hardware Keymap)
+## 📱 Підтримувані портативні консолі та профілі (`profiles/*.ini`)
 
-### Вкладки верхнього рівня
-* `[L1]` — Секвенсор: цикли між `<SEQ>` (сітка тригерів), `ROL` (Piano Roll), `SON` (Song mode).
-* `[L2]` — Синтезатор: цикли між `<SYN>` (движок та фільтри), `MOD` (матриця LFO/ENV/стіків), `FX` (ланцюг ефектів).
-* `[R2]` — Мікшер: цикли між `<MIX>` (рівні та панорама), `SND` (посили Delay/Reverb/Chorus), `MST` (майстеринг шина).
-* `[R1]` — Робоча станція семплювання (SAMPLE): хвильова форма, слайсер, зум.
-* `[G]` (System) — Системні налаштування (SYS): буфер, частота дискретизації, профіль пристрою.
+Архітектура вводу (`InputManager`), аудіо-роутингу (`AudioEngine`) та дисплея (`UiShell`) повністю керується декларативними `.ini`-файлами в каталозі [`profiles/`](profiles/):
 
-### Основні дії та комбінації
-* `D-PAD` — Навігація сіткою та вибір кроків/параметрів.
-* `A` — Збільшення значення параметра / Додавання тригера на кроці / Додавання треку на слоті `[+] ADD TRACK`.
-* `B` — Зменшення значення параметра / Видалення тригера / Закриття модального вікна чи Step Inspector.
-* `X` — Відкриття Step Inspector та циклічне перемикання його 4 сторінок (`MIDI` -> `SYN` -> `MOD` -> `FX`).
-* `Y` — Прослуховування (Audition) активного інструменту / тригера.
-* `START` — Пуск / Стоп секвенсора (Play / Stop).
-* `L3` (клік лівого стіка) — Утримання активує **FILL Mode** (умовні тригери Elektron).
-* `SELECT + R3` — **Універсальний рандомайзер (Randomizer)**.
-* `SELECT + L1` — Швидкий Mute активного треку.
-* `SELECT + L2` — Швидкий Solo активного треку.
-* `Аналогові стіки` — Модуляційні макроси реального часу (Cutoff, Resonance, Env Mod, FM Depth).
+| Пристрій | SoC / Процесор | Екран | Профіль | ОС / Середовище |
+|:---|:---|:---|:---|:---|
+| **MagicX XU10** | Rockchip RK3326S (4× Cortex-A35) | `640×480` (2× integer scale) | [`magicx-xu10.ini`](profiles/magicx-xu10.ini) | ROCKNIX / JELOS / AmberELEC |
+| **Trimui Brick / Brick Pro** | Allwinner A133P (4× Cortex-A53) | `1024×768` (4:3 crisp scale) | [`trimui-brick-pro.ini`](profiles/trimui-brick-pro.ini) | TrimUI OS / CrossMix / Knulli / NextUI |
+| **R36S / R36H / R35S** | Rockchip RK3326 (4× Cortex-A35) | `640×480` (2× integer scale) | [`r36s.ini`](profiles/r36s.ini) | ArkOS / ROCKNIX / AmberELEC |
+| **Anbernic RG35XX / Plus / H** | Allwinner H700 (4× Cortex-A53) | `640×480` (2× integer scale) | [`anbernic-rg35xx.ini`](profiles/anbernic-rg35xx.ini) | Knulli / muOS / Stock |
+| **Anbernic RG351P / MP / V** | Rockchip RK3326 (4× Cortex-A35) | `640×480` / `480×320` | [`anbernic-rg351.ini`](profiles/anbernic-rg351.ini) | AmberELEC / ArkOS / ROCKNIX |
+| **Desktop / Generic Handheld** | x86_64 / ARM64 | `640×480` (віконний / KMSDRM) | [`generic.ini`](profiles/generic.ini) | macOS / Ubuntu / Debian / Arch |
+
+### Як додати або протестувати новий пристрій (Porting Guide для розробників)
+1. **Через змінну середовища (без перекомпіляції):**
+   ```bash
+   # Примусовий запуск із профілем Trimui Brick Pro (1024x768) та кастомною папкою семплів:
+   GROOVEBOX_PROFILE=trimui-brick-pro GROOVEBOX_DATA_DIR=/mnt/SDCARD/Roms/groovebox ./xu10_groovebox
+   ```
+2. **Створення нового `.ini` профілю в `profiles/`:**
+   * Достатньо скопіювати [`profiles/trimui-brick-pro.ini`](profiles/trimui-brick-pro.ini) або [`profiles/r36s.ini`](profiles/r36s.ini).
+   * У секції `[device]` вказати підрядки з `/proc/device-tree/model` через `|` (наприклад, `match = trimui brick|tg3040|a133p`).
+   * У секції `[display]` задати нативну роздільну здатність екрана (`width = 1024`, `height = 768`, `integer_scale = 0`).
+   * У секції `[input]` перелічити підрядки назв `/dev/input/event*` через `|` — підтримуються як цифрові GPIO-кнопки D-pad, так і `ABS_HAT0X / ABS_HAT0Y` хрестовини та аналогові Hall-effect стіки.
 
 ---
 
-## 🛠 Збірка та розгортання
+## 🗂 Організація файлової системи на SD-картці
 
-### 1. Збірка для macOS / Linux Desktop (тести та UI-прев'ю)
-```bash
-# Встановлення залежностей (macOS):
-brew install sdl2 cmake ninja
+Програма автоматично шукає робочу директорію `groovebox/` на SD-картці вашої консолі (`/storage/roms/groovebox` на ROCKNIX, `/roms/groovebox` на ArkOS, `/mnt/SDCARD/Roms/groovebox` на TrimUI) або через `$GROOVEBOX_DATA_DIR`:
 
-# Конфігурація та компіляція:
-cmake -B build-macos -G Ninja
-cmake --build build-macos
-
-# Запуск тестів (243 automated tests):
-./build-macos/auto_test
-
-# Генерація свіжих скріншотів туру:
-./build-macos/render_tour
+```text
+groovebox/
+├── oneshots/      # .wav ваншоти та ударні кіти (відкривається для Sample Player -> ONESHOT)
+├── loops/         # .wav брейкбіти та лупи (відкривається для Sample Player -> SLICER)
+├── dx7/           # .syx картриджі Yamaha DX7 на 32 патчі (відкривається з DX7 -> BANK)
+├── projects/      # .xgproj файли проєктів (патерни A01..H16, Song Chain, Master FX)
+└── recordings/    # .wav записи майстер-шини (SYS -> MASTER WAV)
 ```
 
-### 2. Крос-компіляція та деплой на MagicX XU10
+---
+
+## 🛠 Збірка та пресети (`CMakePresets.json`)
+
+### 1. Нативна збірка для macOS / Linux Desktop
 ```bash
-# Підключення XU10 через USB-C (USB CDC-NCM / RNDIS IP: 10.1.1.2)
-# Автоматична компіляція бінарника aarch64 та перезапуск:
-bash scripts/deploy_xu10.sh --run
+# Встановлення залежностей (macOS):
+brew install sdl2 cmake zig
+
+# Конфігурація та компіляція через CMake Preset:
+cmake --preset desktop
+cmake --build --preset desktop
+
+# Запуск автоматизованого тестового пакету (311 тестів):
+./build/auto_test
+
+# Генерація всіх 20 скріншотів туру інтерфейсу:
+./build/render_tour
+```
+
+### 2. Крос-компіляція під портативні консолі (`aarch64`)
+```bash
+# Збірка під Rockchip RK3326 (MagicX XU10 / R36S / RG351):
+cmake --preset rk3326
+cmake --build --preset rk3326
+
+# Збірка під Allwinner A133P (Trimui Brick / Trimui Brick Pro):
+cmake --preset a133p
+cmake --build --preset a133p
+
+# Швидкий деплой на підключений по USB/SSH пристрій:
+bash scripts/deploy_xu10.sh
 ```
 
 ---
@@ -124,11 +138,11 @@ bash scripts/deploy_xu10.sh --run
 ## 📊 Продуктивність (Stress Benchmark)
 
 При 64 активних поліфонічних голосах (16 треків × 4 голоси одночасно з подвійними фільтрами Cytomic SVF, дифузною реверберацією, ділеєм, індивідуальними хорусами та майстер-компресором):
-* **Частота 32 000 Гц (буфер 96 семплів / 3.0 мс):** Середній час рендеру — **0.17 мс**, споживання DSP — **лише 5.6%** (запас процесора 94.4%).
+* **Частота 32 000 Гц (буфер 96 семплів / 3.0 мс):** Середній час рендеру — **0.17 мс**, споживання DSP — **5.6%** (запас процесора 94.4%).
 * **Оперативна пам'ять:** стабільні **48 MB RSS**.
-* **Zero XRUNs:** прямий вивід в ALSA без затримок.
+* **Zero XRUNs:** прямий вивід в ALSA з ізоляцією RT-потоку (`SCHED_FIFO 85`).
 
 ---
 
 ## 📜 Ліцензія
-Проєкт розповсюджується під ліцензією MIT. Розроблено спеціально для автономного музичного продакшну на портативних консолях.
+Проєкт розповсюджується під ліцензією MIT.
