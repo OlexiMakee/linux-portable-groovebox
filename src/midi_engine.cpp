@@ -1,5 +1,6 @@
 #include "midi_engine.hpp"
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdio>
@@ -43,6 +44,53 @@ void MidiEngine::stop() {
     }
 }
 
+void MidiEngine::sendRawBytes(const uint8_t* data, size_t len) {
+    if (!data || len == 0) return;
+#if defined(__linux__)
+    std::lock_guard<std::mutex> lock(tx_mutex_);
+    for (int fd : out_fds_) {
+        if (fd >= 0) {
+            ssize_t unused = ::write(fd, data, len);
+            (void)unused;
+        }
+    }
+#endif
+}
+
+void MidiEngine::sendNote(int channel, int note, float velocity, bool note_on) {
+    uint8_t ch = static_cast<uint8_t>(std::clamp(channel, 0, 15));
+    uint8_t n = static_cast<uint8_t>(std::clamp(note, 0, 127));
+    uint8_t v = note_on ? static_cast<uint8_t>(std::clamp(static_cast<int>(velocity * 127.0f + 0.5f), 1, 127)) : 0;
+    uint8_t msg[3] = {
+        static_cast<uint8_t>((note_on ? 0x90 : 0x80) | ch),
+        n,
+        v
+    };
+    if (note_on) {
+        tx_notes_.fetch_add(1, std::memory_order_relaxed);
+    }
+    sendRawBytes(msg, 3);
+}
+
+void MidiEngine::sendControlChange(int channel, uint8_t cc, uint8_t value) {
+    uint8_t ch = static_cast<uint8_t>(std::clamp(channel, 0, 15));
+    uint8_t msg[3] = {
+        static_cast<uint8_t>(0xB0 | ch),
+        static_cast<uint8_t>(cc & 0x7F),
+        static_cast<uint8_t>(value & 0x7F)
+    };
+    sendRawBytes(msg, 3);
+}
+
+void MidiEngine::sendProgramChange(int channel, uint8_t program) {
+    uint8_t ch = static_cast<uint8_t>(std::clamp(channel, 0, 15));
+    uint8_t msg[2] = {
+        static_cast<uint8_t>(0xC0 | ch),
+        static_cast<uint8_t>(program & 0x7F)
+    };
+    sendRawBytes(msg, 2);
+}
+
 MidiTelemetry MidiEngine::getTelemetry() const {
     MidiTelemetry t;
     t.connected = connected_.load(std::memory_order_relaxed);
@@ -58,6 +106,7 @@ MidiTelemetry MidiEngine::getTelemetry() const {
     t.detected_bpm = pll_bpm_.load(std::memory_order_relaxed);
     t.rx_clock_ticks = rx_clocks_.load(std::memory_order_relaxed);
     t.rx_notes = rx_notes_.load(std::memory_order_relaxed);
+    t.tx_notes = tx_notes_.load(std::memory_order_relaxed);
     return t;
 }
 
@@ -89,11 +138,16 @@ void MidiEngine::workerLoop() {
                 if (ports[c].fd < 0) {
                     char path[32];
                     std::snprintf(path, sizeof(path), "/dev/snd/midiC%dD0", c);
-                    int fd = ::open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+                    int fd = ::open(path, O_RDWR | O_NONBLOCK | O_CLOEXEC);
+                    if (fd < 0) {
+                        fd = ::open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+                    }
                     if (fd >= 0) {
                         ports[c].fd = fd;
                         ports[c].status_byte = 0;
                         ports[c].data_idx = 0;
+                        std::lock_guard<std::mutex> lock(tx_mutex_);
+                        out_fds_[c] = fd;
                     }
                 }
                 if (ports[c].fd >= 0) {
@@ -122,6 +176,10 @@ void MidiEngine::workerLoop() {
                     continue;
                 }
                 // Пристрій відключено
+                {
+                    std::lock_guard<std::mutex> lock(tx_mutex_);
+                    out_fds_[c] = -1;
+                }
                 ::close(p.fd);
                 p.fd = -1;
                 continue;
@@ -199,19 +257,19 @@ void MidiEngine::workerLoop() {
                 } else if (p.data_idx >= 2) {
                     p.data_idx = 0;
                     if (msg_type == 0x90 && p.data_buf[1] > 0) {
-                        // Note On на каналах 1..4 -> тригерить відповідну доріжку 0..3
-                        if (channel < 4 && on_note_) {
+                        // Note On на всіх 16 MIDI-каналах -> тригерить відповідну доріжку 0..15
+                        if (channel < 16 && on_note_) {
                             rx_notes_.fetch_add(1, std::memory_order_relaxed);
                             on_note_(channel, p.data_buf[0], static_cast<float>(p.data_buf[1]) / 127.0f);
                         }
                     } else if (msg_type == 0x80 || (msg_type == 0x90 && p.data_buf[1] == 0)) {
-                        // Note Off на каналах 1..4 -> відпускання ноти
-                        if (channel < 4 && on_note_off_) {
+                        // Note Off на всіх 16 MIDI-каналах -> відпускання ноти
+                        if (channel < 16 && on_note_off_) {
                             on_note_off_(channel, p.data_buf[0]);
                         }
                     } else if (msg_type == 0xB0 && on_cc_) {
-                        // Control Change (CC) на каналах 1..4
-                        if (channel < 4) {
+                        // Control Change (CC) на всіх 16 MIDI-каналах
+                        if (channel < 16) {
                             on_cc_(channel, p.data_buf[0], static_cast<float>(p.data_buf[1]) / 127.0f);
                         }
                     }
@@ -224,6 +282,10 @@ void MidiEngine::workerLoop() {
         }
     }
 
+    {
+        std::lock_guard<std::mutex> lock(tx_mutex_);
+        out_fds_.fill(-1);
+    }
     for (auto& p : ports) {
         if (p.fd >= 0) {
             ::close(p.fd);

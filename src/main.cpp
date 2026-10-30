@@ -131,10 +131,13 @@ int main(int argc, char* argv[]) {
         ui_dirty = true;
     };
 
-    // Запуск MIDI-рушія з PLL-синхронізацією 24 PPQN для зовнішнього секвенсора (Digitakt II)
+    // Запуск двостороннього MIDI-рушія (16 каналів RX/TX + PLL-синхронізація 24 PPQN)
     groovebox::MidiEngine midi_engine;
+    audio_engine.setMidiOutCallback([&](int channel, int note, float vel, bool note_on) {
+        midi_engine.sendNote(channel, note, vel, note_on);
+    });
     midi_engine.start(
-        [&](int track, uint8_t note, float vel) {
+        [&](int track, int note, float vel) {
             audio_engine.triggerNote(track, note, vel);
             ui_dirty = true;
         },
@@ -169,11 +172,11 @@ int main(int argc, char* argv[]) {
                 audio_engine.setTrackParams(channel, tp);
                 ui_dirty = true;
             } else if (cc == 74) {
-                tp.p[0] = norm_val;
+                tp.lpf_cutoff = norm_val;
                 audio_engine.setTrackParams(channel, tp);
                 ui_dirty = true;
             } else if (cc == 71) {
-                tp.p[1] = norm_val;
+                tp.lpf_resonance = norm_val;
                 audio_engine.setTrackParams(channel, tp);
                 ui_dirty = true;
             }
@@ -182,8 +185,16 @@ int main(int argc, char* argv[]) {
             audio_engine.noteOff(track, note);
             ui_dirty = true;
         },
-        [&](int, int) {
-            // MIDI Program Change 0..127 (квантоване перемикання патернів Elektron A01..H16)
+        [&](int, int program) {
+            // MIDI Program Change 0..127 -> перемикання патернів A01..H16
+            if (app.transport_playing) {
+                app.pattern_mgr.selectProgramChange(program, true);
+            } else {
+                int clamped = std::clamp(program, 0, groovebox::kTotalPatterns - 1);
+                app.pattern_mgr.switchPatternNow(clamped / groovebox::kPatternsPerBank,
+                                                 clamped % groovebox::kPatternsPerBank,
+                                                 audio_engine, app.bpm);
+            }
             ui_dirty = true;
         }
     );

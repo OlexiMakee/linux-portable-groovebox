@@ -1,8 +1,10 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -16,6 +18,7 @@ struct MidiTelemetry {
     float detected_bpm = 120.0f;
     uint32_t rx_clock_ticks = 0;
     uint32_t rx_notes = 0;
+    uint32_t tx_notes = 0;
 };
 
 class MidiEngine {
@@ -40,10 +43,16 @@ public:
     );
     void stop();
 
+    // Двосторонній MIDI-вихід (для доріжок EngineType::kMidiOut)
+    void sendNote(int channel, int note, float velocity, bool note_on);
+    void sendControlChange(int channel, uint8_t cc, uint8_t value);
+    void sendProgramChange(int channel, uint8_t program);
+
     MidiTelemetry getTelemetry() const;
 
 private:
     void workerLoop();
+    void sendRawBytes(const uint8_t* data, size_t len);
 
     NoteCallback on_note_;
     NoteOffCallback on_note_off_;
@@ -59,6 +68,9 @@ private:
     std::atomic<float> pll_bpm_{120.0f};
     std::atomic<uint32_t> rx_clocks_{0};
     std::atomic<uint32_t> rx_notes_{0};
+    std::atomic<uint32_t> tx_notes_{0};
+    mutable std::mutex tx_mutex_;
+    std::array<int, 8> out_fds_{-1, -1, -1, -1, -1, -1, -1, -1};
     std::thread worker_;
 };
 
