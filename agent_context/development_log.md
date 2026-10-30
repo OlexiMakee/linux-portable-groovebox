@@ -1367,3 +1367,10 @@
   * Додано фіксовані поля `sample_path[128]` та `dx7_bank_path[128]` у `TrackParameters`, які автоматично заповнюються при виборі `.wav` семплу (`oneshots/`, `loops/`) або `.syx` DX7-картриджа у `SAMPLE_BROWSER.CONFIRM`.
   * Оновлено `kProjectVersion = 3u` у `src/pattern_manager.cpp`. При завантаженні проєкту (`loadProject` / `applyCurrent`) реалізовано крос-девайсний резолвер `resolvePortableAssetPath()`, який автоматично знаходить семпли та `.syx`-банки навіть при перенесенні файлу `.xgproj` між SD-картами різних ОС (`/storage/roms/groovebox`, `/mnt/SDCARD/Roms/PORTS/groovebox`, `/roms/ports/groovebox`, `res/`).
   * Додано автоматизовані юніт-тести для серіалізації та автоматичного перезавантаження `.wav` буферів і `.syx` шляхів у `tools/auto_test.cpp` (`314/314 PASSED [OK]`).
+
+
+## [2026-10-30 21:04] Milestone 48 (Roadmap A4): Portable SD Card Release Packager (`Ports/Groovebox.sh` + `Ports/groovebox/`)
+
+* **Автоматизоване пакування готового SD-релізу (`scripts/package_release.sh`, `scripts/package_release.bat`, `CMakeLists.txt`):**
+  * Додано прапорець лінкера `-Wl,-s` для Linux-таргетів у `CMakeLists.txt`, що зменшило розмір кожного ARM64-бінарника з 21 МБ до **1.7 МБ**.
+  * Створено кросплатформні скрипти `scripts/package_release.sh` (macOS/Linux) та `scripts/package_release.bat` (Windows), які автоматично компілюють обидва таргети (`rk3326` Cortex-A35 та `a133p` Cortex-A53) і збирають директорію `dist/Ports/` та архів `dist/groovebox-handheld-ports.zip` (3.9 МБ) з `oneshots/`, `loops/`, `dx7/`, `profiles/*.ini` та універсальним лаунчером `Groovebox.sh` (який автоматично визначає SoC через `/proc/device-tree/model` і запускає відповідний бінарник із `SDL_VIDEODRIVER=kmsdrm`).
