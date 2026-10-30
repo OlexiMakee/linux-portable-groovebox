@@ -1374,3 +1374,15 @@
 * **Автоматизоване пакування готового SD-релізу (`scripts/package_release.sh`, `scripts/package_release.bat`, `CMakeLists.txt`):**
   * Додано прапорець лінкера `-Wl,-s` для Linux-таргетів у `CMakeLists.txt`, що зменшило розмір кожного ARM64-бінарника з 21 МБ до **1.7 МБ**.
   * Створено кросплатформні скрипти `scripts/package_release.sh` (macOS/Linux) та `scripts/package_release.bat` (Windows), які автоматично компілюють обидва таргети (`rk3326` Cortex-A35 та `a133p` Cortex-A53) і збирають директорію `dist/Ports/` та архів `dist/groovebox-handheld-ports.zip` (3.9 МБ) з `oneshots/`, `loops/`, `dx7/`, `profiles/*.ini` та універсальним лаунчером `Groovebox.sh` (який автоматично визначає SoC через `/proc/device-tree/model` і запускає відповідний бінарник із `SDL_VIDEODRIVER=kmsdrm`).
+
+
+## [2026-10-30 21:10] Milestone 49 (Roadmap A2): `303 BASSLINE` Engine DSP Overhaul & Stabilization
+
+* **Виправлення багу примусового легато-слайду та зникнення нот (`src/audio_engine.cpp`):**
+  * Виявлено та виправлено критичний баг у `AudioEngine::triggerNote`: раніше умова `voices_[row].amp_adsr.isActive()` примусово вмикала `slide = true` на кожному наступному кроці секвенсора, поки огинаюча першої ноти ще спадала (і блокувала ретригер `amp_adsr` у `triggerVoice`). Тепер автоматичний легато-слайд активується виключно при накладанні нот із відкритим гейтом (`gate_samples_left > 0 && stage != kRelease`) або при явному прапорці `step.slide == true`.
+  * Прибрано жорстке обнулення регістрів фільтра (`lpf_s1/s2`) між нотами на доріжці `303 BASSLINE`, що усунуло цифрові кліки на атаці.
+
+* **Виділений 4-полюсний діодно-сатурований TPT-фільтр та схема Accent/Decay (`src/audio_engine.cpp`, `src/ui/layout.cpp`, `src/ui/params.cpp`):**
+  * Підключено всі 6 параметрів `kAcid303` (`p[0]` `CUTOFF`, `p[1]` `RESO`, `p[2]` `ENV MOD`, `p[3]` `DECAY` `180..2400 ms`, `p[4]` `ACCENT`, `p[5]` `WAVEFRM` `SAW/SQUARE`) безпосередньо до 4-полюсного TPT-каскаду з експоненційною октавною модуляцією (`std::exp2`) та м'якою нелінійною сатурацією зворотного зв'язку (`fast_tanh`).
+  * На акцентованих кроках (`velocity >= 0.82`) реалізовано класичне скорочення спаду фільтра до `~180 мс` та підсилення VCA/резонансу.
+  * З таблиці `[L2] SYNTH` для `kAcid303` прибрано дубльований рядок `LPF`, що конфліктував із рядком `303`. Додано DSP-тести стабільності в `tools/auto_test.cpp` (`316/316 PASSED [OK]`).
