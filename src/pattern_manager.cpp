@@ -12,7 +12,47 @@ namespace groovebox {
 
 namespace {
 constexpr uint32_t kProjectMagic = 0x47425831u; // "GBX1"
-constexpr uint32_t kProjectVersion = 2u;
+constexpr uint32_t kProjectVersion = 3u;
+
+std::string resolvePortableAssetPath(const char* raw_path) {
+    if (!raw_path || raw_path[0] == '\0') return "";
+    std::error_code ec;
+    std::string p(raw_path);
+    if (std::filesystem::exists(p, ec)) return p;
+
+    // Якщо шлях містить відносний суфікс (oneshots/..., loops/..., dx7/..., samples/...),
+    // шукаємо його у стандартних кореневих директоріях поточної консолі або ПК
+    static const char* kAnchors[] = {"oneshots/", "loops/", "dx7/", "samples/"};
+    std::string rel;
+    for (const char* anchor : kAnchors) {
+        auto pos = p.find(anchor);
+        if (pos != std::string::npos) {
+            rel = p.substr(pos);
+            break;
+        }
+    }
+    if (rel.empty()) return p;
+
+    std::vector<std::string> bases;
+    if (const char* env_dir = std::getenv("GROOVEBOX_DATA_DIR"); env_dir && env_dir[0] != '\0') {
+        bases.emplace_back(env_dir);
+    }
+    if (!activeProfile().data_dir.empty()) {
+        bases.push_back(activeProfile().data_dir);
+    }
+    bases.emplace_back("/storage/roms/groovebox");
+    bases.emplace_back("/roms/groovebox");
+    bases.emplace_back("/mnt/SDCARD/Roms/groovebox");
+    bases.emplace_back("/storage/dev/groovebox/res");
+    bases.emplace_back("res");
+    bases.emplace_back("../res");
+
+    for (const auto& base : bases) {
+        std::string cand = base + "/" + rel;
+        if (std::filesystem::exists(cand, ec)) return cand;
+    }
+    return p;
+}
 } // namespace
 
 PatternManager::PatternManager() {
@@ -142,6 +182,18 @@ void PatternManager::applyCurrent(AudioEngine& engine, float& bpm) {
 
     for (int t = 0; t < kTracksCount; ++t) {
         engine.setTrackParams(t, p.tracks[t]);
+        if (p.tracks[t].sample_path[0] != '\0') {
+            std::string resolved_wav = resolvePortableAssetPath(p.tracks[t].sample_path);
+            if (!resolved_wav.empty()) {
+                engine.sampler().loadWavFile(resolved_wav, engine.sampler().trackSample(t));
+            }
+        }
+        if (p.tracks[t].dx7_bank_path[0] != '\0') {
+            std::string resolved_syx = resolvePortableAssetPath(p.tracks[t].dx7_bank_path);
+            if (!resolved_syx.empty()) {
+                engine.dx7().loadCartridgeFile(resolved_syx);
+            }
+        }
     }
 
     const int act = p.active_rows_count;
@@ -247,7 +299,7 @@ bool PatternManager::loadProject(const std::string& filepath, AudioEngine& engin
     uint32_t ver = 0;
     is.read(reinterpret_cast<char*>(&magic), sizeof(magic));
     is.read(reinterpret_cast<char*>(&ver), sizeof(ver));
-    if (magic != kProjectMagic || (ver != 1u && ver != 2u)) return false;
+    if (magic != kProjectMagic || (ver < 1u || ver > kProjectVersion)) return false;
 
     is.read(reinterpret_cast<char*>(&current_bank_), sizeof(current_bank_));
     is.read(reinterpret_cast<char*>(&current_pattern_), sizeof(current_pattern_));

@@ -647,6 +647,10 @@ struct TrackParameters {
 
     // Індекс обраного пресету тембру (Track Preset)
     int preset_idx = 0;
+
+    // Шляхи до завантаженого семплу (.wav) та картриджа DX7 (.syx) для серіалізації у проєкті (.xgproj v3)
+    char sample_path[128] = "";
+    char dx7_bank_path[128] = "";
 };
 
 inline constexpr const char* kParamNames[static_cast<int>(EngineType::kCount)][kParamsPerTrack] = {

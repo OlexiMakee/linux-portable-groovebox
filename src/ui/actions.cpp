@@ -1421,6 +1421,9 @@ ActionRegistry::ActionRegistry() {
 
         if (c.app.browser_context == AppModel::BrowserContext::kDx7) {
             if (c.audio.dx7().loadCartridgeFile(full_path)) {
+                auto tp = c.audio.getTrackParams(t);
+                std::snprintf(tp.dx7_bank_path, sizeof(tp.dx7_bank_path), "%s", full_path.c_str());
+                c.audio.setTrackParams(t, tp);
                 std::string stem = fs::path(full_path).stem().string();
                 c.app.sample_browser_open = false;
                 c.app.modal_cooldown_until_ms = c.now_ms + 300;
@@ -1437,6 +1440,7 @@ ActionRegistry::ActionRegistry() {
             c.audio.setTrackName(t, stem);
             auto tp = c.audio.getTrackParams(t);
             tp.engine = EngineType::kSampleOneShot;
+            std::snprintf(tp.sample_path, sizeof(tp.sample_path), "%s", full_path.c_str());
             if (c.app.browser_context == AppModel::BrowserContext::kLoops) {
                 tp.sample.play_mode = SampleEngineMode::kSlicer;
                 tp.sample.slice_index = 0;
