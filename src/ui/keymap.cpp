@@ -118,7 +118,8 @@ Keymap::Keymap() {
     bind(ViewId::kSample, Layer::kBase, Button::kB, Gesture::kPress, "PARAM.INC");
     bind(ViewId::kSample, Layer::kBase, Button::kA, Gesture::kPress, "PARAM.DEC");
     bind(ViewId::kSample, Layer::kBase, Button::kX, Gesture::kPress, "PARAM.DEC_FAST");
-    bind(ViewId::kSample, Layer::kBase, Button::kY, Gesture::kPress, "PARAM.INC_FAST");
+    bind(ViewId::kSample, Layer::kBase, Button::kY, Gesture::kPress, "SAMPLE.AUDITION");
+    bind(ViewId::kSample, Layer::kSelect, Button::kY, Gesture::kPress, "PARAM.INC_FAST");
     bind(ViewId::kSample, Layer::kSelect, Button::kB, Gesture::kPress, "VIEW.BACK");
 
     // =========================================================================

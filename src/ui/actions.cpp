@@ -1472,6 +1472,27 @@ ActionRegistry::ActionRegistry() {
         c.app.modal_cooldown_until_ms = c.now_ms + 300;
         c.app.last_action = "BROWSER CLOSED";
     }});
+    add(Action{"SAMPLE.AUDITION", "AUDIT", [](UiContext& c) {
+        const int target_t = std::clamp(c.app.sample_target_track, 0, kMaxTracks - 1);
+        const bool has_audio_rec = (c.audio.sampler().recordedFrames() > 64);
+        const bool has_app_rec   = (c.app.sampler.recordedFrames() > 64);
+        if (!has_audio_rec && !has_app_rec) {
+            c.app.last_action = "AUDITION: BUFFER EMPTY";
+            return;
+        }
+        if (has_audio_rec) {
+            c.audio.sampler().assignTrimmedToTrack(target_t, c.app.sample_trim_start, c.app.sample_trim_end);
+            c.app.sampler.setTrackSample(target_t, c.audio.sampler().trackSample(target_t));
+        } else {
+            c.app.sampler.assignTrimmedToTrack(target_t, c.app.sample_trim_start, c.app.sample_trim_end);
+            c.audio.sampler().setTrackSample(target_t, c.app.sampler.trackSample(target_t));
+        }
+        auto tp = c.audio.getTrackParams(target_t);
+        tp.engine = EngineType::kSampleOneShot;
+        c.audio.setTrackParams(target_t, tp);
+        c.audio.triggerNote(target_t, 48, 0.95f);
+        c.app.last_action = "AUDITION -> TRK " + std::to_string(target_t + 1);
+    }});
     add(Action{"ARP.COMMIT", "APPLY", [](UiContext& c) {
         const int row = c.app.cursor_row;
         const int start = c.app.cursor_step;

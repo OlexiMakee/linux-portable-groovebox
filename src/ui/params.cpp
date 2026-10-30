@@ -1514,7 +1514,9 @@ ParamRegistry::ParamRegistry() {
         p.id = "SMP.ARM";
         p.label = "REC ARM";
         p.value = [](const UiContext& c) {
-            auto st = c.app.sampler.recordingState();
+            auto st = (c.audio.sampler().recordingState() != RecState::kIdle)
+                      ? c.audio.sampler().recordingState()
+                      : c.app.sampler.recordingState();
             switch (st) {
                 case RecState::kArmed: return "ARMED";
                 case RecState::kRecording: return "RECORD";
@@ -1524,27 +1526,35 @@ ParamRegistry::ParamRegistry() {
             }
         };
         p.step = [](UiContext& c, int dir, bool) {
-            auto st = c.app.sampler.recordingState();
+            auto st = (c.audio.sampler().recordingState() != RecState::kIdle)
+                      ? c.audio.sampler().recordingState()
+                      : c.app.sampler.recordingState();
             if (dir > 0) {
                 if (st == RecState::kIdle) {
                     c.app.sampler.armRecording();
+                    c.audio.sampler().armRecording();
                     c.app.last_action = "REC ARMED";
                 } else if (st == RecState::kArmed) {
                     c.app.sampler.startRecording();
+                    c.audio.sampler().startRecording();
                     c.app.last_action = "RECORDING";
                 } else if (st == RecState::kRecording) {
                     c.app.sampler.startOverdub();
+                    c.audio.sampler().startOverdub();
                     c.app.last_action = "OVERDUBBING";
                 } else if (st == RecState::kOverdub) {
                     c.app.sampler.stopRecording();
+                    c.audio.sampler().stopRecording();
                     c.app.last_action = "LOOP STOPPED";
                 } else {
                     c.app.sampler.clearRecordedSample();
+                    c.audio.sampler().clearRecordedSample();
                     c.app.last_action = "LOOP CLEARED";
                 }
             } else {
                 if (st != RecState::kIdle) {
                     c.app.sampler.stopRecording();
+                    c.audio.sampler().stopRecording();
                     c.app.last_action = "REC STOPPED";
                 }
             }
@@ -1567,8 +1577,11 @@ ParamRegistry::ParamRegistry() {
             int m = (static_cast<int>(c.app.sampler.recordingMode()) + dir + 3) % 3;
             auto mode = static_cast<RecMode>(m);
             c.app.sampler.setRecordingMode(mode);
+            c.audio.sampler().setRecordingMode(mode);
             if (mode == RecMode::kSyncBar) {
-                c.app.sampler.armSyncedRecording(2, c.app.bpm, c.tel.sample_rate);
+                uint32_t sr = (c.tel.sample_rate > 0) ? c.tel.sample_rate : 32000u;
+                c.app.sampler.armSyncedRecording(2, c.app.bpm, sr);
+                c.audio.sampler().armSyncedRecording(2, c.app.bpm, sr);
                 c.app.last_action = "SYNC LOOPER 2BARS";
             }
         };
@@ -1587,7 +1600,9 @@ ParamRegistry::ParamRegistry() {
             float delta = coarse ? 0.20f : 0.05f;
             c.app.sample_transient_sens = std::clamp(c.app.sample_transient_sens + dir * delta, 0.05f, 0.95f);
             c.app.sampler.sliceTransients(c.app.sample_transient_sens);
-            c.app.last_action = "TRANSIENTS: " + std::to_string(c.app.sampler.sliceCount()) + " SLICES";
+            c.audio.sampler().sliceTransients(c.app.sample_transient_sens);
+            int cnt = std::max(c.audio.sampler().sliceCount(), c.app.sampler.sliceCount());
+            c.app.last_action = "TRANSIENTS: " + std::to_string(cnt) + " SLICES";
         };
         add(std::move(p));
     }
@@ -1633,7 +1648,9 @@ ParamRegistry::ParamRegistry() {
         p.norm = [](const UiContext& c) { return c.app.sampler.overdubFeedback(); };
         p.step = [](UiContext& c, int dir, bool coarse) {
             float d = coarse ? 0.10f : 0.05f;
-            c.app.sampler.setOverdubFeedback(c.app.sampler.overdubFeedback() + dir * d);
+            float next = c.app.sampler.overdubFeedback() + dir * d;
+            c.app.sampler.setOverdubFeedback(next);
+            c.audio.sampler().setOverdubFeedback(next);
         };
         add(std::move(p));
     }
@@ -1659,8 +1676,13 @@ ParamRegistry::ParamRegistry() {
         p.step = [](UiContext& c, int dir, bool coarse) {
             const int max_t = std::max(1, c.audio.getActiveRowCount());
             c.app.sample_target_track = (c.app.sample_target_track + dir + max_t) % max_t;
-            c.app.sampler.assignTrimmedToTrack(c.app.sample_target_track, c.app.sample_trim_start, c.app.sample_trim_end);
-            c.audio.sampler().setTrackSample(c.app.sample_target_track, c.app.sampler.trackSample(c.app.sample_target_track));
+            if (c.audio.sampler().recordedFrames() > 64) {
+                c.audio.sampler().assignTrimmedToTrack(c.app.sample_target_track, c.app.sample_trim_start, c.app.sample_trim_end);
+                c.app.sampler.setTrackSample(c.app.sample_target_track, c.audio.sampler().trackSample(c.app.sample_target_track));
+            } else {
+                c.app.sampler.assignTrimmedToTrack(c.app.sample_target_track, c.app.sample_trim_start, c.app.sample_trim_end);
+                c.audio.sampler().setTrackSample(c.app.sample_target_track, c.app.sampler.trackSample(c.app.sample_target_track));
+            }
             auto tp = c.audio.getTrackParams(c.app.sample_target_track);
             tp.engine = EngineType::kSampleOneShot;
             if (coarse) {
@@ -1700,7 +1722,10 @@ ParamRegistry::ParamRegistry() {
             char fname[64];
             std::snprintf(fname, sizeof(fname), "%s_%03d.wav", is_loop ? "loop" : "rec", s_save_counter++);
             std::string full_path = target_dir + "/" + fname;
-            if (c.app.sampler.saveTrimmedToWav(full_path, c.app.sample_trim_start, c.app.sample_trim_end)) {
+            bool ok = (c.audio.sampler().recordedFrames() > 64)
+                      ? c.audio.sampler().saveTrimmedToWav(full_path, c.app.sample_trim_start, c.app.sample_trim_end)
+                      : c.app.sampler.saveTrimmedToWav(full_path, c.app.sample_trim_start, c.app.sample_trim_end);
+            if (ok) {
                 c.app.last_action = std::string("SAVED: ") + fname;
             } else {
                 c.app.last_action = "SAVE ERR (EMPTY)";
