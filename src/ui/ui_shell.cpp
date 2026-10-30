@@ -158,7 +158,7 @@ void UiShell::renderTabBar(Canvas& cv, const UiContext& ctx) {
             else if (slot.key_label == "[G]")  title = "SYS";
             slot_accent = palette::kParamTrig;
         } else if (slot.key_label == "[R1]") {
-            title = "SAMPLE";
+            title = "AUDIO-REC";
         } else if (slot.key_label == "[G]") {
             title = "SYS";
         }

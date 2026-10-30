@@ -79,8 +79,9 @@ int main() {
     ui.render(app, audio_engine, nullptr, input, hw, audio, midi, 1000);
     capture("/tmp/xu10_tour/tour_01_seq.bmp");
 
-    // 1b. SEQ Tab (REC Mode: Chromatic Sampler Piano Roll)
+    // 1b. SEQ Tab (Piano Roll: Sample Player)
     app.rec_mode = true;
+    app.seq_submode = SeqSubmode::kPianoRoll;
     app.selected_track = 0;
     auto tp0 = audio_engine.getTrackParams(0);
     tp0.engine = EngineType::kSampleOneShot;

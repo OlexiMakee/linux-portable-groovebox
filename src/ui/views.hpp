@@ -94,11 +94,11 @@ public:
     void tick(UiContext& c) override;
 };
 
-// ---------------- SampleView: станція семплювання та лупера ----------------
+// ---------------- SampleView: станція аудіо-запису та лупера ----------------
 class SampleView : public IView {
 public:
     SampleView() : IView(ViewId::kSample) {}
-    std::string tabTitle(const UiContext&) const override { return "SAMPLE"; }
+    std::string tabTitle(const UiContext&) const override { return "AUDIO-REC"; }
     ColorRGB accent() const override { return palette::kAccentCyan; }
     void render(Canvas& cv, const UiContext& c, Rect area) const override;
     void navigate(UiContext& c, int dx, int dy, bool coarse) override;
