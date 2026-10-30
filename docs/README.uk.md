@@ -108,6 +108,9 @@ cmake --preset desktop && cmake --build --preset desktop
 # Крос-компіляція під RK3326 або Allwinner A133P:
 cmake --preset rk3326 && cmake --build --preset rk3326
 cmake --preset a133p  && cmake --build --preset a133p
+
+# Автоматична збірка готового SD-карткового релізу (dist/Ports/ + dist/groovebox-handheld-ports.zip):
+./scripts/package_release.sh
 ```
 
 ---

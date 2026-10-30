@@ -135,6 +135,9 @@ Developers can edit code, run the **311 automated tests (`auto_test`)**, render 
    cmake --preset windows-ninja -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
    cmake --build --preset windows-ninja
    .\build-win\auto_test.exe
+
+   # Package a ready-to-copy SD card release bundle (dist\Ports\):
+   .\scripts\package_release.bat
    ```
 
 #### Option B: Windows Subsystem for Linux (WSL2 — Ubuntu/Debian)
@@ -164,6 +167,9 @@ cmake --build --preset desktop
 # Cross-compile AArch64 binaries for RK3326 (MagicX XU10 / R36S) or A133P (Trimui Brick Pro):
 cmake --preset rk3326 && cmake --build --preset rk3326
 cmake --preset a133p  && cmake --build --preset a133p
+
+# Package a ready-to-copy SD card release bundle (dist/Ports/ + dist/groovebox-handheld-ports.zip):
+./scripts/package_release.sh
 ```
 
 ---
