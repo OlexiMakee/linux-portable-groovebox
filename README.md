@@ -2,7 +2,7 @@
 
 **[🇬🇧 English](README.md)** | **[🇺🇦 Українська](docs/README.uk.md)**
 
-[![Test Suite](https://img.shields.io/badge/tests-316%20passed-brightgreen.svg)](#)
+[![Test Suite](https://img.shields.io/badge/tests-328%20passed-brightgreen.svg)](#)
 [![Status](https://img.shields.io/badge/status-WIP%20Modular%20Framework-blue.svg)](#)
 [![Targets](https://img.shields.io/badge/handhelds-MagicX%20XU10%20%7C%20Trimui%20Brick%20Pro%20%7C%20R36S-orange.svg)](#)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey.svg)](#)
@@ -80,9 +80,9 @@ Each of the **16 tracks** can dynamically load any of the 7 engines from `kSelec
 To prevent object-model confusion, sample playback and live audio recording are strictly separated in both code and UI:
 1. **`SAMPLE PLAYER` (Track Synth Engine in `[L2] SYNTH`):**
    * The instrument engine assigned to a sequencer track that plays loaded `.wav` files through the track's filter, modulation, and FX chain.
-2. **`AUDIO-RECORDING` (Global Workstation Tab in `[R1] AUDIO-REC` — *Experimental / WIP*):**
+2. **`AUDIO-RECORDING` (Global Workstation Tab in `[R1] AUDIO-REC`):**
    * The global audio recorder, master resampler (`SRC: RESAMPLE` or `LINE-IN / USB`), live looper, and transient slicer (`SamplerEngine`).
-   * *Note:* The `[R1] AUDIO-RECORDING` workflow and the monophonic loop `SLICER` mode (`8..128` grid slices) are **currently incomplete and under active testing**.
+   * Features unified live capture (`SMP.ARM`), instant trimmed buffer audition on `[Y] AUDIT` (`SAMPLE.AUDITION`) with a live waveform playhead cursor, one-click track assignment (`SMP.ASSIGN` in One-Shot or `SELECT` + Slicer mode), and `.wav` export (`SMP.SAVE` to `oneshots/` or `loops/`).
 
 ---
 
