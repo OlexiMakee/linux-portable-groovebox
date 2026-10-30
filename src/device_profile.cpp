@@ -137,6 +137,11 @@ std::vector<std::string> profileDirs() {
     }
 #endif
     dirs.emplace_back("profiles");
+    dirs.emplace_back("/storage/roms/ports/profiles");
+    dirs.emplace_back("/storage/roms/ports/groovebox/profiles");
+    dirs.emplace_back("/storage/roms/groovebox/profiles");
+    dirs.emplace_back("/roms/ports/groovebox/profiles");
+    dirs.emplace_back("/mnt/SDCARD/Roms/PORTS/groovebox/profiles");
     return dirs;
 }
 

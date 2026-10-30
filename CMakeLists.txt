@@ -128,6 +128,7 @@ if(CMAKE_CROSSCOMPILING)
     target_link_options(auto_test PRIVATE
         "-Wl,--allow-shlib-undefined"
         "-Wl,-rpath,/usr/lib"
+        "-Wl,-s"
     )
     target_link_libraries(auto_test PRIVATE
         SDL2
