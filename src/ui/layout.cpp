@@ -77,9 +77,8 @@ void setupAppLayout(UiShell& shell) {
                     };
                 case EngineType::kAcid303:
                     return {
-                        {"INST",   {"TRK.ENGINE", "TRK.PRESET", "TRK.P6"}},
+                        {"INST",   {"TRK.ENGINE", "TRK.PRESET", "TRK.P6", "TRK.GAIN_OVER"}},
                         {"303",    {"TRK.P1", "TRK.P2", "TRK.P3", "TRK.P4", "TRK.P5"}},
-                        {"LPF",    {"TRK.LPF_CUT", "TRK.LPF_RES", "TRK.LPF_POLE", "TRK.LPF_ENV", "TRK.LPF_DEC"}},
                         {"HPF",    {"TRK.HPF_CUT", "TRK.HPF_RES", "TRK.HPF_POLE", "TRK.HPF_ENV", "TRK.HPF_DEC"}},
                         {"ENV 1 (AMP)", {"TRK.ATK", "TRK.DEC", "TRK.SUS", "TRK.REL", "TRK.LVL"}}
                     };

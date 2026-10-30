@@ -290,6 +290,12 @@ void AudioEngine::adjustTrackParam(int track, int param_idx, float delta) {
     auto& tr = tracks_[std::clamp(track, 0, kMaxTracks - 1)];
     if (param_idx >= 0 && param_idx < kParamsPerTrack) {
         tr.p[param_idx] = std::clamp(tr.p[param_idx] + delta, 0.0f, 1.0f);
+        if (tr.engine == EngineType::kAcid303) {
+            if (param_idx == 0) tr.lpf_cutoff = tr.p[0];
+            else if (param_idx == 1) tr.lpf_resonance = std::clamp(tr.p[1], 0.0f, 0.95f);
+            else if (param_idx == 2) tr.lpf_env = tr.p[2];
+            else if (param_idx == 3) tr.lpf_decay = 0.18f + tr.p[3] * 2.22f;
+        }
     }
 }
 
@@ -665,18 +671,36 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
     v.hpf_env_val = 1.0f;
     v.hpf_decay_coef = std::exp(-1.0f / (std::clamp(tracks_[t].hpf_decay, 0.01f, 4.0f) * sr));
 
+    if (tracks_[t].engine == EngineType::kAcid303) {
+        float eff_dec = (v.plock_p[3] >= 0.0f) ? v.plock_p[3] : tracks_[t].p[3];
+        float eff_acc = (v.plock_p[4] >= 0.0f) ? v.plock_p[4] : tracks_[t].p[4];
+        float accent_amt = (v.velocity >= 0.82f)
+            ? (eff_acc * std::clamp((v.velocity - 0.70f) / 0.30f, 0.0f, 1.0f))
+            : 0.0f;
+        // TB-303 filter decay: 180 ms .. 2400 ms, shortened toward ~180 ms on accented steps
+        float acid_dec_sec = std::max(0.14f, (0.18f + eff_dec * 2.22f) * (1.0f - 0.62f * accent_amt));
+        v.lpf_decay_coef = std::exp(-1.0f / (acid_dec_sec * sr));
+        v.lpf_env_val = 1.0f + 0.35f * accent_amt;
+    }
+
     if (tracks_[t].engine == EngineType::kAcid303 && slide && v.amp_adsr.isActive()) {
         // Roland TB-303 Legato Slide: нова цільова нота, плавний слайд без скидання фази чи огинаючої!
         v.target_pitch = static_cast<float>(midi_note);
         v.is_legato = true;
         v.glide_coef = std::exp(-1.0f / (0.060f * sr)); // 60ms constant-time RC slide
+        if (v.amp_adsr.stage == AdsrStage::kRelease || v.amp_adsr.value < 0.65f) {
+            v.amp_adsr.stage = AdsrStage::kDecay;
+            v.amp_adsr.value = std::max(v.amp_adsr.value, 0.80f);
+        }
     } else {
         v.target_pitch = static_cast<float>(midi_note);
         v.current_pitch = v.target_pitch;
         v.is_legato = false;
         v.freq = midiToFreq(midi_note);
-        v.lpf_s1 = v.lpf_s2 = v.lpf_s1_b = v.lpf_s2_b = 0.0f;
-        v.hpf_s1 = v.hpf_s2 = v.hpf_s1_b = v.hpf_s2_b = 0.0f;
+        if (tracks_[t].engine != EngineType::kAcid303) {
+            v.lpf_s1 = v.lpf_s2 = v.lpf_s1_b = v.lpf_s2_b = 0.0f;
+            v.hpf_s1 = v.hpf_s2 = v.hpf_s1_b = v.hpf_s2_b = 0.0f;
+        }
 
         if (tracks_[t].engine == EngineType::kDx7) {
             int p_idx = std::clamp(static_cast<int>(tracks_[t].p[0] * (dx7_engine_.patchCount() - 1) + 0.5f), 0, dx7_engine_.patchCount() - 1);
@@ -725,6 +749,11 @@ void AudioEngine::triggerVoice(int row, int midi_note, float velocity, float plo
             }
             v.amp_adsr.trigger(tracks_[t].attack, tracks_[t].decay, tracks_[t].sustain, sr);
             v.filter_adsr.trigger(tracks_[t].attack * 0.6f, tracks_[t].decay, tracks_[t].sustain, sr);
+        } else if (tracks_[t].engine == EngineType::kAcid303) {
+            float eff_dec = (v.plock_p[3] >= 0.0f) ? v.plock_p[3] : tracks_[t].p[3];
+            float amp_dec = std::clamp(0.18f + eff_dec * 0.72f, 0.10f, 1.0f);
+            v.amp_adsr.trigger(std::min(tracks_[t].attack, 0.003f), amp_dec, tracks_[t].sustain, sr);
+            v.filter_adsr.trigger(0.001f, eff_dec, 0.0f, sr);
         } else {
             v.amp_adsr.trigger(tracks_[t].attack, tracks_[t].decay, tracks_[t].sustain, sr);
             v.filter_adsr.trigger(tracks_[t].attack * 0.6f, tracks_[t].decay, tracks_[t].sustain, sr);
@@ -792,8 +821,9 @@ void AudioEngine::triggerNote(int track, int midi_note, float velocity, float pl
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
         row = allocateVoice(track, midi_note);
-        if (tracks_[track].engine == EngineType::kAcid303 && voices_[row].active && voices_[row].amp_adsr.isActive()) {
-            // Нашарування нот на кроці або активна нота TB-303 сприймаються як слайд
+        if (tracks_[track].engine == EngineType::kAcid303 && voices_[row].active &&
+            voices_[row].gate_samples_left > 0 && voices_[row].amp_adsr.stage != AdsrStage::kRelease) {
+            // Нашарування нот при відкритому гейті TB-303 сприймається як легато-слайд
             slide = true;
         }
         voices_[row].note_num = static_cast<uint8_t>(midi_note);
@@ -1723,41 +1753,85 @@ void AudioEngine::renderBlock(int16_t* out_interleaved, uint32_t frames, uint32_
                 }
 
                 // Dual filter 2: Low Pass Filter (Cytomic SVF, 12 dB or cascaded 24 dB) with Bipolar Decay Envelope
-                float base_cut = (v.plock_cutoff >= 0.0f) ? v.plock_cutoff : tp.lpf_cutoff;
-                float eff_lpf = std::clamp(base_cut + cut_offset + (tp.lpf_env + env_offset) * v.lpf_env_val, 0.01f, 1.0f);
-                if ((i & 7) == 0) {
-                    float f_lpf_hz = std::clamp(20.0f * std::pow(1000.0f, eff_lpf), 20.0f, static_cast<float>(sample_rate) * 0.45f);
-                    float g_lpf = std::tan(3.14159265f * f_lpf_hz * inv_sr);
-                    v.lpf_k = 2.0f - 1.9f * lpf_reso;
-                    v.lpf_a1 = 1.0f / (1.0f + g_lpf * (g_lpf + v.lpf_k));
-                    v.lpf_a2 = g_lpf * v.lpf_a1;
-                    v.lpf_a3 = g_lpf * v.lpf_a2;
+                float lp_out = raw;
+                if (tp.engine == EngineType::kAcid303) {
+                    // Dedicated TB-303 4-Pole Acid Filter with Exponential Octave Sweep & Soft-Saturated Resonance
+                    float acid_cut = (v.plock_cutoff >= 0.0f) ? v.plock_cutoff : eff_p[0];
+                    float acid_reso = std::clamp(eff_p[1] + res_offset, 0.0f, 0.96f);
+                    float acid_env_mod = std::clamp(eff_p[2] + env_offset, 0.0f, 1.0f);
+                    float accent_amt = (v.velocity >= 0.82f)
+                        ? (eff_p[4] * std::clamp((v.velocity - 0.70f) / 0.30f, 0.0f, 1.0f))
+                        : 0.0f;
 
-                    if (tp.lpf_24db) {
-                        // Stage 2 (4-pole 24 dB/oct, Linkwitz-Riley damped to prevent resonance squeal)
-                        v.lpf_k_b = 1.414f + (v.lpf_k - 1.414f) * 0.35f;
+                    if ((i & 7) == 0) {
+                        float base_oct = std::clamp(acid_cut + cut_offset, 0.0f, 1.0f) * 7.2f;
+                        float env_oct = (acid_env_mod * 4.2f + accent_amt * 1.4f) * v.lpf_env_val;
+                        float f_lpf_hz = std::clamp(42.0f * std::exp2(base_oct + env_oct), 35.0f, static_cast<float>(sample_rate) * 0.42f);
+                        float g_lpf = std::tan(3.14159265f * f_lpf_hz * inv_sr);
+                        v.lpf_k = 2.0f - 1.88f * acid_reso;
+                        v.lpf_a1 = 1.0f / (1.0f + g_lpf * (g_lpf + v.lpf_k));
+                        v.lpf_a2 = g_lpf * v.lpf_a1;
+                        v.lpf_a3 = g_lpf * v.lpf_a2;
+
+                        // Stage 2 (diode cascade damping to keep resonance musical and unconditionally stable)
+                        v.lpf_k_b = 1.35f - 0.70f * acid_reso;
                         v.lpf_a1_b = 1.0f / (1.0f + g_lpf * (g_lpf + v.lpf_k_b));
                         v.lpf_a2_b = g_lpf * v.lpf_a1_b;
                         v.lpf_a3_b = g_lpf * v.lpf_a2_b;
                     }
-                }
 
-                // Stage 1 (12 dB/oct)
-                float v3_l1 = raw - v.lpf_s2;
-                float v1_l1 = v.lpf_a1 * v.lpf_s1 + v.lpf_a2 * v3_l1;
-                float v2_l1 = v.lpf_s2 + v.lpf_a2 * v.lpf_s1 + v.lpf_a3 * v3_l1;
-                v.lpf_s1 = 2.0f * v1_l1 - v.lpf_s1;
-                v.lpf_s2 = 2.0f * v2_l1 - v.lpf_s2;
-                float lp_out = v2_l1;
+                    // Soft-saturated input + diode resonance feedback
+                    float drive_in = fast_tanh(raw * (1.15f + 0.50f * accent_amt) - 0.25f * acid_reso * v.lpf_s2_b);
+                    float v3_l1 = drive_in - v.lpf_s2;
+                    float v1_l1 = v.lpf_a1 * v.lpf_s1 + v.lpf_a2 * v3_l1;
+                    float v2_l1 = v.lpf_s2 + v.lpf_a2 * v.lpf_s1 + v.lpf_a3 * v3_l1;
+                    v.lpf_s1 = 2.0f * v1_l1 - v.lpf_s1;
+                    v.lpf_s2 = 2.0f * v2_l1 - v.lpf_s2;
 
-                if (tp.lpf_24db) {
-                    // Stage 2 (4-pole 24 dB/oct, Linkwitz-Riley damped to prevent resonance squeal)
-                    float v3_l2 = lp_out - v.lpf_s2_b;
+                    float stage1_sat = fast_tanh(v2_l1 * (1.10f + 0.35f * acid_reso));
+                    float v3_l2 = stage1_sat - v.lpf_s2_b;
                     float v1_l2 = v.lpf_a1_b * v.lpf_s1_b + v.lpf_a2_b * v3_l2;
                     float v2_l2 = v.lpf_s2_b + v.lpf_a2_b * v.lpf_s1_b + v.lpf_a3_b * v3_l2;
                     v.lpf_s1_b = 2.0f * v1_l2 - v.lpf_s1_b;
                     v.lpf_s2_b = 2.0f * v2_l2 - v.lpf_s2_b;
-                    lp_out = v2_l2;
+                    lp_out = fast_tanh(v2_l2 * (1.0f + 0.35f * accent_amt));
+                } else {
+                    float base_cut = (v.plock_cutoff >= 0.0f) ? v.plock_cutoff : tp.lpf_cutoff;
+                    float eff_lpf = std::clamp(base_cut + cut_offset + (tp.lpf_env + env_offset) * v.lpf_env_val, 0.01f, 1.0f);
+                    if ((i & 7) == 0) {
+                        float f_lpf_hz = std::clamp(20.0f * std::pow(1000.0f, eff_lpf), 20.0f, static_cast<float>(sample_rate) * 0.45f);
+                        float g_lpf = std::tan(3.14159265f * f_lpf_hz * inv_sr);
+                        v.lpf_k = 2.0f - 1.9f * lpf_reso;
+                        v.lpf_a1 = 1.0f / (1.0f + g_lpf * (g_lpf + v.lpf_k));
+                        v.lpf_a2 = g_lpf * v.lpf_a1;
+                        v.lpf_a3 = g_lpf * v.lpf_a2;
+
+                        if (tp.lpf_24db) {
+                            // Stage 2 (4-pole 24 dB/oct, Linkwitz-Riley damped to prevent resonance squeal)
+                            v.lpf_k_b = 1.414f + (v.lpf_k - 1.414f) * 0.35f;
+                            v.lpf_a1_b = 1.0f / (1.0f + g_lpf * (g_lpf + v.lpf_k_b));
+                            v.lpf_a2_b = g_lpf * v.lpf_a1_b;
+                            v.lpf_a3_b = g_lpf * v.lpf_a2_b;
+                        }
+                    }
+
+                    // Stage 1 (12 dB/oct)
+                    float v3_l1 = raw - v.lpf_s2;
+                    float v1_l1 = v.lpf_a1 * v.lpf_s1 + v.lpf_a2 * v3_l1;
+                    float v2_l1 = v.lpf_s2 + v.lpf_a2 * v.lpf_s1 + v.lpf_a3 * v3_l1;
+                    v.lpf_s1 = 2.0f * v1_l1 - v.lpf_s1;
+                    v.lpf_s2 = 2.0f * v2_l1 - v.lpf_s2;
+                    lp_out = v2_l1;
+
+                    if (tp.lpf_24db) {
+                        // Stage 2 (4-pole 24 dB/oct, Linkwitz-Riley damped to prevent resonance squeal)
+                        float v3_l2 = lp_out - v.lpf_s2_b;
+                        float v1_l2 = v.lpf_a1_b * v.lpf_s1_b + v.lpf_a2_b * v3_l2;
+                        float v2_l2 = v.lpf_s2_b + v.lpf_a2_b * v.lpf_s1_b + v.lpf_a3_b * v3_l2;
+                        v.lpf_s1_b = 2.0f * v1_l2 - v.lpf_s1_b;
+                        v.lpf_s2_b = 2.0f * v2_l2 - v.lpf_s2_b;
+                        lp_out = v2_l2;
+                    }
                 }
 
                 trk_sum += lp_out * amp * v.velocity;

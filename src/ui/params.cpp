@@ -149,6 +149,17 @@ Param engineParam(int idx) {
                 return "FB " + std::to_string(fb);
             }
         }
+        if (tp.engine == EngineType::kAcid303) {
+            if (idx == 3) {
+                int ms = static_cast<int>(180.0f + tp.p[3] * 2220.0f + 0.5f);
+                return std::to_string(ms) + " ms";
+            }
+            if (idx == 5) {
+                if (tp.p[5] <= 0.05f) return std::string("SAW");
+                if (tp.p[5] >= 0.95f) return std::string("SQUARE");
+                char b[16]; std::snprintf(b, sizeof(b), "S/Q %d%%", static_cast<int>(tp.p[5] * 100.0f + 0.5f)); return std::string(b);
+            }
+        }
         if ((tp.engine == EngineType::kSampleOneShot && idx == 1) ||
             (tp.engine == EngineType::kSliceSampler && idx == 2)) {
             int st = static_cast<int>(std::round((tp.p[idx] - 0.5f) * 48.0f));
