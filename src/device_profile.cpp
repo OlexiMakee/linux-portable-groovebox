@@ -80,9 +80,16 @@ void applyIni(const IniMap& m, DeviceProfile& p, const std::string& path) {
     p.name = get("device.name", p.name);
     p.match = get("device.match", p.match);
 
+    p.display_width = std::max(320, geti("display.width", p.display_width));
+    p.display_height = std::max(240, geti("display.height", p.display_height));
+    p.integer_scale = geti("display.integer_scale", p.integer_scale ? 1 : 0) != 0;
+
+    p.data_dir = get("storage.data_dir", p.data_dir);
+
     p.gamepad_name = get("input.gamepad", p.gamepad_name);
     p.volume_name = get("input.volume", p.volume_name);
     p.headphones_name = get("input.headphones", p.headphones_name);
+    p.has_analog_sticks = geti("input.has_analog_sticks", p.has_analog_sticks ? 1 : 0) != 0;
     p.axis_max = std::max(1, geti("input.axis_max", p.axis_max));
     p.axis_deadzone = geti("input.axis_deadzone", p.axis_deadzone);
     p.invert_ly = geti("input.invert_ly", p.invert_ly ? 1 : 0) != 0;
@@ -148,6 +155,21 @@ std::vector<std::string> listIni(const std::string& dir) {
     return files;
 }
 
+bool matchesAnyToken(const std::string& haystack_lower, const std::string& pattern_lower) {
+    if (haystack_lower.empty() || pattern_lower.empty()) return false;
+    size_t start = 0;
+    while (start < pattern_lower.size()) {
+        size_t sep = pattern_lower.find('|', start);
+        if (sep == std::string::npos) sep = pattern_lower.size();
+        std::string token = trim(pattern_lower.substr(start, sep - start));
+        if (!token.empty() && haystack_lower.find(token) != std::string::npos) {
+            return true;
+        }
+        start = sep + 1;
+    }
+    return false;
+}
+
 } // namespace
 
 const char* btnKey(Btn b) {
@@ -157,6 +179,8 @@ const char* btnKey(Btn b) {
 
 const DeviceProfile& loadActiveProfile() {
     g_profile = DeviceProfile{};
+    const char* env_prof = std::getenv("GROOVEBOX_PROFILE");
+    const std::string forced_prof = env_prof ? lower(trim(env_prof)) : "";
     const std::string model = lower(readDeviceModel());
 
     std::string generic_path;
@@ -165,9 +189,18 @@ const DeviceProfile& loadActiveProfile() {
         for (const auto& path : listIni(dir)) {
             IniMap ini;
             if (!parseIni(path, ini)) continue;
+            const std::string path_low = lower(path);
+            auto it_name = ini.find("device.name");
+            const std::string name_low = it_name != ini.end() ? lower(it_name->second) : "";
+            if (!forced_prof.empty() &&
+                (path_low.find(forced_prof) != std::string::npos || name_low.find(forced_prof) != std::string::npos)) {
+                applyIni(ini, g_profile, path);
+                std::printf("[PROFILE] Forced '%s' via GROOVEBOX_PROFILE (%s)\n", g_profile.name.c_str(), path.c_str());
+                return g_profile;
+            }
             auto it = ini.find("device.match");
             const std::string match = it != ini.end() ? lower(it->second) : "";
-            if (!match.empty() && !model.empty() && model.find(match) != std::string::npos) {
+            if (matchesAnyToken(model, match)) {
                 applyIni(ini, g_profile, path);
                 std::printf("[PROFILE] '%s' matched model '%s' (%s)\n", g_profile.name.c_str(), model.c_str(), path.c_str());
                 return g_profile;

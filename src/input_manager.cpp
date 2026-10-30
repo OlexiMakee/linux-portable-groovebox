@@ -26,12 +26,25 @@ InputManager::~InputManager() {
 #if defined(__linux__)
 namespace {
 
-// Знаходить evdev-пристрій за підрядком імені (EVIOCGNAME), а не за жорстким номером eventN —
-// номери змінюються між прошивками й консолями.
+// Знаходить evdev-пристрій за підрядком імені (EVIOCGNAME, підтримує варіанти через '|'),
+// а не за жорстким номером eventN — номери змінюються між прошивками й консолями.
 int openEvdevByName(const std::string& needle) {
     if (needle.empty()) return -1;
     std::string want = needle;
     for (auto& c : want) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+
+    auto matches = [&](const std::string& dev_name_low) {
+        size_t start = 0;
+        while (start < want.size()) {
+            size_t sep = want.find('|', start);
+            if (sep == std::string::npos) sep = want.size();
+            std::string tok = want.substr(start, sep - start);
+            if (!tok.empty() && dev_name_low.find(tok) != std::string::npos) return true;
+            start = sep + 1;
+        }
+        return false;
+    };
+
     for (int i = 0; i < 32; ++i) {
         char path[32];
         std::snprintf(path, sizeof(path), "/dev/input/event%d", i);
@@ -41,7 +54,7 @@ int openEvdevByName(const std::string& needle) {
         if (::ioctl(fd, EVIOCGNAME(sizeof(name) - 1), name) >= 0) {
             std::string n = name;
             for (auto& c : n) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-            if (n.find(want) != std::string::npos) {
+            if (matches(n)) {
                 std::printf("[INPUT] '%s' -> %s (%s)\n", needle.c_str(), path, name);
                 return fd;
             }
@@ -254,6 +267,14 @@ void InputManager::pollEvdev(bool& quit_requested) {
                 state_.raw_ry = ev.value;
                 float n = norm(ev.value) * (prof.invert_ry ? -1.0f : 1.0f);
                 if (std::fabs(n - state_.ry) > 0.01f) { state_.ry = n; state_.any_change = true; }
+            } else if (ev.code == ABS_HAT0X) {
+                // Підтримка D-Pad через ABS_HAT0X (R36S ArkOS / Trimui Brick Pro / Generic Gamepads)
+                setButton(state_.dpad_left, state_.left_pressed, ev.value < 0, "D-LEFT");
+                setButton(state_.dpad_right, state_.right_pressed, ev.value > 0, "D-RIGHT");
+            } else if (ev.code == ABS_HAT0Y) {
+                // Підтримка D-Pad через ABS_HAT0Y (R36S ArkOS / Trimui Brick Pro / Generic Gamepads)
+                setButton(state_.dpad_up, state_.up_pressed, ev.value < 0, "D-UP");
+                setButton(state_.dpad_down, state_.down_pressed, ev.value > 0, "D-DOWN");
             }
         }
     }

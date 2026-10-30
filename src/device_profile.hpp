@@ -22,13 +22,22 @@ const char* btnKey(Btn b); // INI key suffix, e.g. "a", "select", "vol_up"
 struct DeviceProfile {
     // [device]
     std::string name = "Generic Linux Handheld";
-    std::string match;         // substring of /proc/device-tree/model (case-insensitive)
+    std::string match;         // substring(s) of /proc/device-tree/model (pipe-separated, case-insensitive)
     std::string source = "built-in defaults";
 
-    // [input] — evdev devices are found by name substring (EVIOCGNAME), not by eventN index
-    std::string gamepad_name = "Gamepad";
-    std::string volume_name = "vol";
-    std::string headphones_name = "Headphones";
+    // [display] — logical canvas is 320x240 (4:3); physical output scales automatically (640x480, 1024x768, etc.)
+    int display_width = 640;
+    int display_height = 480;
+    bool integer_scale = false;
+
+    // [storage] — base data directory on SD card for samples, loops, dx7, projects, recordings
+    std::string data_dir = "/storage/roms/groovebox";
+
+    // [input] — evdev devices are found by name substring (EVIOCGNAME, pipe-separated), not by eventN index
+    std::string gamepad_name = "Gamepad|joypad|trimui-input|retrogame_joypad|Xbox";
+    std::string volume_name = "vol|gpio-keys";
+    std::string headphones_name = "Headphones|headphone|jack";
+    bool has_analog_sticks = true;
     int axis_max = 1800;
     int axis_deadzone = 60;
     bool invert_ly = false;
